@@ -1,0 +1,11 @@
+{
+  "name": "aiassistant-discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:deps": "cd regenerated && npm install",
+    "start": "node bot.js",
+    "check": "node --check bot.js"
+  }
+}

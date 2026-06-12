@@ -1,0 +1,13 @@
+.vs/
+**/.vs/
+
+agents/*/secrets/
+agents/*/soul/
+agents/*/settings.jsonc
+
+discord-bot/regenerated/
+discord-bot/node_modules/
+discord-bot/npm-debug.log*
+
+*.bak
+*.log

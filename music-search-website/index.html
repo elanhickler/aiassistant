@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Music Search Workbench</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="workspace">
+      <div class="topbar">
+        <div>
+          <h1>Music Search Workbench</h1>
+          <p>Build human and bot-friendly music links from known songs or vibes.</p>
+        </div>
+        <button id="copyConfigButton" type="button">copy config url</button>
+      </div>
+
+      <div class="grid">
+        <section class="panel">
+          <h2>Request</h2>
+          <label>
+            music request
+            <textarea id="requestInput" rows="5" placeholder="dark romantic synthwave for Trish, or Grimes - Oblivion"></textarea>
+          </label>
+          <div class="two">
+            <label>
+              artist
+              <input id="artistInput" type="text" placeholder="artist">
+            </label>
+            <label>
+              title
+              <input id="titleInput" type="text" placeholder="song title">
+            </label>
+          </div>
+          <label>
+            vibe
+            <input id="vibeInput" type="text" placeholder="dreamy lo-fi indie pop">
+          </label>
+          <div class="actions">
+            <button id="knownButton" type="button">known song</button>
+            <button id="vibeButton" type="button">vibe</button>
+            <button id="autoButton" type="button">auto</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Sites</h2>
+          <div id="siteToggles" class="toggles"></div>
+        </section>
+      </div>
+
+      <section class="panel results-panel">
+        <div class="section-head">
+          <h2>Links</h2>
+          <button id="copySelectedButton" type="button">copy selected</button>
+        </div>
+        <div id="results" class="results"></div>
+      </section>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

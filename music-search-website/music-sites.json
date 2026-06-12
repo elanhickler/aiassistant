@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "discord_format": "[`🎵📽️`:`{label}`](<{url}>)",
+  "known_song_sites": [
+    {
+      "id": "spotify",
+      "label": "Spotify",
+      "enabled_key": "spotify_enabled",
+      "url_template": "https://open.spotify.com/search/{query}"
+    },
+    {
+      "id": "apple_music",
+      "label": "Apple Music",
+      "enabled_key": "apple_music_enabled",
+      "url_template": "https://music.apple.com/search?term={query}"
+    },
+    {
+      "id": "youtube_music",
+      "label": "YouTube Music",
+      "enabled_key": "youtube_music_enabled",
+      "url_template": "https://music.youtube.com/search?q={query}"
+    },
+    {
+      "id": "bandcamp",
+      "label": "Bandcamp",
+      "enabled_key": "bandcamp_enabled",
+      "url_template": "https://bandcamp.com/search?q={query}"
+    },
+    {
+      "id": "soundcloud",
+      "label": "SoundCloud",
+      "enabled_key": "soundcloud_enabled",
+      "url_template": "https://soundcloud.com/search?q={query}"
+    }
+  ],
+  "vibe_sites": [
+    {
+      "id": "youtube",
+      "label": "YouTube",
+      "enabled_key": "youtube_enabled",
+      "url_template": "https://www.youtube.com/results?search_query={query}"
+    }
+  ]
+}
