@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { parseShortMemoryEntries } from "./memory.js";
 
 async function readRequiredTextFile(filePath) {
   try {
@@ -9,21 +10,19 @@ async function readRequiredTextFile(filePath) {
   }
 }
 
+async function readOptionalTextFile(filePath) {
+  try {
+    return (await readFile(filePath, "utf8")).trim();
+  } catch (error) {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  }
+}
+
 function parseRecentShortMemory(text, limit) {
   if (limit <= 0) return "";
-  return text
-    .trim()
-    .split(/\r?\n/)
-    .filter(Boolean)
+  return parseShortMemoryEntries(text)
     .slice(-limit)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean)
     .map((entry) => `${entry.role || "unknown"}: ${entry.content || ""}`.trim())
     .filter(Boolean)
     .join("\n");
@@ -64,6 +63,7 @@ export async function buildOpenRouterMessages({
   conversationHistoryLimit,
   longMemoryPath,
   message,
+  originSummaryPath,
   persona,
   shortMemoryPath,
   statusPath,
@@ -71,9 +71,10 @@ export async function buildOpenRouterMessages({
   timePassages = [],
 }) {
   const longMemory = await readRequiredTextFile(longMemoryPath);
+  const originSummary = originSummaryPath ? await readOptionalTextFile(originSummaryPath) : "";
   const shortMemoryText = await readRequiredTextFile(shortMemoryPath);
   const statusText = await readRequiredTextFile(statusPath);
-  const shortMemory = parseRecentShortMemory(shortMemoryText, Math.min(conversationHistoryLimit, 20));
+  const shortMemory = parseRecentShortMemory(shortMemoryText, conversationHistoryLimit);
   const blocks = [
     normalizeContextBlock({
       title: "Status",
@@ -86,6 +87,12 @@ export async function buildOpenRouterMessages({
       source: longMemoryPath,
       priority: 80,
       content: longMemory,
+    }),
+    normalizeContextBlock({
+      title: "Origin Summary",
+      source: originSummaryPath,
+      priority: 75,
+      content: originSummary,
     }),
     normalizeContextBlock({
       title: "Recent Shortmemory",

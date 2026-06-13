@@ -1,0 +1,237 @@
+{
+    // descrip: Shared defaults for every agent. Agent settings override these values.
+    // default: edit this file for global behavior, edit agents/<Agent>/settings.jsonc for per-agent differences
+    // descrip: OpenRouter API base URL used for chat completions.
+    // default: "https://openrouter.ai/api/v1"
+    "openrouter_base_url": "https://openrouter.ai/api/v1",
+
+    // descrip: OpenRouter provider routing. Ignored providers are skipped when OpenRouter chooses where to run the model. This is useful when a provider blocks roleplay output even though the model itself is acceptable.
+    // default: skip Alibaba because it has returned inappropriate-content upstream errors for adult roleplay
+    "openrouter_provider_routing": {
+        "ignore": [
+            "Alibaba"
+        ]
+    },
+
+    // descrip: OpenRouter model string used for replies.
+    // default: "deepseek/deepseek-v4-flash"
+    "model": "deepseek/deepseek-v4-flash",
+    // descrip: OpenRouter model string used for small utility decisions like intent checks, status inference, and whether sleep should create a dream.
+    // default: "openai/gpt-oss-20b:free"
+    "utility_model": "openai/gpt-oss-20b:free",
+    // descrip: Optional bot skills loaded for agents unless overridden.
+    // default: time, story, and discordstatusupdate
+    "enabled_skills": [
+        "time",
+        "story",
+        "discordstatusupdate"
+    ],
+    // descrip: Persona file to load from each agent folder.
+    // default: "soul/persona.md"
+    "system_prompt_file": "soul/persona.md",
+    // descrip: Repo-level persona addition appended to every agent persona at runtime. This file does not overwrite agent persona files.
+    // default: "global-persona.md"
+    "global_persona_file": "global-persona.md",
+    // descrip: Discord forum post/thread ID used by /reloadpersona. Per-agent override recommended.
+    // default: ""
+    "persona_source_thread_id": "",
+    // descrip: If true and persona_source_thread_id is blank, startup and /reloadpersona may use the memory forum persona post as the persona source. If false, the bot uses the local system_prompt_file unless persona_source_thread_id is explicitly set.
+    // range: true or false.
+    // default: true
+    "use_memory_forum_persona_source": true,
+    // descrip: Discord forum post/thread ID the bot may use to read extra agent-specific information later.
+    // default: ""
+    "access_thread_id": "",
+    // descrip: Optional OAuth invite URL for this agent's Discord application. If set, it appears in the help memory post.
+    // default: ""
+    "discord_invite_url": "",
+    // descrip: Discord forum post/thread ID where the bot mirrors shortmemory entries. If blank, the bot looks for a shortmemory post in memory_forum_channel_id.
+    // default: ""
+    "shortmemory_thread_id": "",
+    // descrip: Required Discord forum channel ID for each agent's memory forum. Agents must override this.
+    // default: ""
+    "memory_forum_channel_id": "",
+    // descrip: Core forum post names that startup and /setupmemoryforum create or confirm. Skill posts are added only when the skill is enabled and implemented.
+    // default: standard memory posts
+    "memory_forum_posts": [
+        "help",
+        "emoji",
+        "persona",
+        "origin",
+        "adjustments",
+        "status",
+        "profilepic",
+        "longmemory",
+        "shortmemory",
+        "dreams",
+        "art",
+        "stories"
+    ],
+    // descrip: Music skill site switches. music_thread_id must be overridden when the music skill is enabled.
+    // default: only YouTube discovery enabled, no archive thread
+    "music_skill": {
+        "music_thread_id": "",
+        "website_config_url": "",
+        "youtube_enabled": true,
+        "bandcamp_enabled": false,
+        "soundcloud_enabled": false,
+        "spotify_enabled": false,
+        "apple_music_enabled": false,
+        "youtube_music_enabled": false,
+        "internet_archive_enabled": false,
+        "free_music_archive_enabled": false,
+        "jamendo_enabled": false,
+        "newgrounds_audio_enabled": false
+    },
+    // descrip: Cheap local trigger words that decide whether a skill is allowed to spend tokens on an AI intent check. If no trigger matches, no AI intent check happens.
+    // default: music triggers only
+    "intent_triggers": {
+        // descrip: Words and phrases that may mean the user wants a music link. Matching these only starts the AI intent check; it does not automatically post music by itself.
+        // default: minimal music request words
+        "music": [
+            "song",
+            "music"
+        ]
+    },
+    // descrip: Natural-language status update settings. These status notes are written into soul/status.json and mirrored to the status memory thread after summarization.
+    // default: allow implemented major context skills to influence status text
+    "discord_status_update": {
+        // descrip: Skills allowed to provide optional status hints. Unknown, disabled, or unavailable skill names are ignored.
+        // default:
+        "source_skills": [
+            "time",
+            "dreams",
+            "story",
+            "music"
+        ]
+    },
+    // descrip: Placeholder settings for planned skills. These do not do anything until the matching skill is implemented.
+    // default: all disabled placeholders
+    "planned_skill_settings": {
+        "characterproxy": {
+            "enabled": false
+        },
+        "emoji": {
+            "enabled": false
+        },
+        "gamemaster": {
+            "enabled": false
+        },
+        "profilepic": {
+            "enabled": false
+        },
+        "art": {
+            "enabled": false
+        },
+        "settings": {
+            "enabled": false
+        }
+    },
+    // descrip: Maximum number of recent chat messages remembered as hidden context. These messages are sent privately to OpenRouter with each request, which uses input tokens and increases API cost.
+    // range: 0 or higher; practical range is 5 to 100 for normal chat, higher if you accept more cost and possible distraction.
+    // default: 100
+    "conversation_history_limit": 100,
+    // descrip: Seconds to wait before a normal reply, then re-check that the source message still exists before spending OpenRouter tokens. Set to 0 to disable. This was a Tupper hack for bots that delete/replace user messages.
+    // range: 0 or higher.
+    // default: 0
+    "seconds_before_reply": 0,
+    // descrip: Summarization settings control automatic memory maintenance. This turns shortmemory into compact longmemory text.
+    // default: soul/shortmemory.jsonl input, soul/longmemory.txt output
+    "summarization_settings": {
+        // descrip: Summarization instruction. Longmemory must keep # Past, # Present, and # Future / Plans sections. Keep durable user-specific facts when they help future replies, such as names, stable preferences, boundaries, relationships, ongoing situations, and important context. Do not save throwaway moods, one-off wording, private subtext, or raw transcripts unless they became durably important.
+        // default: remember durable per-user context, not everything
+        "summary_policy": "remember durable per-user context, not everything",
+        // descrip: Maximum recent shortmemory lines to include in one summarization run. Older shortmemory is not read directly during that run; it should already be represented in soul/longmemory.txt from earlier summaries.
+        // range: 1 or higher.
+        // default: 200
+        "max_lines_per_summary": 200
+    },
+    // descrip: Origin summary settings control how soul/origin.md becomes soul/origin_summary.md. Origin is backstory/lore source material, not ordinary chat memory.
+    // default: lore-dense summary that keeps memorable roleplay details while staying shorter than the source
+    "origin_summary_settings": {
+        // descrip: Origin summarization instruction. Keep identity facts, origin timeline, transformation facts, triggers, body and appearance changes, recurring phrases, emotional beats, scene implications, important names, and continuity hooks. Include juicy details when they help future roleplay. Avoid raw transcript style and long quotes. Use clear markdown sections such as Identity, Origin Timeline, Conditioning Details, Alternate Modes, Voice, Important Scene Memories, and Current Use.
+        // default: preserve memorable lore and roleplay hooks, not just a tiny abstract
+        "summary_policy": "preserse juicy details, especially lewd details and specific words used to get the overall feel of the origin material. include snippets of dialog and text for context, speech patterns, behaviors, and personality.",
+        // descrip: Maximum tokens the model may generate for origin_summary.md. Higher allows more detail but sends more text in future prompts because origin_summary.md is regular hidden context.
+        // range: 1 or higher; practical range is 800 to 3000.
+        // default: 2200
+        "max_tokens": 4000
+    },
+    // descrip: Dream settings control the dream part of the time skill. Dreams are creative artifacts and do not directly replace summaries.
+    // default: manual dream generation, write drafts into soul/dreams
+    "dream_settings": {
+        "enabled": true,
+        "mode": "manual",
+        "idle_minutes": 180,
+        "sleep_window": {
+            "start": "04:00",
+            "end": "05:00"
+        },
+        "output_folder": "soul/dreams",
+        "source_files": [
+            "soul/longmemory.txt",
+            "soul/shortmemory.jsonl"
+        ],
+        "max_words": 500,
+        "can_feed_summarization": false
+    },
+    // descrip: Reply randomness; chaos here is temperature for OpenRouter. Higher values are looser, lower values are steadier.
+    // range: 0 to 2.
+    // default: 0.85
+    "chaos": 0.85,
+    // descrip: Maximum number of tokens the model can generate in one reply, roughly max_tokens * 4 characters. Lower this if replies hit the Discord character limit; raise it if model replies stop too early.
+    // range: 1 or higher; model limits vary.
+    // default: 850
+    "max_tokens": 850,
+    // descrip: Maximum characters sent in one Discord reply before the bot truncates, meaning it bluntly cuts off extra text and adds "..." instead of summarizing. Cut-off text is not saved to bot memory.
+    // range: 1 to 2000 for normal Discord messages.
+    // default: 1900
+    "discord_reply_character_limit": 1900,
+    // descrip: Channel and server reply policy. reply_to lists are ambient reply zones where the bot may answer without being directly @mentioned or named. Direct @mentions and name calls may reply outside reply_to lists. do_not_reply lists always win.
+    // default: listed mode with empty lists
+    "location_reply_policy": {
+        "mode": "listed",
+        // descrip: If true, the bot may only reply inside reply_to_channel_ids, reply_to_server_ids, or DMs. If false, direct @mentions and name calls may reply outside those ambient reply zones.
+        // range: true or false.
+        // default: false
+        "only_allow_replies_to_specific_channels": false,
+        "reply_to_server_ids": [],
+        "do_not_reply_to_server_ids": [],
+        "reply_to_channel_ids": [],
+        "do_not_reply_to_channel_ids": []
+    },
+    // descrip: User-level reply policy. mode can be "all", "listed", or "none". do_not_reply_to_user_ids always wins.
+    // default: mode "all", empty lists
+    "user_reply_policy": {
+        "mode": "all",
+        "reply_to_user_ids": [],
+        "do_not_reply_to_user_ids": []
+    },
+    // descrip: Discord user IDs allowed to run slash-command control actions like reload persona, setup memory, sync memory, raw prompt, and story upload. If blank, everyone can run slash-command controls.
+    // default: blank, everyone can control
+    "control_user_ids": [],
+    // descrip: Bot-level reply policy. Only bot IDs listed here can trigger replies.
+    // default: Tupper app allowed, webhooks disabled
+    "bot_reply_policy": {
+        "reply_to_bot_ids": [
+            "431544605209788416"
+        ],
+        "reply_to_webhooks": false
+    },
+    // descrip: Whether the bot replies when someone mentions it with @.
+    // range: true or false.
+    // default: true
+    "reply_when_mentioned": true,
+    // descrip: Whether the bot replies when someone types its primary name or one of its nicknames.
+    // range: true or false.
+    // default: true
+    "reply_when_name_used": true,
+    // descrip: Whether the bot replies when someone does not type its primary name or one of its nicknames, allowing general replies to ordinary messages.
+    // range: true or false.
+    // default: true
+    "reply_when_name_not_used": true,
+    // descrip: Whether the bot refuses messages that mention someone with @ unless the bot itself or one of its configured mention roles is directly @mentioned. Plain text name matches do not override an unrelated @mention.
+    // range: true or false.
+    // default: true
+    "do_not_reply_when_at_is_not_about_bot": true
+}

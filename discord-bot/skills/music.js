@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readShortMemoryEntries } from "../memory.js";
 
 export function createMusicSkill(context) {
   const {
@@ -8,6 +8,7 @@ export function createMusicSkill(context) {
     requiredSetting,
     safeReply,
     shortMemoryPath,
+    writeRawOpenRouterText,
   } = context;
   const musicSkillSettings = requiredSetting("music_skill");
   const musicThreadId = String(musicSkillSettings.music_thread_id || "");
@@ -48,26 +49,33 @@ export function createMusicSkill(context) {
   }
 
   async function readRecentShortMemory(limit = 30) {
-    const text = await readFile(shortMemoryPath, "utf8").catch((error) => {
-      if (error.code === "ENOENT") return "";
-      throw error;
-    });
-    const lines = text.trim().split(/\r?\n/).filter(Boolean).slice(-limit);
-
-    return lines
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch {
-          return null;
-        }
-      })
-      .filter(Boolean);
+    return (await readShortMemoryEntries(shortMemoryPath)).slice(-limit);
   }
 
   async function inferMusicIntent(sourceText) {
     const text = sourceText || (await recentShortMemoryText());
     if (!text) throw new Error("shortmemory has no recent conversation to infer music from.");
+    const messages = [
+      {
+        role: "system",
+        content: [
+          "Find the most recent music request or music-related desire in the text.",
+          "If the request is for a specific song, return known_song with artist and title when possible.",
+          "If the request is only a mood, scene, genre, playlist, mix, or vibe, return vibe with one concise search_query.",
+          "Use nearby context to resolve vague phrases like 'that', 'this', 'same vibe', or 'for her'.",
+          "Ignore older music topics if a newer one appears.",
+          "Return only strict JSON in this shape:",
+          "{\"mode\":\"known_song\",\"artist\":\"artist name\",\"title\":\"song title\",\"search_query\":\"artist song title\"}",
+          "or:",
+          "{\"mode\":\"vibe\",\"artist\":\"\",\"title\":\"\",\"search_query\":\"concise music search query\"}",
+        ].join(" "),
+      },
+      {
+        role: "user",
+        content: text,
+      },
+    ];
+    await writeRawOpenRouterText?.(messages, "music intent");
 
     const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
       method: "POST",
@@ -77,26 +85,7 @@ export function createMusicSkill(context) {
       },
       body: JSON.stringify({
         model,
-        messages: [
-          {
-            role: "system",
-            content: [
-              "Find the most recent music request or music-related desire in the text.",
-              "If the request is for a specific song, return known_song with artist and title when possible.",
-              "If the request is only a mood, scene, genre, playlist, mix, or vibe, return vibe with one concise search_query.",
-              "Use nearby context to resolve vague phrases like 'that', 'this', 'same vibe', or 'for her'.",
-              "Ignore older music topics if a newer one appears.",
-              "Return only strict JSON in this shape:",
-              "{\"mode\":\"known_song\",\"artist\":\"artist name\",\"title\":\"song title\",\"search_query\":\"artist song title\"}",
-              "or:",
-              "{\"mode\":\"vibe\",\"artist\":\"\",\"title\":\"\",\"search_query\":\"concise music search query\"}",
-            ].join(" "),
-          },
-          {
-            role: "user",
-            content: text,
-          },
-        ],
+        messages,
         temperature: 0.2,
         max_tokens: 120,
       }),
@@ -121,6 +110,58 @@ export function createMusicSkill(context) {
       title: String(intent.title || "").trim(),
       searchQuery,
     };
+  }
+
+  async function shouldRespondWithMusic(sourceText) {
+    const recentText = await recentShortMemoryText();
+    const messages = [
+      {
+        role: "system",
+        content: [
+          "Decide whether the latest user message is asking the bot to post or find music now.",
+          "Return true for direct natural requests like 'music', 'play something', 'find a song', 'queue something up', 'send me a music link', or '@agent music'.",
+          "Return true when context makes a short request like 'yes, show me' clearly refer to music.",
+          "Return false if the bot merely mentioned music itself, or if the user is only chatting about music without asking for a link/result now.",
+          "Return only strict JSON: {\"should_post_music\":true,\"reason\":\"short reason\"}",
+        ].join(" "),
+      },
+      {
+        role: "user",
+        content: [
+          "# Recent Conversation",
+          recentText || "(empty)",
+          "",
+          "# Latest User Message",
+          sourceText,
+        ].join("\n"),
+      },
+    ];
+    await writeRawOpenRouterText?.(messages, "music natural intent");
+
+    const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openrouterApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0,
+        max_tokens: 80,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
+    }
+
+    const payload = await response.json();
+    const raw = payload.choices?.[0]?.message?.content?.trim();
+    if (!raw) return false;
+    const jsonText = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+    const decision = JSON.parse(jsonText);
+    return Boolean(decision.should_post_music);
   }
 
   async function recentShortMemoryText() {
@@ -317,6 +358,20 @@ export function createMusicSkill(context) {
     return formattedMusicLink;
   }
 
+  async function runNaturalMusicRequest(sourceText = "") {
+    if (parseMusicLinkInput(sourceText) || musicUrlSite(sourceText)) {
+      return runMusicRequest(sourceText);
+    }
+
+    return runMusicRequest([
+      "# Recent Conversation",
+      await recentShortMemoryText() || "(empty)",
+      "",
+      "# Latest User Message",
+      sourceText,
+    ].join("\n"));
+  }
+
   async function handlePipeCommand(command, message) {
     if (command?.kind !== "music") return false;
 
@@ -337,13 +392,16 @@ export function createMusicSkill(context) {
     getContextBlocks() {
       return {
         title: "Music Skill",
-        content: "The music skill is available through pipe text, such as ||@agent music|| or ||@agent music: description||. Do not post music links in ordinary replies unless the user asks for music.",
+        content: "The music skill is available through pipe text, such as ||@agent music|| or ||@agent music: description||, and through a music note reaction on a bot reply. Do not post music links in ordinary replies unless the user asks for music.",
         source: "discord-bot/skills/music.js",
         priority: 10,
         enabled: true,
       };
     },
     handlePipeCommand,
+    runMusicRequest,
+    runNaturalMusicRequest,
+    shouldRespondWithMusic,
     onReady() {
       if (musicThreadId) console.log(`Music forum post/thread: ${musicThreadId}`);
     },

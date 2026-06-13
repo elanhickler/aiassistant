@@ -5,6 +5,7 @@ Starter project for a multi-agent AI assistant system.
 ## File Map
 
 * `README.md` : This project overview.
+* `settings.jsonc` : Global shared default settings for every agent. Per-agent settings override this file.
 
 * `agents/` : One folder per assistant, bot, or agent identity.
 
@@ -13,11 +14,14 @@ Starter project for a multi-agent AI assistant system.
     * `.npmrc` : Prevents npm from writing a root `package-lock.json`.
     * `bot.js` : Shared Discord bot runtime. Uses `AGENT_NAME` to choose an agent folder and defaults to `Stardust`.
     * `context.js` : Builds OpenRouter request context from persona, longmemory, recent shortmemory, and enabled skill context blocks.
+    * `memory.js` : Shared shortmemory parsing and formatting helpers.
     * `package.json` : Runtime scripts for installing dependencies, checking syntax, and starting the bot.
     * `skills/` : Optional skill modules loaded through each agent's `enabled_skills` setting.
         * `README.md` : Skills overview.
+        * `discordstatusupdate.js` : Optional status-note skill that updates natural-language status after summarization.
         * `music.js` : Optional pipe-command music skill.
         * `placeholders.js` : Registry of planned skills that are documented but not implemented yet.
+        * `story.js` : Optional pipe-command story generation and story upload skill.
         * `time.js` : Optional pipe-command time, sleep, status, and dream skill.
     * `regenerated/` : Generated dependency area, ignored by git.
         * `node_modules/` : Installed npm packages.
@@ -47,37 +51,70 @@ $env:AGENT_NAME='Stardust'
 npm.cmd start
 ```
 
+## Settings
+
+## Agent Identity Rule
+
+* one agent : one soul folder, one Discord application, one bot token, one memory forum.
+* shared runtime : `discord-bot/` is only shared code. Agent identity stays in the agent folder.
+* agent folder : The character's only local identity folder. It contains persona, memory, status, stories, dreams, settings overrides, and secrets.
+* Discord application : The character's only Discord account/profile. The avatar and username set in Discord Developer Portal belong to this one agent.
+
+* `settings.jsonc` : Global defaults used by every bot.
+* `global-persona.md` : Repo-level persona addition appended to every agent persona at runtime.
+* `agents/<AGENT_NAME>/settings.jsonc` : Per-agent overrides only. Arrays replace the global array; objects merge with the global object.
+* `agents/<AGENT_NAME>/backups/` : Automatic timestamped backups created before large local overwrites such as persona reloads, longmemory summaries, and shortmemory rewrites.
+* required per-agent overrides : `identity` and `memory_forum_channel_id`.
+* `model` : Main OpenRouter model used for character replies and creative writing.
+* `utility_model` : Free or cheap OpenRouter model used for small structured decisions like status inference and whether sleep should create a dream.
+* `identity.mention_role_ids` : Optional Discord role IDs that count as targeting that agent inside pipe commands.
+* `global_persona_file` : Repo-level persona addition appended to every agent persona at runtime.
+* `intent_triggers` : Cheap local trigger words that decide whether a skill is allowed to spend tokens on an AI intent check. For example, music intent only checks OpenRouter when a message contains a configured music trigger.
+* `control_user_ids` : Discord user IDs allowed to run slash-command control actions. If blank, everyone can run slash-command controls.
+* common per-agent overrides : `enabled_skills`, Discord thread IDs, reply channel IDs, and skill-specific thread IDs such as `music_skill.music_thread_id`.
+
 ## Discord Slash Commands
+
+Slash commands are control actions. Only users listed in `control_user_ids` can run them.
 
 * `/reloadpersona` : Reloads the agent persona. If `persona_source_thread_id` is set, it grabs message text from that Discord forum post/thread into `soul/persona.md` first.
 * `/clearshortmemory` : Clears the agent's `soul/shortmemory.jsonl` file, clears the live recent context held by the running bot process, and deletes bot-written `shortmemory:` entries from the Discord shortmemory forum post.
-* `/clean adjustments` : Deletes messages inside the Discord `adjustments` memory post. For now, this command only cleans adjustment audit entries.
 * `/setupmemoryforum` : Populates the agent's Discord memory forum with core memory posts plus posts for enabled implemented skills. `memory_forum_channel_id` is required; the bot errors at startup if it is blank. The bot must be able to view and send messages in that forum.
+* `/raw` : Shows the latest OpenRouter message text uploaded by the agent. Large raw prompts are sent as a private text file attachment.
 * `/syncshortmemory direction` : Syncs shortmemory between local `soul/shortmemory.jsonl` and the Discord shortmemory forum post. Direction can be `both`, `local to discord`, or `discord to local`.
-* `/scrapeshortmemory channel_id` : Appends recent messages from a channel to shortmemory, ending at the agent's latest reply in that channel. Uses `conversation_history_limit` as the scrape size, capped at Discord's recent-message fetch limit. This is a dumb recovery tool; it does not summarize or dedupe.
-* `/scrapedmshortmemory` : Appends recent DMs between the command user and the agent to shortmemory, ending at the agent's latest DM reply. Uses `conversation_history_limit` as the scrape size.
-* `/uploadstory filename` : Uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
-* `❌ reaction` : React to a bot reply with ❌ to delete that reply and remove its matching assistant entry from local and Discord shortmemory.
+* `/scrapeshortmemory channel_id` : Reads all available message pages from a channel, anchors at the agent's latest reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
+* `/scrapedmshortmemory` : Reads all available DM message pages with the command user, anchors at the agent's latest DM reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
+* `/uploadstory filename` : Story skill command that uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
+* `❌ delete reaction` : React to a bot reply with `:x:` to delete that reply and remove its matching assistant entry from local and Discord shortmemory.
+* `🔁 redo reaction` : React to a bot reply with `:repeat:` to delete that reply from memory and generate a fresh answer to the previous user message.
+* `⏪ rewind reaction` : React to a bot reply with `:rewind:` to delete that bot reply, remove that one assistant shortmemory entry, and remove the previous user message from shortmemory only. It does not delete the user's Discord message.
+* `▶️ replace reaction` : React to a bot reply with `:arrow_forward:` to make the bot temporarily say `next reply replaces my text`.
+* `🎵 music reaction` : React to a bot reply with `:musical_note:` to run the music skill from recent shortmemory and post a formatted music link.
 
 ## Pipe Text
 
 * `||@agent reply||` : Has the agent continue the story from recent context. In DMs, `@agent` is optional.
 * `normal text ||@agent subtext: private text||` : Inline private subtext lets you communicate assumptions and quick persona adjustments. It is not spoken text to quote or answer directly, and it may be loosely stored later by summaries. In DMs, `@agent` is optional.
-* `||@agent adjust: adjustment instructions||` : Gives instructions for adjusting the previous bot reply. The bot deletes the old reply, redoes the reply, and updates the matching shortmemory entry.
-* `||@agent summarize||` : Summarizes recent shortmemory into `soul/longmemory.txt`. In DMs, `@agent` is optional.
-* `||@agent story||` : Writes a short story from recent context and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@agent` is optional.
-* `||@agent story: story prompt||` : Writes a short story using the prompt plus shortmemory and longmemory.
-* `||@agent music||` : Optional `music` skill. Infers the latest music request from shortmemory, posts a formatted music link, and archives it to the configured music thread. In DMs, `@agent` is optional.
+* `||@agent adjust: adjustment instructions||` : Redoes the previous bot reply with adjustment instructions. The bot deletes the old reply, removes that assistant shortmemory entry, and writes a replacement reply to the original user message.
+* `||@agent summarize||` : Summarizes recent shortmemory into `soul/longmemory.txt`, posts a longmemory preview, and cleans adjustment audit messages. In DMs, `@agent` is optional.
+* `||@agent story||` : Story skill command that writes an evidence-grounded short story from saved stories, recent shortmemory, and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@agent` is optional.
+* `||@agent story: story prompt||` : Story skill command that searches saved stories, shortmemory, and longmemory for the requested subject, then writes only what the evidence supports.
+* story recall : When the story skill is enabled, normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and longmemory context, and let the agent answer with a focused summary or explanation without inventing unsupported details.
+* natural music intent : If `music` is enabled and a message matches `intent_triggers.music`, the bot asks a small AI intent question. If the answer says the user wants music now, it posts a formatted music link instead of a normal reply.
+* `||@agent music||` : Optional `music` skill. Infers the latest music request from shortmemory, posts a formatted music link, and archives it to the configured music thread. The `:musical_note:` reaction does the same thing without needing command text. In DMs, `@agent` is optional.
 * `||@agent music: description or link||` : Optional `music` skill with direct input. Can use a music description, a specific music link, or `Artist - Song | https://...`.
 * `||@agent sleep||` : Sets `soul/status.json` mode to `sleeping`.
 * `||@agent wake||` : Sets `soul/status.json` mode to `awake`.
-* `||@agent busy||` : Sets `soul/status.json` mode to `busy`; normal replies only happen when the agent is directly mentioned or named.
 * `||@agent away||` : Sets `soul/status.json` mode to `away`; normal replies are blocked until status changes.
-* `||@agent status||` : Shows the current status mode, energy, and current activity.
-* `||@agent passtimeminutes: 60||` : Queues explicit experienced time for the agent before their next reply and updates energy when sleeping or dreaming.
+* `||@agent state||` : Shows the raw state mode, energy, and current activity.
+* `||@agent status||` : Generates a natural-language status update from memory and current state.
+* `||@agent status: text||` : Generates a natural-language status update using text as the basis or suggested status.
+* `||@agent passtimeminutes: 60||` : Queues explicit experienced time for the agent before their next reply and updates energy when sleeping or dreaming. Extra text after the number describes interruptions or restful conditions.
+* `||@agent passtimehours: 8||` : Queues explicit experienced time in hours for longer sleep or dream gaps. Extra text after the number can make `utility_model` adjust sleep remaining, such as loud noises waking the agent sooner.
 * `||@agent dream: dream seed text||` : Generates one dream from memory, previous dreams, and the seed text. In DMs, `@agent` is optional. This requires status mode `sleeping`.
 * `||@agent dream||` : Generates an automatic dream from context and previous dreams. In DMs, `@agent` is optional. This requires status mode `sleeping`.
-* automatic status inference : The `time` skill can update `soul/status.json` after normal replies when the latest exchange clearly implies sleep, waking, dreaming, busy, away, or another state. It keeps the current state when clues are weak or metaphorical.
+* automatic status inference : The `time` skill can update `soul/status.json` after normal replies when the latest exchange clearly implies sleep, waking, dreaming, away, or another state. It keeps the current state when clues are weak or metaphorical.
+* natural sleep disturbance : While status is `sleeping`, incoming natural-language messages are checked by `utility_model` before normal replies. Quiet or irrelevant messages can be ignored, interruptions can adjust `sleep_remaining_minutes`, and wake events can switch status to `awake` before the main reply model answers.
 
 ## Error Messages
 
@@ -93,6 +130,9 @@ Each agent keeps its own secrets under `agents/<AGENT_NAME>/secrets/`.
 Each normal reply sends an assembled OpenRouter request instead of only `soul/persona.md`.
 
 * `soul/persona.md` : Identity and behavior anchor.
+* `global-persona.md` : Shared behavior/style addition appended after the agent persona.
+* `soul/origin.md` : Optional full lore dump for origin/backstory material. On startup, the bot mirrors non-empty text from the Discord `origin` memory post into this file. This is editable source material and is not sent in every model request.
+* `soul/origin_summary.md` : Optional compact origin summary generated from `soul/origin.md`. If present and non-empty, it is sent as hidden `Origin Summary` context.
 * `soul/longmemory.txt` : Durable compact memory sent as hidden context when present. It uses explicit `# Past`, `# Present`, and `# Future / Plans` sections.
 * `soul/shortmemory.jsonl` : Recent local shortmemory lines sent as hidden context.
 * `shortmemory` Discord forum post : Mirrored shortmemory authority when available. If `shortmemory_thread_id` is blank, the bot finds this post from the memory forum.
@@ -100,18 +140,23 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `longmemory` Discord forum post : Receives a latest longmemory preview/notice from `||@agent summarize||`. The full memory is only stored in the local txt file because Discord posts have text limits.
 * `adjustments` Discord forum post : Receives an audit entry whenever `||@agent adjust: ...||` replaces a reply.
 * `status` Discord forum post : Receives a status dump whenever status changes, including AI-inferred status changes.
+* `discord_status_update` : Controls which enabled skills may provide optional hints for natural-language status text after summarization. Unknown or unavailable skill names are ignored.
+* `seconds_before_reply` : Tupper/delete-race hack. The bot waits this many seconds before a normal OpenRouter reply, re-checks that the source message still exists, and skips the model call if the message was deleted.
 * `summarization_settings.summary_policy` : Summarization guidance. Remember durable per-user context when it improves future replies, but do not save every passing detail. Longmemory keeps `# Past`, `# Present`, and `# Future / Plans`.
+* `origin_summary_settings.summary_policy` : Origin summary guidance. This controls how `soul/origin.md` becomes `soul/origin_summary.md`, with more emphasis on memorable lore, triggers, voice anchors, and roleplay hooks.
 * automatic summarization : Runs in the background after enough new shortmemory has accumulated. It uses `conversation_history_limit` as the rough trigger size and does not block normal chat replies.
-* `dream_settings` : Controls the dream part of the `time` skill. `||@agent dream||` requires `soul/status.json` mode `sleeping`, reads configured source files and previous dreams, writes a dream draft into `soul/dreams`, and does not update longmemory.
+* automatic Discord status update : When `discordstatusupdate` is enabled, successful summarization writes a concise human-readable status into `soul/status.json` and mirrors it to the `status` Discord forum post.
+* `dream_settings` : Controls the dream part of the `time` skill. `||@agent dream||` requires `soul/status.json` mode `sleeping`, reads configured source files and previous dreams, writes a dream draft into `soul/dreams`, and does not update longmemory. When status changes to sleeping, `utility_model` may decide to create an immediate dream.
 * `||@agent passtimeminutes: 60||` : Adds a one-shot hidden time passage block to the next normal reply.
+* `||@agent passtimehours: 8||` : Adds a longer one-shot hidden time passage block to the next normal reply.
+* sleep timer : When status changes to `sleeping`, `utility_model` estimates `sleep_planned_minutes` and stores `sleep_remaining_minutes` in `soul/status.json`. Passing time counts that value down. Extra pass-time context can adjust the timer; interruptions reduce it faster, restful protection can extend it. If it reaches zero or below, status becomes `awake` and `woke_minutes_ago` records how long ago the agent woke.
 * `enabled_skills` : Implemented skills may contribute small context blocks.
-* `soul/status.json` : Current agent state used by core replies and status-aware skills. `mode` is the primary state; `status` contains boolean flags. Current modes are `awake`, `sleepy`, `sleeping`, `dreaming`, `busy`, and `away`. `busy` only allows direct attention; `away` blocks normal replies.
+* `soul/status.json` : Current agent state used by core replies and status-aware skills. `mode` is the primary state; `status` contains boolean flags. Current modes are `awake`, `sleepy`, `sleeping`, `dreaming`, and `away`. `away` blocks normal replies.
 * `soul/dreams/` : Dream output folder used by the pipe dream command.
-* `soul/stories/` : Story output folder used by `||@agent story||`.
+* `soul/stories/` : Story skill output folder used by `||@agent story||`. Story generation and recall search `.md` and `.txt` files here, then combine relevant story text with shortmemory and longmemory as evidence.
 * `soul/art/` and `soul/emojis/` : Placeholder content folders. They are not automatically sent until a future skill or retrieval feature chooses them.
 
 ## Memory Maintenance Flow
 
-* `||@agent summarize||` : First, summarize recent shortmemory and adjustment history into `soul/longmemory.txt`.
-* review summary result : Check that the useful adjustment lessons made it into longmemory.
-* `/clean adjustments` : After review, delete the adjustment audit entries from Discord.
+* `||@agent summarize||` : Summarize recent shortmemory and adjustment history into `soul/longmemory.txt`, then clean adjustment audit messages.
+* review summary result : Check that useful adjustment lessons made it into longmemory.

@@ -1,9 +1,10 @@
 const placeholderSkillDescriptions = {
+  characterproxy: "Future webhook-based character proxy for roleplaying as saved character profiles.",
   emoji: "Future emoji preference and emoji context provider.",
+  gamemaster: "Future game master workflow for scenes, rules, pacing, and world state.",
   profilepic: "Future avatar/profile image workflow.",
   summarization: "Future shortmemory to longmemory maintenance workflow.",
   art: "Future art prompt, reference, and visual memory workflow.",
-  stories: "Future story, lore, and narrative retrieval workflow.",
   settings: "Future Discord-editable settings workflow.",
 };
 

@@ -3,12 +3,15 @@ import { readFileSync, unlinkSync } from "node:fs";
 import { appendFile, mkdir, open, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildOpenRouterMessages } from "./context.js";
+import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
 import { createMusicSkill } from "./skills/music.js";
 import { plannedSkillNames } from "./skills/placeholders.js";
+import { createDiscordStatusUpdateSkill } from "./skills/discordstatusupdate.js";
+import { createStorySkill } from "./skills/story.js";
 import { createTimeSkill } from "./skills/time.js";
 
 const require = createRequire(import.meta.url);
-const { Client, GatewayIntentBits, Partials } = require("./regenerated/node_modules/discord.js");
+const { AttachmentBuilder, Client, GatewayIntentBits, Partials } = require("./regenerated/node_modules/discord.js");
 
 async function readTextFile(path) {
   try {
@@ -24,6 +27,28 @@ async function loadJson(path) {
   return JSON.parse(text.replace(/^\s*\/\/.*$/gm, ""));
 }
 
+function mergeSettings(globalSettings, agentSettings) {
+  const merged = { ...globalSettings };
+
+  for (const [key, value] of Object.entries(agentSettings)) {
+    const existingValue = merged[key];
+    if (
+      value &&
+      existingValue &&
+      typeof value === "object" &&
+      typeof existingValue === "object" &&
+      !Array.isArray(value) &&
+      !Array.isArray(existingValue)
+    ) {
+      merged[key] = mergeSettings(existingValue, value);
+    } else {
+      merged[key] = value;
+    }
+  }
+
+  return merged;
+}
+
 async function appendConversationLog(entry) {
   const shortMemoryEntry = { timestamp: new Date().toISOString(), ...entry };
   await appendFile(shortMemoryPath, `${JSON.stringify(shortMemoryEntry)}\n`);
@@ -32,12 +57,19 @@ async function appendConversationLog(entry) {
 }
 
 async function appendShortMemoryEntries(entries) {
-  if (entries.length === 0) return;
+  if (entries.length === 0) return 0;
 
-  await appendFile(shortMemoryPath, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
-  for (const entry of entries) {
+  const existingEntries = await readShortMemoryEntries(shortMemoryPath);
+  const existingEntryKeys = new Set(existingEntries.map(shortMemoryEntryKey));
+  const newEntries = entries.filter((entry) => !existingEntryKeys.has(shortMemoryEntryKey(entry)));
+  if (newEntries.length === 0) return 0;
+
+  const mergedEntries = sortShortMemoryEntries([...existingEntries, ...newEntries]);
+  await writeShortMemoryEntries(mergedEntries);
+  for (const entry of newEntries) {
     await appendShortMemoryThread(entry);
   }
+  return newEntries.length;
 }
 
 function requiredSetting(name) {
@@ -45,11 +77,13 @@ function requiredSetting(name) {
   return settings[name];
 }
 
+const temporaryErrorSeconds = 15;
+
 async function replyWithTemporaryError(message, text) {
-  const errorMessage = await safeReply(message, text);
+  const errorMessage = await safeReply(message, `${text}\n\nmessage will be removed in ${temporaryErrorSeconds} seconds`);
   setTimeout(() => {
     errorMessage.delete().catch(() => {});
-  }, 30000);
+  }, temporaryErrorSeconds * 1000);
 }
 
 async function replyTemporarily(message, text, milliseconds = 30000) {
@@ -74,6 +108,119 @@ function isDeleteReactionEmoji(emoji) {
   const emojiName = String(emoji?.name || "");
   const emojiIdentifier = String(emoji?.identifier || "");
   return emojiName === "❌" || emojiName.toLowerCase() === "x" || emojiIdentifier.includes("%E2%9D%8C");
+}
+
+function isMemoReactionEmoji(emoji) {
+  const emojiName = String(emoji?.name || "");
+  const emojiIdentifier = String(emoji?.identifier || "");
+  return emojiName === "📝" ||
+    emojiName === "✏️" ||
+    emojiName === "✏" ||
+    ["memo", "pencil"].includes(emojiName.toLowerCase()) ||
+    emojiIdentifier.includes("%F0%9F%93%9D") ||
+    emojiIdentifier.includes("%E2%9C%8F");
+}
+
+function isRedoReactionEmoji(emoji) {
+  const emojiName = String(emoji?.name || "");
+  const emojiIdentifier = String(emoji?.identifier || "");
+  return emojiName === "🔁" || emojiName.toLowerCase() === "repeat" || emojiIdentifier.includes("%F0%9F%94%81");
+}
+
+function isRewindReactionEmoji(emoji) {
+  const emojiName = String(emoji?.name || "");
+  const emojiIdentifier = String(emoji?.identifier || "");
+  return emojiName === "⏪" ||
+    emojiName.toLowerCase() === "rewind" ||
+    emojiIdentifier.includes("%E2%8F%AA");
+}
+
+function isReplaceReactionEmoji(emoji) {
+  const emojiName = String(emoji?.name || "");
+  const emojiIdentifier = String(emoji?.identifier || "");
+  return emojiName === "▶️" ||
+    emojiName === "▶" ||
+    emojiName.toLowerCase() === "arrow_forward" ||
+    emojiIdentifier.includes("%E2%96%B6");
+}
+
+function isMusicReactionEmoji(emoji) {
+  const emojiName = String(emoji?.name || "");
+  const emojiIdentifier = String(emoji?.identifier || "");
+  return emojiName === "🎵" ||
+    emojiName.toLowerCase() === "musical_note" ||
+    emojiIdentifier.includes("%F0%9F%8E%B5");
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function withTypingHeartbeat(channel, task) {
+  let stopped = false;
+  const sendTyping = async () => {
+    if (!channel?.sendTyping) return;
+    await channel.sendTyping().catch((error) => {
+      console.error(`sendTyping failed in ${channel.id || "unknown channel"}: ${error.message}`);
+    });
+  };
+
+  await sendTyping();
+  const timer = setInterval(() => {
+    if (!stopped) sendTyping();
+  }, 4000);
+
+  try {
+    return await task();
+  } finally {
+    stopped = true;
+    clearInterval(timer);
+  }
+}
+
+function isMissingDiscordResourceError(error) {
+  return error?.code === 10008 ||
+    error?.status === 404 ||
+    /Unknown Message/i.test(String(error?.message || ""));
+}
+
+function isDiscordConnectTimeout(error) {
+  return error?.name === "ConnectTimeoutError" ||
+    error?.cause?.name === "ConnectTimeoutError" ||
+    /Connect Timeout Error/i.test(String(error?.message || ""));
+}
+
+function formatTemporaryError(prefix, error) {
+  if (isDiscordConnectTimeout(error)) {
+    return `${prefix}: Discord timed out while the bot was talking to Discord. This is usually temporary, retry is okay.`;
+  }
+  return `${prefix}: ${error.message}`;
+}
+
+function formatErrorForLog(error) {
+  const cause = error?.cause ? `\ncaused by: ${error.cause.stack || error.cause.message || error.cause}` : "";
+  return `${error?.stack || error}${cause}`;
+}
+
+function openRouterProviderOptions() {
+  const ignore = (openRouterProviderRouting.ignore || [])
+    .map((providerName) => String(providerName).trim())
+    .filter(Boolean);
+  if (ignore.length === 0) return undefined;
+  return { ignore };
+}
+
+async function deleteDiscordMessageIfExists(message, label) {
+  try {
+    await message.delete();
+    return true;
+  } catch (error) {
+    if (isMissingDiscordResourceError(error)) {
+      console.log(`${label} was already deleted.`);
+      return false;
+    }
+    throw error;
+  }
 }
 
 const agentName = process.env.AGENT_NAME || "Stardust";
@@ -149,25 +296,41 @@ process.on("unhandledRejection", (error) => {
 });
 process.on("uncaughtException", async (error) => {
   console.error(`Uncaught exception: ${error?.stack || error}`);
+  if (error?.name === "ConnectTimeoutError" || String(error?.message || "").includes("Connect Timeout Error")) {
+    console.error("Keeping bot process alive after transient Discord connection timeout.");
+    return;
+  }
   await releaseAgentLock();
   process.exit(1);
 });
 
 const agentFolder = path.join("..", "agents", agentName);
-const settings = await loadJson(path.join(agentFolder, "settings.jsonc"));
+const backupFolder = path.join(agentFolder, "backups");
+const globalSettingsPath = path.join("..", "settings.jsonc");
+const agentSettingsPath = path.join(agentFolder, "settings.jsonc");
+const settings = mergeSettings(await loadJson(globalSettingsPath), await loadJson(agentSettingsPath));
 const soulFolder = path.join(agentFolder, "soul");
+const originPath = path.join(soulFolder, "origin.md");
+const originSummaryPath = path.join(soulFolder, "origin_summary.md");
 const longMemoryPath = path.join(soulFolder, "longmemory.txt");
 const shortMemoryPath = path.join(soulFolder, "shortmemory.jsonl");
 const statusPath = path.join(soulFolder, "status.json");
+const rawOpenRouterPath = path.join(soulFolder, "raw.txt");
 const secretsFolder = path.join(agentFolder, "secrets");
 const discordToken = await readTextFile(path.join(secretsFolder, "discord_token.txt"));
 const openrouterApiKey = await readTextFile(path.join(secretsFolder, "openrouter_api_key.txt"));
 const identity = requiredSetting("identity");
 const name = String(identity.name);
+const mentionRoleIds = new Set((identity.mention_role_ids || []).map((roleId) => String(roleId)));
 const model = requiredSetting("model");
+const utilityModel = requiredSetting("utility_model");
+const openRouterProviderRouting = requiredSetting("openrouter_provider_routing");
 const systemPromptFile = requiredSetting("system_prompt_file");
+const globalPersonaFile = String(requiredSetting("global_persona_file"));
 const personaSourceThreadId = String(requiredSetting("persona_source_thread_id"));
+const useMemoryForumPersonaSource = Boolean(requiredSetting("use_memory_forum_persona_source"));
 const accessThreadId = String(requiredSetting("access_thread_id"));
+const discordInviteUrl = String(requiredSetting("discord_invite_url"));
 let shortMemoryThreadId = String(requiredSetting("shortmemory_thread_id"));
 const memoryForumChannelId = String(requiredSetting("memory_forum_channel_id"));
 const memoryForumPosts = requiredSetting("memory_forum_posts").map((postName) => String(postName));
@@ -177,15 +340,22 @@ if (!memoryForumChannelId) {
   );
 }
 const systemPromptPath = path.join(agentFolder, systemPromptFile);
+const globalPersonaPath = path.join("..", globalPersonaFile);
 async function loadSystemPrompt({ allowEmpty = false } = {}) {
-  const prompt = await readTextFile(systemPromptPath);
-  if (!prompt && !allowEmpty) throw new Error(`Persona file is empty: ${systemPromptPath}`);
+  const agentPrompt = await readTextFile(systemPromptPath);
+  const globalPrompt = await readTextFile(globalPersonaPath);
+  if (!agentPrompt && !allowEmpty) throw new Error(`Persona file is empty: ${systemPromptPath}`);
+  if (!globalPrompt) throw new Error(`Global persona file is empty: ${globalPersonaPath}`);
+  const prompt = [agentPrompt, globalPrompt].filter((part) => part.trim()).join("\n\n");
   return prompt;
 }
 let systemPrompt = await loadSystemPrompt({ allowEmpty: Boolean(personaSourceThreadId) });
 
 const locationReplyPolicy = requiredSetting("location_reply_policy");
 const locationReplyMode = String(locationReplyPolicy.mode);
+const onlyAllowRepliesToSpecificChannels = Boolean(
+  locationReplyPolicy.only_allow_replies_to_specific_channels,
+);
 const replyToChannelIds = new Set(
   locationReplyPolicy.reply_to_channel_ids.map((channelId) => String(channelId)),
 );
@@ -204,11 +374,16 @@ const replyToUserIds = new Set(userReplyPolicy.reply_to_user_ids.map((userId) =>
 const doNotReplyToUserIds = new Set(
   userReplyPolicy.do_not_reply_to_user_ids.map((userId) => String(userId)),
 );
+const controlUserIds = new Set(requiredSetting("control_user_ids").map((userId) => String(userId)));
 const botReplyPolicy = requiredSetting("bot_reply_policy");
 const replyToBotIds = new Set(botReplyPolicy.reply_to_bot_ids.map((botId) => String(botId)));
+const replyToWebhooks = Boolean(botReplyPolicy.reply_to_webhooks);
 const conversationHistoryLimit = Number(requiredSetting("conversation_history_limit"));
+const secondsBeforeReply = Number(requiredSetting("seconds_before_reply"));
 const discordReplyCharacterLimit = Number(requiredSetting("discord_reply_character_limit"));
 const summarizationSettings = requiredSetting("summarization_settings");
+const originSummarySettings = requiredSetting("origin_summary_settings");
+const intentTriggers = requiredSetting("intent_triggers");
 const replyWhenMentioned = Boolean(requiredSetting("reply_when_mentioned"));
 const replyWhenNameUsed = Boolean(requiredSetting("reply_when_name_used"));
 const replyWhenNameNotUsed = Boolean(requiredSetting("reply_when_name_not_used"));
@@ -219,9 +394,55 @@ const botNames = [name, ...identity.nicknames].map((botName) => String(botName).
 const conversationHistory = [];
 const lastReplyByChannelId = new Map();
 const pendingTimePassages = [];
+const pendingReplyEditsByChannelId = new Map();
 const handledDeleteReactionKeys = new Set();
+const handledReactionActionKeys = new Set();
 let summarizationTimer = null;
 let summarizationRunning = false;
+
+async function writeRawOpenRouterText(messages, source = "unknown") {
+  const text = [
+    `source: ${source}`,
+    `written_at: ${new Date().toISOString()}`,
+    "",
+    ...messages.map((message, index) => [
+      `# message ${index + 1}: ${message.role || "unknown"}`,
+      String(message.content || ""),
+    ].join("\n")),
+    "",
+  ].join("\n\n");
+  await writeFile(rawOpenRouterPath, text, "utf8");
+}
+
+function backupTimestamp() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function safeBackupName(text) {
+  return String(text || "file").replace(/[^a-z0-9._-]+/gi, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "file";
+}
+
+async function backupFileBeforeOverwrite(filePath, reason) {
+  const existing = await readFile(filePath).catch((error) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (!existing || existing.length === 0) return null;
+
+  await mkdir(backupFolder, { recursive: true });
+  const relativeName = safeBackupName(path.relative(agentFolder, filePath));
+  const backupName = `${backupTimestamp()}-${safeBackupName(reason)}-${relativeName}`;
+  const backupPath = path.join(backupFolder, backupName);
+  await writeFile(backupPath, existing);
+  return backupPath;
+}
+
+async function readRawOpenRouterText() {
+  return readFile(rawOpenRouterPath, "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
+}
 
 const bot = new Client({
   intents: [
@@ -236,7 +457,7 @@ const bot = new Client({
 });
 
 const enabledSkills = requiredSetting("enabled_skills");
-const allowedStatusModes = new Set(["awake", "sleepy", "sleeping", "dreaming", "busy", "away"]);
+const allowedStatusModes = new Set(["awake", "sleepy", "sleeping", "dreaming", "away"]);
 
 async function readStatus() {
   const status = await loadJson(statusPath);
@@ -253,6 +474,16 @@ async function writeStatus(status) {
   await writeFile(statusPath, `${JSON.stringify(status, null, 2)}\n`, "utf8");
 }
 
+function statusFlagsForMode(mode) {
+  return {
+    awake: mode === "awake",
+    sleepy: mode === "sleepy",
+    sleeping: mode === "sleeping",
+    dreaming: mode === "dreaming",
+    away: mode === "away",
+  };
+}
+
 const statusApi = {
   async get() {
     return readStatus();
@@ -264,12 +495,7 @@ const statusApi = {
       mode,
       status: {
         ...(status.status || {}),
-        awake: mode === "awake",
-        sleeping: mode === "sleeping",
-        dreaming: mode === "dreaming",
-        busy: mode === "busy",
-        away: mode === "away",
-        sleepy: mode === "sleepy" || Boolean(status.status?.sleepy),
+        ...statusFlagsForMode(mode),
       },
       current_activity: currentActivity,
       last_status_change: new Date().toISOString(),
@@ -314,6 +540,11 @@ function statusDumpText(previousStatus, nextStatus, source) {
     `mode: ${nextStatus.mode}`,
     `energy: ${nextStatus.energy ?? ""}`,
     `current_activity: ${nextStatus.current_activity || ""}`,
+    `discord_status_text: ${nextStatus.discord_status_text || ""}`,
+    `discord_status_mood: ${nextStatus.discord_status_mood || ""}`,
+    `discord_status_visibility_note: ${nextStatus.discord_status_visibility_note || ""}`,
+    `discord_status_updated_at: ${nextStatus.discord_status_updated_at || ""}`,
+    `discord_status_source: ${nextStatus.discord_status_source || ""}`,
     "flags:",
     JSON.stringify(nextStatus.status || {}, null, 2),
   ].join("\n");
@@ -329,7 +560,7 @@ async function appendStatusMemoryDump(previousStatus, nextStatus, source) {
   }
 }
 
-async function addTimePassage(minutes) {
+async function addTimePassage(minutes, sleepTimerAdjustment = null) {
   if (!Number.isInteger(minutes) || minutes < 1) {
     throw new Error("minutes must be a whole number greater than 0.");
   }
@@ -343,27 +574,59 @@ async function addTimePassage(minutes) {
     content: `${agentName} experiences ${minutes} minutes of time passing before the next reply.`,
   });
 
-  const status = await readStatus();
-  const energy = Number(status.energy);
-  const energyGain = status.mode === "sleeping" || status.mode === "dreaming"
+  const previousStatus = await readStatus();
+  const energy = Number(previousStatus.energy);
+  const energyGain = previousStatus.mode === "sleeping" || previousStatus.mode === "dreaming"
     ? Math.max(1, Math.floor(minutes / 6))
     : 0;
+  const remainingSleepMinutes = Number(previousStatus.sleep_remaining_minutes);
   const nextStatus = {
-    ...status,
-    energy: Number.isFinite(energy) ? Math.min(100, energy + energyGain) : status.energy,
+    ...previousStatus,
+    energy: Number.isFinite(energy) ? Math.min(100, energy + energyGain) : previousStatus.energy,
     last_time_passage_minutes: minutes,
     last_time_passage_at: new Date().toISOString(),
   };
+
+  if (
+    (previousStatus.mode === "sleeping" || previousStatus.mode === "dreaming") &&
+    Number.isFinite(remainingSleepMinutes)
+  ) {
+    const adjustmentMinutes = Number(sleepTimerAdjustment?.minutes || 0);
+    const nextRemainingSleepMinutes = remainingSleepMinutes - minutes - adjustmentMinutes;
+    nextStatus.sleep_remaining_minutes = nextRemainingSleepMinutes;
+    if (sleepTimerAdjustment) {
+      nextStatus.last_sleep_timer_adjustment_minutes = adjustmentMinutes;
+      nextStatus.last_sleep_timer_adjustment_reason = String(sleepTimerAdjustment.reason || "");
+    }
+    if (nextRemainingSleepMinutes <= 0) {
+      const wokeMinutesAgo = Math.abs(nextRemainingSleepMinutes);
+      nextStatus.mode = "awake";
+      nextStatus.status = {
+        ...(nextStatus.status || {}),
+        ...statusFlagsForMode("awake"),
+      };
+      nextStatus.woke_minutes_ago = wokeMinutesAgo;
+      nextStatus.current_activity = wokeMinutesAgo > 0
+        ? `woke up ${wokeMinutesAgo} minutes ago after sleeping`
+        : "just woke up after sleeping";
+      nextStatus.last_status_change = new Date().toISOString();
+    }
+  }
+
   await writeStatus(nextStatus);
+  await appendStatusMemoryDump(previousStatus, nextStatus, "time passage");
   return nextStatus;
 }
 
 const skillFactories = new Map([
+  ["discordstatusupdate", createDiscordStatusUpdateSkill],
   ["music", createMusicSkill],
+  ["story", createStorySkill],
   ["time", createTimeSkill],
 ]);
 const placeholderSkillNames = new Set(plannedSkillNames());
-const skills = enabledSkills.map((skillName) => {
+let skills = [];
+skills = enabledSkills.map((skillName) => {
   const factory = skillFactories.get(skillName);
   if (!factory && placeholderSkillNames.has(skillName)) {
     throw new Error(`Skill is planned but not implemented yet: ${skillName}`);
@@ -374,15 +637,72 @@ const skills = enabledSkills.map((skillName) => {
     agentName,
     bot,
     agentFolder,
+    conversationHistoryLimit,
+    findMemoryForumPostByName,
+    getSkills: () => skills,
+    longMemoryPath,
     model,
     openrouterApiKey,
+    replyTemporarily,
     requiredSetting,
     safeReply,
     shortMemoryPath,
     statusApi,
     systemPrompt: () => systemPrompt,
+    utilityModel,
+    writeRawOpenRouterText,
   });
 });
+
+async function runSkillHook(hookName, hookContext) {
+  for (const skill of skills) {
+    const hook = skill?.[hookName];
+    if (typeof hook !== "function") continue;
+    try {
+      await hook(hookContext);
+    } catch (error) {
+      console.error(`Skill hook ${hookName} failed for ${skill.name || "unknown"}: ${error.message}`);
+    }
+  }
+}
+
+function skillCommands() {
+  return skills.flatMap((skill) => {
+    if (!skill.command) return [];
+    return Array.isArray(skill.command) ? skill.command : [skill.command];
+  });
+}
+
+async function handleSkillInteraction(interaction) {
+  for (const skill of skills) {
+    try {
+      if (await skill.handleInteraction?.(interaction)) return true;
+    } catch (error) {
+      const text = `Error running ${skill.name || "unknown"} command: ${error.message}`;
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(text).catch(() => {});
+      } else {
+        await interaction.reply({ content: text, ephemeral: true }).catch(() => {});
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+async function userCanControlBot(interaction) {
+  if (controlUserIds.size === 0) return true;
+  return controlUserIds.has(String(interaction.user?.id || ""));
+}
+
+async function rejectUnauthorizedControl(interaction) {
+  const text = `Only approved control users can run ${agentName} slash commands.`;
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply(text).catch(() => {});
+  } else {
+    await interaction.reply({ content: text, ephemeral: true }).catch(() => {});
+  }
+}
 
 bot.once("clientReady", async () => {
   console.log(`Bot is online. Logged in as ${bot.user.tag}`);
@@ -399,23 +719,12 @@ bot.once("clientReady", async () => {
           description: "Clear this agent's soul/shortmemory.jsonl and live recent context.",
         },
         {
-          name: "clean",
-          description: "Clean a selected generated Discord memory surface.",
-          options: [
-            {
-              name: "target",
-              description: "What to clean. Currently only adjustments is supported.",
-              type: 3,
-              required: true,
-              choices: [
-                { name: "adjustments", value: "adjustments" },
-              ],
-            },
-          ],
-        },
-        {
           name: "setupmemoryforum",
           description: "Create or populate this agent's memory forum posts.",
+        },
+        {
+          name: "raw",
+          description: "Show the latest OpenRouter text uploaded by this agent.",
         },
         {
           name: "syncshortmemory",
@@ -450,19 +759,7 @@ bot.once("clientReady", async () => {
           name: "scrapedmshortmemory",
           description: "Append recent DMs with you ending at this agent's last DM reply.",
         },
-        {
-          name: "uploadstory",
-          description: "Upload a local soul/stories Markdown story to the Discord stories thread.",
-          options: [
-            {
-              name: "filename",
-              description: "Story filename in soul/stories. .md is assumed if omitted.",
-              type: 3,
-              required: true,
-            },
-          ],
-        },
-        ...skills.map((skill) => skill.command),
+        ...skillCommands(),
       ].filter(Boolean);
 
       await guild.commands.set(commands);
@@ -483,17 +780,29 @@ bot.once("clientReady", async () => {
     );
   }
 
-  if (personaSourceThreadId) {
-    try {
-      const characterCount = await reloadPersonaFromConfiguredThread();
-      console.log(
-        `Loaded persona for ${agentName} from Discord forum post/thread ${personaSourceThreadId}: ${characterCount} characters.`,
-      );
-    } catch (error) {
-      console.error(`Could not load persona from Discord forum post/thread ${personaSourceThreadId}: ${error.message}`);
+  try {
+    const characterCount = await reloadPersonaFromDiscordSource();
+    if (characterCount) {
+      console.log(`Loaded persona for ${agentName} from Discord persona source: ${characterCount} characters.`);
+    } else {
+      console.log(`Loaded persona for ${agentName} from disk: ${systemPrompt.length} characters.`);
     }
-  } else {
-    console.log(`Loaded persona for ${agentName} from disk: ${systemPrompt.length} characters.`);
+  } catch (error) {
+    console.error(`Could not load persona from Discord persona source: ${error.message}`);
+    console.log(`Keeping persona for ${agentName} from disk: ${systemPrompt.length} characters.`);
+  }
+
+  try {
+    const result = await syncOriginFromDiscordSource();
+    if (result.synced) {
+      console.log(
+        `Synced origin for ${agentName}: wrote ${result.originFile}, summary ${result.summaryUpdated ? "updated" : "unchanged"}.`,
+      );
+    } else {
+      console.log(`Origin sync skipped for ${agentName}: ${result.reason}`);
+    }
+  } catch (error) {
+    console.error(`Could not sync origin from Discord origin post: ${error.message}`);
   }
 
   if (accessThreadId) console.log(`Access forum post/thread for ${agentName}: ${accessThreadId}`);
@@ -507,7 +816,11 @@ bot.once("clientReady", async () => {
     console.error(`Could not sync shortmemory: ${error.message}`);
   }
   for (const skill of skills) {
-    skill.onReady?.();
+    try {
+      await skill.onReady?.();
+    } catch (error) {
+      console.error(`Skill ${skill.name || "unknown"} onReady failed: ${error.message}`);
+    }
   }
 });
 
@@ -570,6 +883,7 @@ async function threadToPersonaText(channel) {
 async function saveAndReloadPersona(text) {
   const trimmedText = text.trim();
   if (!trimmedText) throw new Error(`Refusing to overwrite ${systemPromptFile} with empty text.`);
+  await backupFileBeforeOverwrite(systemPromptPath, "reloadpersona");
   await writeFile(systemPromptPath, `${trimmedText}\n`, "utf8");
   systemPrompt = await loadSystemPrompt();
   return systemPrompt.length;
@@ -584,6 +898,120 @@ async function reloadPersonaFromConfiguredThread() {
   return saveAndReloadPersona(await threadToPersonaText(thread));
 }
 
+async function reloadPersonaFromDiscordSource() {
+  if (personaSourceThreadId) return reloadPersonaFromConfiguredThread();
+  if (!useMemoryForumPersonaSource) return null;
+
+  const personaPost = await findMemoryForumPostByName("persona").catch(() => null);
+  if (!personaPost) return null;
+  return saveAndReloadPersona(await threadToPersonaText(personaPost));
+}
+
+async function writeTextFileIfChanged(filePath, text, backupReason) {
+  const nextText = text.endsWith("\n") ? text : `${text}\n`;
+  const existingText = await readFile(filePath, "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
+  if (existingText === nextText) return false;
+
+  await mkdir(path.dirname(filePath), { recursive: true });
+  if (existingText) await backupFileBeforeOverwrite(filePath, backupReason);
+  await writeFile(filePath, nextText, "utf8");
+  return true;
+}
+
+async function summarizeOriginText(originText, existingSummary) {
+  const messages = [
+    {
+      role: "system",
+      content: [
+        `# Persona: ${agentName}`,
+        systemPrompt,
+        "",
+        "# Origin Summary Task",
+        "Rewrite the origin/backstory source material into a rich but still compressed durable lore summary.",
+        "This summary will be sent in normal model requests, so keep it much shorter than the source, but do not flatten away the memorable details.",
+        String(originSummarySettings.summary_policy || "preserve memorable lore and roleplay hooks, not just a tiny abstract"),
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        "# Existing Origin Summary",
+        existingSummary || "(empty)",
+        "",
+        "# Full Origin Source",
+        originText,
+        "",
+        "Return the complete compact origin summary.",
+      ].join("\n"),
+    },
+  ];
+  await writeRawOpenRouterText(messages, "origin summarization");
+
+  const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openrouterApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: Math.min(Number(requiredSetting("chaos")), 0.4),
+      max_tokens: Number(originSummarySettings.max_tokens || 2200),
+      provider: openRouterProviderOptions(),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
+  }
+
+  const payload = await response.json();
+  const summaryText = payload.choices?.[0]?.message?.content?.trim();
+  if (!summaryText) throw new Error("OpenRouter returned an empty origin summary.");
+  return summaryText;
+}
+
+async function syncOriginFromDiscordSource() {
+  const originPost = await findMemoryForumPostByName("origin").catch(() => null);
+  if (!originPost) return { synced: false, reason: "no origin memory forum post found" };
+
+  let originText;
+  try {
+    originText = await threadToPersonaText(originPost);
+  } catch (error) {
+    if (String(error.message || "").includes("did not contain usable persona text")) {
+      return { synced: false, reason: "origin post is empty" };
+    }
+    throw error;
+  }
+
+  const originChanged = await writeTextFileIfChanged(originPath, originText, "origin-sync");
+  const existingSummary = await readFile(originSummaryPath, "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
+  let summaryUpdated = false;
+  if (originChanged || !existingSummary.trim()) {
+    console.log(
+      `Regenerating origin summary for ${agentName}: originChanged=${originChanged}, existingSummaryCharacters=${existingSummary.trim().length}.`,
+    );
+    const summaryText = await summarizeOriginText(originText, existingSummary.trim());
+    summaryUpdated = await writeTextFileIfChanged(originSummaryPath, summaryText, "origin-summary");
+  }
+
+  return {
+    synced: true,
+    originChanged,
+    summaryUpdated,
+    originFile: path.relative(agentFolder, originPath).replace(/\\/g, "/"),
+    summaryFile: path.relative(agentFolder, originSummaryPath).replace(/\\/g, "/"),
+  };
+}
+
 function formatShortMemoryThreadEntry(entry) {
   const lines = [
     `shortmemory: ${entry.role || "unknown"}`,
@@ -595,6 +1023,7 @@ function formatShortMemoryThreadEntry(entry) {
   if (entry.channel_id) lines.push(`channel_id: ${entry.channel_id}`);
   if (entry.message_id) lines.push(`message_id: ${entry.message_id}`);
   if (entry.server_id) lines.push(`server_id: ${entry.server_id}`);
+  if (entry.edited_at) lines.push(`edited_at: ${entry.edited_at}`);
   if (typeof entry.truncated === "boolean") lines.push(`truncated: ${entry.truncated}`);
   lines.push("content:");
   lines.push(entry.content || "");
@@ -659,10 +1088,11 @@ async function fetchShortMemoryThreadEntries() {
     if (batch.size < 100) break;
   }
 
-  const entries = messages
-    .sort((left, right) => left.createdTimestamp - right.createdTimestamp)
-    .map((message) => parseShortMemoryThreadEntry(message.content))
-    .filter(Boolean);
+  const entries = sortShortMemoryEntries(
+    messages
+      .map((message) => parseShortMemoryThreadEntry(message.content))
+      .filter(Boolean),
+  );
 
   if (messages.length > 0 && entries.length === 0) {
     console.warn(
@@ -690,8 +1120,9 @@ async function deleteShortMemoryThreadEntries() {
 
     for (const message of batch.values()) {
       if (!parseShortMemoryThreadEntry(message.content)) continue;
-      await message.delete();
-      deleted += 1;
+      if (await deleteDiscordMessageIfExists(message, `Shortmemory entry ${message.id}`)) {
+        deleted += 1;
+      }
     }
 
     before = batch.last().id;
@@ -702,23 +1133,30 @@ async function deleteShortMemoryThreadEntries() {
 }
 
 async function readLocalShortMemoryEntries() {
-  const text = await readFile(shortMemoryPath, "utf8").catch((error) => {
-    if (error.code === "ENOENT") return "";
-    throw error;
-  });
+  return readShortMemoryEntries(shortMemoryPath);
+}
 
-  return text
-    .trim()
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean);
+function shortMemoryTimestamp(entry) {
+  const timestamp = Date.parse(entry.timestamp || "");
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sortShortMemoryEntries(entries) {
+  return [...entries].sort((left, right) => {
+    const timestampDifference = shortMemoryTimestamp(left) - shortMemoryTimestamp(right);
+    if (timestampDifference !== 0) return timestampDifference;
+    return String(left.message_id || "").localeCompare(String(right.message_id || ""));
+  });
+}
+
+async function writeShortMemoryEntries(entries) {
+  const sortedEntries = sortShortMemoryEntries(entries);
+  await backupFileBeforeOverwrite(shortMemoryPath, "shortmemory-overwrite");
+  await writeFile(
+    shortMemoryPath,
+    sortedEntries.length ? `${sortedEntries.map((entry) => JSON.stringify(entry)).join("\n")}\n` : "",
+    "utf8",
+  );
 }
 
 function shortMemoryEntryKey(entry) {
@@ -735,7 +1173,6 @@ function shortMemoryEntryKey(entry) {
 }
 
 function shortMemoryEntryMatchesMessage(entry, message) {
-  if (entry.role !== "assistant") return false;
   if (entry.message_id && String(entry.message_id) === String(message.id)) return true;
   return (
     String(entry.channel_id || "") === String(message.channelId) &&
@@ -749,11 +1186,7 @@ async function deleteLocalShortMemoryForMessage(message) {
   const deleted = entries.length - keptEntries.length;
 
   if (deleted > 0) {
-    await writeFile(
-      shortMemoryPath,
-      keptEntries.length ? `${keptEntries.map((entry) => JSON.stringify(entry)).join("\n")}\n` : "",
-      "utf8",
-    );
+    await writeShortMemoryEntries(keptEntries);
   }
 
   return deleted;
@@ -777,8 +1210,9 @@ async function deleteShortMemoryThreadEntriesForMessage(message) {
     for (const threadMessage of batch.values()) {
       const entry = parseShortMemoryThreadEntry(threadMessage.content);
       if (!entry || !shortMemoryEntryMatchesMessage(entry, message)) continue;
-      await threadMessage.delete();
-      deleted += 1;
+      if (await deleteDiscordMessageIfExists(threadMessage, `Shortmemory entry ${threadMessage.id}`)) {
+        deleted += 1;
+      }
     }
 
     before = batch.last().id;
@@ -786,6 +1220,85 @@ async function deleteShortMemoryThreadEntriesForMessage(message) {
   }
 
   return deleted;
+}
+
+async function updateLocalShortMemoryForMessage(message, replacementContent) {
+  return updateLocalShortMemoryForMessageSnapshot({
+    channelId: message.channelId,
+    messageId: message.id,
+    content: message.content,
+  }, replacementContent);
+}
+
+async function updateLocalShortMemoryForMessageSnapshot(snapshot, replacementContent) {
+  const entries = await readLocalShortMemoryEntries();
+  let updated = 0;
+  const updatedEntries = entries.map((entry) => {
+    const idMatches = snapshot.messageId && String(entry.message_id || "") === String(snapshot.messageId);
+    const contentMatches =
+      String(entry.channel_id || "") === String(snapshot.channelId || "") &&
+      String(entry.content || "").trim() === String(snapshot.content || "").trim();
+    if (!idMatches && !contentMatches) return entry;
+    updated += 1;
+    return {
+      ...entry,
+      content: replacementContent,
+      edited_at: new Date().toISOString(),
+    };
+  });
+
+  if (updated > 0) {
+    await writeShortMemoryEntries(updatedEntries);
+  }
+
+  return updated;
+}
+
+async function updateShortMemoryThreadEntriesForMessage(message, replacementContent) {
+  return updateShortMemoryThreadEntriesForMessageSnapshot({
+    channelId: message.channelId,
+    messageId: message.id,
+    content: message.content,
+  }, replacementContent);
+}
+
+async function updateShortMemoryThreadEntriesForMessageSnapshot(snapshot, replacementContent) {
+  await ensureShortMemoryThreadId();
+
+  const shortMemoryThread = await bot.channels.fetch(shortMemoryThreadId);
+  if (!shortMemoryThread?.messages?.fetch) {
+    throw new Error(`Could not read shortmemory forum post/thread: ${shortMemoryThreadId}`);
+  }
+
+  let updated = 0;
+  let before;
+
+  for (;;) {
+    const batch = await shortMemoryThread.messages.fetch({ limit: 100, before });
+    if (batch.size === 0) break;
+
+    for (const threadMessage of batch.values()) {
+      const entry = parseShortMemoryThreadEntry(threadMessage.content);
+      if (!entry) continue;
+      const idMatches = snapshot.messageId && String(entry.message_id || "") === String(snapshot.messageId);
+      const contentMatches =
+        String(entry.channel_id || "") === String(snapshot.channelId || "") &&
+        String(entry.content || "").trim() === String(snapshot.content || "").trim();
+      if (!idMatches && !contentMatches) continue;
+      const nextEntry = {
+        ...entry,
+        content: replacementContent,
+        edited_at: new Date().toISOString(),
+      };
+      await threadMessage.edit(formatShortMemoryThreadEntry(nextEntry));
+      updated += 1;
+    }
+
+    before = batch.last().id;
+    if (batch.size < 100) break;
+  }
+
+  return updated;
 }
 
 async function syncLocalShortMemoryFromDiscord() {
@@ -803,13 +1316,7 @@ async function syncLocalShortMemoryFromDiscord() {
     );
   }
 
-  if (existingText.trim()) {
-    const backupPath = `${shortMemoryPath}.${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
-    await writeFile(backupPath, existingText, "utf8");
-  }
-
-  const text = entries.map((entry) => JSON.stringify(entry)).join("\n");
-  await writeFile(shortMemoryPath, text ? `${text}\n` : "", "utf8");
+  await writeShortMemoryEntries(entries);
   return entries.length;
 }
 
@@ -843,6 +1350,7 @@ const memoryForumPostDescriptions = new Map([
   ["help", "Clean command reference for this agent."],
   ["emoji", "Emoji, reaction habits, symbol meanings, and tiny expression notes."],
   ["persona", "Persona source material and identity notes."],
+  ["origin", "Full editable origin, backstory, and lore source material. On startup, non-empty text here mirrors to local soul/origin.md and is summarized into soul/origin_summary.md for regular context."],
   ["music", "Music links, listening preferences, and song references."],
   ["adjustments", "Audit log of reply adjustments requested by the user."],
   ["status", "Current agent status changes, activity state, energy, and sleep or away logs."],
@@ -855,37 +1363,40 @@ const memoryForumPostDescriptions = new Map([
 ]);
 
 function helpCommandLists() {
+  const agentCommandName = `@${agentName.toLowerCase()}`;
   const slashCommands = [
     ["/reloadpersona", "Reload persona."],
     ["/clearshortmemory", "Clear local/live/Discord shortmemory."],
-    ["/clean adjustments", "Delete messages inside the Discord adjustments memory post."],
     ["/setupmemoryforum", "Create missing memory posts."],
+    ["/raw", "Show the latest OpenRouter text uploaded by this agent."],
     ["/syncshortmemory direction", "Sync local and Discord shortmemory."],
-    ["/scrapeshortmemory channel_id", "Scrape recent channel messages into shortmemory."],
-    ["/scrapedmshortmemory", "Scrape recent DMs into shortmemory."],
+    ["/scrapeshortmemory channel_id", "Scrape readable channel history into timestamp-sorted shortmemory."],
+    ["/scrapedmshortmemory", "Scrape readable DM history into timestamp-sorted shortmemory."],
     ["/uploadstory filename", "Upload a local soul/stories Markdown story to the stories thread."],
   ];
   const pipeCommands = [
-    ["||@agent reply||", "Continue the story from recent context."],
-    ["||@agent adjust: text||", "Instructions for redoing the previous bot reply; the bot updates its reply and shortmemory entry."],
-    ["||@agent summarize||", "Write soul/longmemory.txt."],
-    ["||@agent story||", "Write a short story from recent context and memory."],
-    ["||@agent story: text||", "Write a short story using the prompt plus recent context and memory."],
-    ["||@agent subtext: text||", "Private assumptions/persona nudges; loosely stored later by summaries."],
-    ["||@agent sleep||", "Set sleeping."],
-    ["||@agent wake||", "Set awake."],
-    ["||@agent busy||", "Set busy."],
-    ["||@agent away||", "Set away."],
-    ["||@agent status||", "Show status."],
-    ["||@agent passtimeminutes: 60||", "Pass time."],
-    ["||@agent dream||", "Dream from context; requires sleeping."],
-    ["||@agent dream: text||", "Dream from seed text; requires sleeping."],
+    [`||${agentCommandName} reply||`, "Reply to the last non-reply message without adding this command to shortmemory."],
+    [`||${agentCommandName} adjust: text||`, "Redo the previous bot reply with adjustment instructions; deletes the old bot reply and its assistant shortmemory entry."],
+    [`||${agentCommandName} summarize||`, "Write soul/longmemory.txt."],
+    [`||${agentCommandName} story||`, "Write a short story from recent context and memory."],
+    [`||${agentCommandName} story: text||`, "Write a short story using the prompt plus recent context and memory."],
+    [`||${agentCommandName} subtext: text||`, "Private assumptions/persona nudges; loosely stored later by summaries."],
+    [`||${agentCommandName} sleep||`, "Set sleeping."],
+    [`||${agentCommandName} wake||`, "Set awake."],
+    [`||${agentCommandName} away||`, "Set away."],
+    [`||${agentCommandName} state||`, "Show raw state mode, energy, and current activity."],
+    [`||${agentCommandName} status||`, "Generate a natural-language status update from memory and current state."],
+    [`||${agentCommandName} status: text||`, "Generate a natural-language status update using text as the basis or suggested status."],
+    [`||${agentCommandName} passtimeminutes: 60||`, "Pass time in minutes."],
+    [`||${agentCommandName} passtimehours: 8||`, "Pass time in hours."],
+    [`||${agentCommandName} dream||`, "Dream from context; requires sleeping."],
+    [`||${agentCommandName} dream: text||`, "Dream from seed text; requires sleeping."],
   ];
 
   if (enabledSkills.includes("music")) {
     pipeCommands.push(
-      ["||@agent music||", "Search the internet for music based on shortmemory."],
-      ["||@agent music: link or text||", "Search the internet for music based on description, or give a direct link."],
+      [`||${agentCommandName} music||`, "Search the internet for music based on shortmemory."],
+      [`||${agentCommandName} music: link or text||`, "Search the internet for music based on description, or give a direct link."],
     );
   }
 
@@ -906,26 +1417,42 @@ function helpForumPostContent() {
 
 function helpSectionMessages() {
   const { slashCommands, pipeCommands } = helpCommandLists();
-  return [
+  const agentCommandName = `@${agentName.toLowerCase()}`;
+  const sections = [
     [
       "**Slash Commands**",
+      "",
+      "* These control commands only work for approved control users.",
       "",
       ...slashCommands.map(([command, description]) => `* \`${command}\` : ${description}`),
     ].join("\n"),
     [
       "**Pipe Commands**",
       "",
-      "* Server use : `@agent`, the bot name, or the bot mention.",
-      "* DM use : `@agent` is optional.",
+      `* Server use : \`${agentCommandName}\`, the bot name, or the bot mention.`,
+      `* DM use : \`${agentCommandName}\` is optional.`,
       "",
       ...pipeCommands.map(([command, description]) => `* \`${command}\` : ${description}`),
     ].join("\n"),
     [
       "**Emoji Reactions**",
       "",
-      "* `❌` : Delete a bot reply and remove its matching assistant shortmemory entry.",
+      "* `❌` / `:x:` : Delete a bot reply and remove its matching assistant shortmemory entry.",
+      "* `🔁` / `:repeat:` : Delete the bot reply from memory, then redo a fresh reply to the previous user message.",
+      "* `⏪` / `:rewind:` : Delete a bot reply, remove that reply from shortmemory, and remove the previous user message from shortmemory only.",
+      "* `📝` / `:pencil:` : Temporarily reply `your next reply replaces the content of my last reply`, then use your next message as a technical edit of that bot reply and update shortmemory.",
+      "* `▶️` / `:arrow_forward:` : Temporarily reply `next reply replaces my text` for the replacement pipeline.",
+      "* `🎵` / `:musical_note:` : Run the music skill from recent shortmemory and post a formatted music link.",
     ].join("\n"),
   ];
+  if (discordInviteUrl) {
+    sections.push([
+      "**Invite Link**",
+      "",
+      `* ${agentName} : ${discordInviteUrl}`,
+    ].join("\n"));
+  }
+  return sections;
 }
 
 function normalizeForumPostName(name) {
@@ -1051,6 +1578,8 @@ async function setupMemoryForum(guild = null) {
     const forumPosts = await fetchForumPostsByName(forumChannel);
     const helpPost = forumPosts.get("help");
     if (helpPost) await refreshHelpForumPost(helpPost);
+    const personaPost = forumPosts.get("persona");
+    if (personaPost) await deleteBotPersonaMirrorChunks(personaPost);
   }
 
   return {
@@ -1064,7 +1593,7 @@ async function refreshHelpForumPost(helpPost) {
   if (!helpPost?.messages?.fetch || !helpPost?.send) return false;
 
   const messages = await helpPost.messages.fetch({ limit: 100 });
-  const helpSectionTitles = new Set(["**Slash Commands**", "**Pipe Commands**", "**Emoji Reactions**"]);
+  const helpSectionTitles = new Set(["**Slash Commands**", "**Pipe Commands**", "**Emoji Reactions**", "**Invite Link**"]);
   const deletions = [];
   for (const message of messages.values()) {
     if (message.author?.id !== bot.user.id) continue;
@@ -1079,13 +1608,30 @@ async function refreshHelpForumPost(helpPost) {
   return true;
 }
 
+async function deleteBotPersonaMirrorChunks(personaPost) {
+  if (!personaPost?.messages?.fetch) return false;
+
+  const messages = await personaPost.messages.fetch({ limit: 100 });
+  const deletions = [];
+  for (const message of messages.values()) {
+    if (message.author?.id !== bot.user.id) continue;
+    const firstLine = String(message.content || "").split(/\r?\n/, 1)[0];
+    if (firstLine === "**Persona**") deletions.push(message.delete().catch(() => {}));
+  }
+  if (deletions.length > 0) {
+    await Promise.all(deletions);
+    console.log(`Deleted ${deletions.length} old bot-authored persona mirror chunk(s) for ${agentName}.`);
+  }
+  return deletions.length > 0;
+}
+
 async function findMemoryForumPostByName(postName) {
   const { forumChannel } = await resolveMemoryForum();
   const forumPosts = await fetchForumPostsByName(forumChannel);
   return forumPosts.get(normalizeForumPostName(postName)) || null;
 }
 
-async function cleanMemoryForumPost(postName) {
+async function deleteMemoryForumPostReplies(postName) {
   const post = await findMemoryForumPostByName(postName);
   if (!post?.messages?.fetch) {
     throw new Error(`Could not find readable memory forum post/thread: ${postName}`);
@@ -1162,194 +1708,9 @@ async function readRelativeTextFile(relativeFilePath) {
 async function writeRelativeTextFile(relativeFilePath, text) {
   const absoluteFilePath = path.join(agentFolder, relativeFilePath);
   await mkdir(path.dirname(absoluteFilePath), { recursive: true });
+  await backupFileBeforeOverwrite(absoluteFilePath, `overwrite-${path.basename(relativeFilePath)}`);
   await writeFile(absoluteFilePath, text, "utf8");
   return absoluteFilePath;
-}
-
-function shortMemoryEntriesToSummarySource(entries) {
-  return entries
-    .map((entry) => {
-      const parts = [
-        `timestamp: ${entry.timestamp || ""}`,
-        `role: ${entry.role || ""}`,
-        `username: ${entry.username || ""}`,
-        `user_id: ${entry.user_id || ""}`,
-        `channel_id: ${entry.channel_id || ""}`,
-        "content:",
-        entry.content || "",
-      ];
-      return parts.join("\n");
-    })
-    .join("\n\n---\n\n");
-}
-
-function timestampForFileName() {
-  return new Date().toISOString().replace(/[:.]/g, "-");
-}
-
-function safeFileName(name) {
-  const safe = String(name || "story")
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .toLowerCase();
-  return safe || "story";
-}
-
-function storyFileNameFromInput(input) {
-  const trimmed = String(input || "").trim().replace(/^["']|["']$/g, "");
-  if (!trimmed) throw new Error("Story filename is required.");
-  if (trimmed.includes("/") || trimmed.includes("\\") || trimmed.includes("..")) {
-    throw new Error("Story filename must be only a file name inside soul/stories.");
-  }
-  return path.extname(trimmed) ? trimmed : `${trimmed}.md`;
-}
-
-function chunkMarkdown(text, limit = 1800) {
-  const chunks = [];
-  let remaining = String(text || "").trim();
-  while (remaining.length > limit) {
-    let cut = remaining.lastIndexOf("\n\n", limit);
-    if (cut < 500) cut = remaining.lastIndexOf("\n", limit);
-    if (cut < 500) cut = remaining.lastIndexOf(" ", limit);
-    if (cut < 500) cut = limit;
-    chunks.push(remaining.slice(0, cut).trimEnd());
-    remaining = remaining.slice(cut).trimStart();
-  }
-  if (remaining) chunks.push(remaining);
-  return chunks;
-}
-
-function storyTextWithoutMetadata(text) {
-  return String(text || "")
-    .replace(/\n---\n(?:agent|created|prompt|local_file):[\s\S]*$/i, "")
-    .trim();
-}
-
-async function uploadStoryFile(filenameInput) {
-  const fileName = storyFileNameFromInput(filenameInput);
-  const relativeFilePath = path.join("soul", "stories", fileName);
-  const storyText = storyTextWithoutMetadata(await readRelativeTextFile(relativeFilePath));
-  if (!storyText.trim()) throw new Error(`Story file is empty: ${relativeFilePath}`);
-
-  const storiesPost = await findMemoryForumPostByName("stories").catch(() => null);
-  if (!storiesPost?.send) {
-    throw new Error("Could not find writable stories memory forum post/thread.");
-  }
-
-  const chunks = chunkMarkdown(storyText);
-  for (let index = 0; index < chunks.length; index += 1) {
-    const chunk = chunks[index];
-    const message = chunks.length === 1
-      ? chunk
-      : [`_story part ${index + 1}/${chunks.length}_`, "", chunk].join("\n");
-    await storiesPost.send(message);
-  }
-
-  return {
-    fileName,
-    chunks: chunks.length,
-  };
-}
-
-function parseJsonObjectFromText(text) {
-  const trimmed = String(text || "").trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const jsonText = fenced ? fenced[1].trim() : trimmed;
-  const objectMatch = jsonText.match(/\{[\s\S]*\}/);
-  if (!objectMatch) throw new Error(`No JSON object found in model response: ${trimmed}`);
-  return JSON.parse(objectMatch[0]);
-}
-
-async function generateStory(commandContent = "") {
-  const recentEntries = (await readLocalShortMemoryEntries()).slice(-conversationHistoryLimit);
-  const recentShortMemory = shortMemoryEntriesToSummarySource(recentEntries);
-  const existingLongMemory = await readTextFile(longMemoryPath).catch((error) => {
-    if (error.message.startsWith("Missing required file:")) return "";
-    throw error;
-  });
-  const storyPrompt = commandContent.trim() ||
-    "Look at the recent context and longmemory, then make a short story based on what feels most relevant.";
-
-  const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openrouterApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content: [
-            `# Persona: ${agentName}`,
-            systemPrompt,
-            "",
-            "# Story Task",
-            "Write one short story as this agent, using recent shortmemory as the main evidence and longmemory as additional context.",
-            "Use the user's story prompt to decide what part of memory they are asking about.",
-            "If the prompt is blank, choose a relevant recent scene or thread and write a short story from it.",
-            "Do not invent major facts that contradict memory.",
-            "Return only strict JSON with this shape:",
-            "{\"title\":\"short title\",\"story_markdown\":\"markdown story beginning with a matching # title\"}",
-          ].join("\n"),
-        },
-        {
-          role: "user",
-          content: [
-            "# User Story Prompt",
-            storyPrompt,
-            "",
-            "# Longmemory",
-            existingLongMemory || "(empty)",
-            "",
-            "# Recent Shortmemory",
-            recentShortMemory || "(empty)",
-          ].join("\n"),
-        },
-      ],
-      temperature: Number(requiredSetting("chaos")),
-      max_tokens: Number(requiredSetting("max_tokens")),
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
-  }
-
-  const payload = await response.json();
-  const raw = payload.choices?.[0]?.message?.content?.trim();
-  if (!raw) throw new Error("OpenRouter returned an empty story.");
-
-  const parsed = parseJsonObjectFromText(raw);
-  const title = String(parsed.title || "Story").trim() || "Story";
-  let storyMarkdown = String(parsed.story_markdown || "").trim();
-  if (!storyMarkdown) throw new Error("OpenRouter returned a story without story_markdown.");
-  if (!storyMarkdown.startsWith("# ")) {
-    storyMarkdown = [`# ${title}`, "", storyMarkdown].join("\n");
-  }
-
-  const fileName = `${timestampForFileName()}-${safeFileName(title)}.md`;
-  const relativeFilePath = path.join("soul", "stories", fileName);
-  const fileText = `${storyMarkdown}\n`;
-  const absoluteFilePath = await writeRelativeTextFile(relativeFilePath, fileText);
-
-  const storiesPost = await findMemoryForumPostByName("stories").catch(() => null);
-  let postedToDiscord = false;
-  if (storiesPost?.send) {
-    const postText = storyMarkdown;
-    await storiesPost.send(postText.length <= 1900 ? postText : `${postText.slice(0, 1900)}\n...`);
-    postedToDiscord = true;
-  }
-
-  return {
-    title,
-    relativeFilePath,
-    absoluteFilePath,
-    postedToDiscord,
-  };
 }
 
 async function runSummarization({ force = false } = {}) {
@@ -1390,7 +1751,7 @@ async function runSummarization({ force = false } = {}) {
     const summaryPolicy = String(
       summarizationSettings.summary_policy || "remember durable per-user context, not everything",
     );
-    const sourceText = shortMemoryEntriesToSummarySource(selectedEntries);
+    const sourceText = shortMemoryEntriesToSource(selectedEntries);
     const messages = [
       {
         role: "system",
@@ -1430,6 +1791,7 @@ async function runSummarization({ force = false } = {}) {
         ].join("\n"),
       },
     ];
+    await writeRawOpenRouterText(messages, "summarization");
 
     const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
       method: "POST",
@@ -1442,6 +1804,7 @@ async function runSummarization({ force = false } = {}) {
         messages,
         temperature: Math.min(Number(requiredSetting("chaos")), 0.5),
         max_tokens: Number(requiredSetting("max_tokens")),
+        provider: openRouterProviderOptions(),
       }),
     });
 
@@ -1459,9 +1822,22 @@ async function runSummarization({ force = false } = {}) {
       outputFile,
       outputText: summaryText,
     });
+    const deletedAdjustmentMessages = await deleteMemoryForumPostReplies("adjustments").catch((error) => {
+      console.error(`Could not clean adjustments after summarization: ${error.message}`);
+      return 0;
+    });
     console.log(
-      `Summarized ${selectedEntries.length} shortmemory entries for ${agentName}; wrote longmemory to ${outputPath}.`,
+      `Summarized ${selectedEntries.length} shortmemory entries for ${agentName}; wrote longmemory to ${outputPath}; cleaned ${deletedAdjustmentMessages} adjustment messages.`,
     );
+    await runSkillHook("afterSummary", {
+      entries: selectedEntries,
+      outputFile,
+      outputPath,
+      selectedEntryCount: selectedEntries.length,
+      sourceText,
+      summarizedAt: new Date().toISOString(),
+      summaryText,
+    });
     await writeSummaryState({
       shortMemoryEntryCount: entries.length,
       summarizedAt: new Date().toISOString(),
@@ -1473,6 +1849,7 @@ async function runSummarization({ force = false } = {}) {
       entries: selectedEntries.length,
       outputFile,
       postedLongMemoryPreview,
+      deletedAdjustmentMessages,
     };
   } finally {
     summarizationRunning = false;
@@ -1515,6 +1892,11 @@ function stripPipeCommandTarget(text, isDm) {
   const mentionMatch = trimmedText.match(mentionPattern);
   if (mentionMatch) return trimmedText.slice(mentionMatch[0].length).trimStart();
 
+  const roleMentionMatch = trimmedText.match(/^<@&(\d+)>\s*/);
+  if (roleMentionMatch && mentionRoleIds.has(roleMentionMatch[1])) {
+    return trimmedText.slice(roleMentionMatch[0].length).trimStart();
+  }
+
   for (const botName of botNames) {
     const escapedName = botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const namePattern = new RegExp(`^@${escapedName}\\b\\s*`, "i");
@@ -1529,12 +1911,12 @@ function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
 
-  const commandMatch = targetedText.match(/^(reply|adjust|subtext|summarize|story|music|dream|sleep|wake|busy|away|status|passtimeminutes)(?:\s*:\s*([\s\S]*))?$/i);
+  const commandMatch = targetedText.match(/^(reply|adjust|subtext|summarize|story|music|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
   if (!commandMatch) return null;
 
   const kind = commandMatch[1].toLowerCase();
   const content = (commandMatch[2] || "").trimStart().trimEnd();
-  if (!["reply", "dream", "sleep", "wake", "busy", "away", "status", "summarize", "story", "music"].includes(kind) && !content) return null;
+  if (!["reply", "dream", "sleep", "wake", "away", "state", "status", "summarize", "story", "music"].includes(kind) && !content) return null;
   return {
     kind,
     content,
@@ -1615,7 +1997,7 @@ async function generateReplyFromContext(contextSource, userContent, logEntry, se
     conversationHistory.shift();
   }
 
-  const reply = await askOpenRouter(contextSource);
+  const reply = await withTypingHeartbeat(contextSource.channel, () => askOpenRouter(contextSource));
   pendingTimePassages.length = 0;
   const sentReply =
     reply.length > discordReplyCharacterLimit
@@ -1669,12 +2051,50 @@ async function sendGeneratedReply(message, userContent, logContent = userContent
   return sentMessage;
 }
 
-async function sendPipeReply(message) {
-  const instruction = "Continue the story from recent context. Do not treat this as a new topic; write the agent's next natural reply.";
-  const sentMessage = await generateReplyFromContext(message, `${message.author.username}: ${instruction}`, null, (sentReply) =>
-    safeReply(message, sentReply),
+async function sendRegeneratedReply(message, userContent) {
+  const formattedUserContent = formatUserContentWithPipeSubtext(message, userContent);
+  const sentMessage = await generateReplyFromContext(
+    message,
+    `${message.author.username}: ${formattedUserContent}`,
+    null,
+    (sentReply) => safeReply(message, sentReply),
   );
   rememberSentReply(message.channelId, sentMessage);
+  return sentMessage;
+}
+
+async function sendAdjustedReply(originalUserMessage, originalReplyText, adjustInstruction) {
+  const formattedUserContent = formatUserContentWithPipeSubtext(originalUserMessage, originalUserMessage.content);
+  const adjustedUserContent = [
+    `${originalUserMessage.author.username}: ${formattedUserContent}`,
+    "",
+    "# Redo With Adjustment",
+    "Redo the assistant reply to the user message above.",
+    "Use the original assistant reply only as context for what is being replaced.",
+    "Apply the adjustment instructions and write the complete replacement reply.",
+    "",
+    "# Original Assistant Reply Being Replaced",
+    originalReplyText,
+    "",
+    "# Adjustment Instructions",
+    adjustInstruction,
+  ].join("\n");
+  const sentMessage = await generateReplyFromContext(
+    originalUserMessage,
+    adjustedUserContent,
+    null,
+    (sentReply) => safeReply(originalUserMessage, sentReply),
+  );
+  rememberSentReply(originalUserMessage.channelId, sentMessage);
+  return sentMessage;
+}
+
+async function sendPipeReply(message) {
+  const targetMessage = await findLastNonReplyPipeUserMessage(message);
+  if (!targetMessage) {
+    throw new Error("Could not find a previous non-reply message to answer.");
+  }
+  await sendRegeneratedReply(targetMessage, targetMessage.content);
 }
 
 async function handlePipeReply(message) {
@@ -1686,6 +2106,38 @@ async function handlePipeReply(message) {
   return true;
 }
 
+function isWholeReplyPipeCommandMessage(message) {
+  const content = String(message.content || "").trim();
+  const wholePipeCommandMatch = content.match(/^\|\|([\s\S]*?)\|\|$/);
+  if (!wholePipeCommandMatch) return false;
+  const command = parsePipeCommandText(wholePipeCommandMatch[1], message.channel?.isDMBased?.());
+  return command?.kind === "reply";
+}
+
+async function findLastNonReplyPipeUserMessage(message) {
+  if (message.reference?.messageId && message.channel?.messages?.fetch) {
+    const referencedMessage = await message.channel.messages.fetch(message.reference.messageId).catch(() => null);
+    if (
+      referencedMessage?.content?.trim() &&
+      String(referencedMessage.author?.id) !== String(bot.user.id) &&
+      !isWholeReplyPipeCommandMessage(referencedMessage)
+    ) {
+      return referencedMessage;
+    }
+  }
+
+  if (!message.channel?.messages?.fetch) return null;
+  const recentMessages = await message.channel.messages.fetch({ limit: 50, before: message.id }).catch(() => null);
+  if (!recentMessages?.values) return null;
+
+  return [...recentMessages.values()]
+    .find((recentMessage) =>
+      recentMessage.content?.trim() &&
+      String(recentMessage.author?.id) !== String(bot.user.id) &&
+      !isWholeReplyPipeCommandMessage(recentMessage)
+    ) || null;
+}
+
 function messageToShortMemoryEntry(message) {
   return {
     role: String(message.author.id) === String(bot.user.id) ? "assistant" : "user",
@@ -1693,37 +2145,60 @@ function messageToShortMemoryEntry(message) {
     username: message.author.username,
     user_id: String(message.author.id),
     channel_id: String(message.channelId),
+    message_id: String(message.id),
     server_id: message.guildId ? String(message.guildId) : null,
     content: message.content || "",
   };
 }
 
-async function scrapeShortMemoryFromChannel(channelId, entryCount) {
+async function fetchAllMessagesFromChannel(channel) {
+  const messages = [];
+  let before;
+
+  for (;;) {
+    const batch = await channel.messages.fetch({ limit: 100, before });
+    if (batch.size === 0) break;
+    messages.push(...batch.values());
+    before = batch.last().id;
+    if (batch.size < 100) break;
+  }
+
+  return messages;
+}
+
+async function scrapeShortMemoryFromChannel(channelId, entryCount = null) {
   const channel = await bot.channels.fetch(channelId);
   if (!channel?.messages?.fetch) {
     throw new Error(`Could not read messages from channel: ${channelId}`);
   }
 
-  const fetched = [...(await channel.messages.fetch({ limit: 100 })).values()];
+  const fetched = (await fetchAllMessagesFromChannel(channel))
+    .sort((left, right) => right.createdTimestamp - left.createdTimestamp);
   const latestBotReplyIndex = fetched.findIndex((message) => String(message.author.id) === String(bot.user.id));
-  if (latestBotReplyIndex === -1) {
-    throw new Error(`Could not find a recent ${agentName} reply in channel ${channelId}.`);
-  }
+  const scrapeStartIndex = latestBotReplyIndex === -1 ? 0 : latestBotReplyIndex;
+  const scrapeEndIndex = Number.isInteger(entryCount) && entryCount > 0
+    ? scrapeStartIndex + entryCount
+    : fetched.length;
 
   const selectedMessages = fetched
-    .slice(latestBotReplyIndex, latestBotReplyIndex + entryCount)
+    .slice(scrapeStartIndex, scrapeEndIndex)
     .filter((message) => message.content?.trim())
-    .reverse();
+    .sort((left, right) => left.createdTimestamp - right.createdTimestamp);
   const entries = selectedMessages.map(messageToShortMemoryEntry);
 
-  await appendShortMemoryEntries(entries);
-  for (const entry of entries) {
+  const appended = await appendShortMemoryEntries(entries);
+  for (const entry of entries.slice(-conversationHistoryLimit)) {
     conversationHistory.push({ role: entry.role === "assistant" ? "assistant" : "user", content: entry.content });
+  }
+  while (conversationHistory.length > conversationHistoryLimit) {
+    conversationHistory.shift();
   }
 
   return {
-    appended: entries.length,
-    anchorMessageId: fetched[latestBotReplyIndex].id,
+    appended,
+    selected: entries.length,
+    fetched: fetched.length,
+    anchorMessageId: latestBotReplyIndex === -1 ? null : fetched[latestBotReplyIndex].id,
   };
 }
 
@@ -1743,34 +2218,15 @@ async function handlePipeAdjust(message) {
 
   const originalReplyText = originalReply.content.trim();
   const adjustInstruction = command.content;
-  const replacementInstruction = [
-    "The previous assistant reply should be adjusted, not treated as a brand-new topic.",
-    "Keep the same basic reply, intent, continuity, and emotional direction as the original.",
-    "Only change what the user's adjustment asks for.",
-    `Original reply: ${originalReplyText}`,
-    `Adjustment instructions: ${adjustInstruction}`,
-    "Write the full replacement reply now.",
-  ].join("\n");
-
-  const lastAssistantIndex = conversationHistory
-    .map((entry) => entry.role === "assistant" && entry.content === originalReplyText)
-    .lastIndexOf(true);
-  if (lastAssistantIndex !== -1) {
-    conversationHistory.splice(lastAssistantIndex, 1);
+  const originalUserMessage = await findUserMessageBeforeBotReply(originalReply);
+  if (!originalUserMessage?.content?.trim()) {
+    throw new Error("Could not find the user message that the adjusted reply belongs to.");
   }
 
-  const localDeleted = await deleteLocalShortMemoryForMessage(originalReply);
-  const discordDeleted = await deleteShortMemoryThreadEntriesForMessage(originalReply);
+  await forgetBotReply(originalReply, "Adjusted");
   await originalReply.delete().catch(() => {});
-  const rememberedReply = lastReplyByChannelId.get(String(message.channelId));
-  if (rememberedReply?.id === originalReply.id) {
-    lastReplyByChannelId.delete(String(message.channelId));
-  }
-  console.log(
-    `Adjusted ${agentName} reply ${originalReply.id}; removed ${localDeleted} local and ${discordDeleted} Discord shortmemory entries.`,
-  );
 
-  const sentMessage = await sendGeneratedReply(message, replacementInstruction, `adjust: ${adjustInstruction}`);
+  const sentMessage = await sendAdjustedReply(originalUserMessage, originalReplyText, adjustInstruction);
   await appendAdjustmentMemoryDump({
     originalReplyText,
     adjustInstruction,
@@ -1784,7 +2240,7 @@ async function summarizeNowText() {
   if (result.skipped) {
     return `Skipped summarization for ${agentName}: ${result.reason}.`;
   }
-  return `Summarized ${result.entries} shortmemory entries for ${agentName}. Wrote longmemory: ${result.outputFile}. Longmemory Discord preview: ${result.postedLongMemoryPreview ? "posted" : "not found"}.`;
+  return `Summarized ${result.entries} shortmemory entries for ${agentName}. Wrote longmemory: ${result.outputFile}. Longmemory Discord preview: ${result.postedLongMemoryPreview ? "posted" : "not found"}. Cleaned adjustments: ${result.deletedAdjustmentMessages || 0}.`;
 }
 
 async function handlePipeSummarize(message) {
@@ -1792,16 +2248,6 @@ async function handlePipeSummarize(message) {
   if (command?.kind !== "summarize") return false;
 
   await replyTemporarily(message, await summarizeNowText());
-  return true;
-}
-
-async function handlePipeStory(message) {
-  const command = await parseWholeMessagePipeCommand(message);
-  if (command?.kind !== "story") return false;
-
-  await message.channel.sendTyping();
-  await generateStory(command.content);
-  await replyTemporarily(message, "story saved in thread");
   return true;
 }
 
@@ -1817,6 +2263,45 @@ async function handleSkillPipeCommand(command, message) {
   if (!command) return false;
   for (const skill of skills) {
     if (await skill.handlePipeCommand?.(command, message)) return true;
+  }
+  return false;
+}
+
+function messageMatchesIntentTrigger(skillName, message) {
+  const triggers = intentTriggers?.[skillName];
+  if (!Array.isArray(triggers) || triggers.length === 0) return false;
+
+  const text = String(message.content || "").toLowerCase();
+  return triggers.some((trigger) => {
+    const triggerText = String(trigger || "").trim().toLowerCase();
+    return triggerText && text.includes(triggerText);
+  });
+}
+
+async function handleNaturalLanguageMusicIntent(message) {
+  if (!messageMatchesIntentTrigger("music", message)) return false;
+
+  const musicSkill = skills.find((skill) =>
+    skill.name === "music" &&
+    typeof skill.shouldRespondWithMusic === "function" &&
+    typeof skill.runNaturalMusicRequest === "function"
+  );
+  if (!musicSkill) return false;
+
+  const shouldPostMusic = await musicSkill.shouldRespondWithMusic(message.content);
+  if (!shouldPostMusic) return false;
+
+  await message.channel.sendTyping();
+  await safeReply(message, await musicSkill.runNaturalMusicRequest(message.content));
+  return true;
+}
+
+async function handleSleepingMessage(message) {
+  for (const skill of skills) {
+    const result = await skill.handleSleepingMessage?.(message);
+    if (!result) continue;
+    if (result.handled) return true;
+    if (result.continueNormalReply) return false;
   }
   return false;
 }
@@ -1837,31 +2322,65 @@ async function shouldReply(message) {
   }
 
   const contentLower = message.content.toLowerCase();
-  const mentioned = message.mentions?.has?.(bot.user.id);
+  const botUserId = String(bot.user.id);
+  const mentioned =
+    Boolean(message.mentions?.has?.(botUserId)) ||
+    Boolean(message.mentions?.users?.has?.(botUserId)) ||
+    new RegExp(`<@!?${botUserId}>`).test(message.content);
+  const roleMentioned = [...mentionRoleIds].some((roleId) =>
+    Boolean(message.mentions?.roles?.has?.(roleId)) ||
+    new RegExp(`<@&${roleId}>`).test(message.content)
+  );
+  const directlyMentioned = mentioned || roleMentioned;
   const nameUsed = botNames.some((name) => contentLower.includes(name));
   const status = await statusApi.get();
   if (status.mode === "away") return false;
-  if (status.mode === "busy" && !mentioned && !nameUsed) return false;
   const hasAnyAtMention =
     message.mentions?.users?.size > 0 ||
     message.mentions?.roles?.size > 0 ||
     message.mentions?.everyone ||
     /<@&?\d+>|@everyone|@here/.test(message.content);
-  if (doNotReplyWhenAtIsNotAboutBot && hasAnyAtMention && !mentioned && !nameUsed) return false;
+  if (doNotReplyWhenAtIsNotAboutBot && hasAnyAtMention && !directlyMentioned) {
+    console.log(
+      `Skipped ${agentName} reply: message ${message.id} had @ mention(s), but none matched bot user ${botUserId} or mention roles ${[...mentionRoleIds].join(", ") || "none"}. Raw content: ${message.content}`,
+    );
+    return false;
+  }
 
-  const locationMatches =
+  const directTargetMatches =
+    (replyWhenMentioned && directlyMentioned) ||
+    (replyWhenNameUsed && nameUsed);
+  const ambientLocationMatches =
     locationReplyMode === "all" ||
     (locationReplyMode === "listed" &&
       (message.channel?.isDMBased?.() ||
         replyToChannelIds.has(String(message.channelId)) ||
         replyToServerIds.has(String(message.guildId))));
-  if (!locationMatches) return false;
+  const locationRequired = onlyAllowRepliesToSpecificChannels || !directTargetMatches;
+  if (locationReplyMode === "none" && locationRequired) return false;
+  if (locationRequired && !ambientLocationMatches) {
+    console.log(
+      `Skipped ${agentName} reply: channel ${message.channelId} / server ${message.guildId || "dm"} is not in reply_to lists. only_allow_replies_to_specific_channels=${onlyAllowRepliesToSpecificChannels}; mentioned=${mentioned}; nameUsed=${nameUsed}.`,
+    );
+    return false;
+  }
 
-  return (
-    (replyWhenMentioned && mentioned) ||
-    (replyWhenNameUsed && nameUsed) ||
-    (replyWhenNameNotUsed && !nameUsed)
-  );
+  return directTargetMatches || (replyWhenNameNotUsed && !nameUsed && ambientLocationMatches);
+}
+
+async function waitForMessageToSurviveBeforeReply(message) {
+  if (!Number.isFinite(secondsBeforeReply) || secondsBeforeReply <= 0) return true;
+  await delay(secondsBeforeReply * 1000);
+
+  if (!message.channel?.messages?.fetch) return true;
+  const stillExists = await message.channel.messages.fetch(message.id).catch(() => null);
+  if (!stillExists) {
+    console.log(
+      `Skipped reply for ${agentName}: source message ${message.id} disappeared during ${secondsBeforeReply}s pre-reply wait.`,
+    );
+    return false;
+  }
+  return true;
 }
 
 async function askOpenRouter(message) {
@@ -1877,66 +2396,106 @@ async function askOpenRouter(message) {
     conversationHistoryLimit,
     longMemoryPath,
     message,
+    originSummaryPath,
     persona: systemPrompt,
     shortMemoryPath,
     statusPath,
     skills,
     timePassages: pendingTimePassages,
   });
+  await writeRawOpenRouterText(messages, "normal reply");
 
-  const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${openrouterApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: Number(requiredSetting("chaos")),
-      max_tokens: Number(requiredSetting("max_tokens")),
-    }),
-  });
+  let response;
+  try {
+    response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openrouterApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: Number(requiredSetting("chaos")),
+        max_tokens: Number(requiredSetting("max_tokens")),
+        provider: openRouterProviderOptions(),
+      }),
+    });
+  } catch (error) {
+    console.error(`OpenRouter fetch failed for ${agentName}: ${formatErrorForLog(error)}`);
+    throw new Error(`OpenRouter fetch failed: ${error.cause?.message || error.message}`, { cause: error });
+  }
 
   if (!response.ok) {
     throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
   }
 
   const payload = await response.json();
-  const reply = payload.choices?.[0]?.message?.content?.trim();
-  if (!reply) throw new Error("OpenRouter returned an empty reply.");
+  const choice = payload.choices?.[0];
+  const reply = choice?.message?.content?.trim();
+  if (!reply) {
+    if (choice?.error?.message) {
+      throw new Error(`OpenRouter generation error ${choice.error.code || "unknown"}: ${choice.error.message}`);
+    }
+    const messageKeys = choice?.message ? Object.keys(choice.message).join(", ") : "none";
+    const refusal = choice?.message?.refusal ? ` refusal=${JSON.stringify(choice.message.refusal).slice(0, 500)}` : "";
+    const finishReason = choice?.finish_reason || choice?.native_finish_reason || "unknown";
+    console.error(`OpenRouter empty reply payload: ${JSON.stringify(payload).slice(0, 2000)}`);
+    throw new Error(`OpenRouter returned an empty reply. finish_reason=${finishReason}; message_keys=${messageKeys}.${refusal}`);
+  }
   return reply;
 }
 
 bot.on("messageCreate", async (message) => {
-  if (message.author.bot && !replyToBotIds.has(String(message.author.id))) return;
+  const isAllowedWebhookMessage = Boolean(message.webhookId) && replyToWebhooks;
+  if (message.author.bot && !isAllowedWebhookMessage && !replyToBotIds.has(String(message.author.id))) return;
+
+  try {
+    if (await handlePendingReplyEdit(message)) return;
+  } catch (error) {
+    await replyWithTemporaryError(message, formatTemporaryError("Error editing reply", error));
+    return;
+  }
 
   try {
     const wholePipeCommand = await parseWholeMessagePipeCommand(message);
     if (await handlePipeReply(message)) return;
     if (await handlePipeSummarize(message)) return;
-    if (await handlePipeStory(message)) return;
     if (await handleSkillPipeCommand(wholePipeCommand, message)) return;
   } catch (error) {
-    await replyWithTemporaryError(message, `Error running pipe command: ${error.message}`);
+    await replyWithTemporaryError(message, formatTemporaryError("Error running pipe command", error));
     return;
   }
 
   try {
     if (await handlePipeAdjust(message)) return;
   } catch (error) {
-    await replyWithTemporaryError(message, `Error adjusting reply: ${error.message}`);
+    await replyWithTemporaryError(message, formatTemporaryError("Error adjusting reply", error));
     return;
   }
 
   if (!(await shouldReply(message))) return;
+  if (!(await waitForMessageToSurviveBeforeReply(message))) return;
 
-  await message.channel.sendTyping();
+  try {
+    if (await handleSleepingMessage(message)) return;
+  } catch (error) {
+    await replyWithTemporaryError(message, formatTemporaryError("Error handling sleep status", error));
+    return;
+  }
+
+  try {
+    if (await handleNaturalLanguageMusicIntent(message)) return;
+  } catch (error) {
+    await replyWithTemporaryError(message, formatTemporaryError("Error finding music", error));
+    return;
+  }
 
   try {
     await sendGeneratedReply(message, message.content);
   } catch (error) {
-    await replyWithTemporaryError(message, `Error: ${error.message}`);
+    console.error(`Error generating reply for ${agentName}: ${formatErrorForLog(error)}`);
+    await replyWithTemporaryError(message, formatTemporaryError("Error", error));
   }
 });
 
@@ -1968,7 +2527,7 @@ async function handleDeleteReaction({ message, userId, source }) {
       ),
     );
 
-    await message.delete();
+    await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
     console.log(
       `Deleted ${agentName} reply ${message.id} from ${source} reaction by ${userId}; removed ${localDeleted} local and ${discordDeleted} Discord shortmemory entries.`,
     );
@@ -1977,15 +2536,314 @@ async function handleDeleteReaction({ message, userId, source }) {
   }
 }
 
+function rememberReactionAction(message, userId, action) {
+  const key = `${message.channelId}:${message.id}:${userId}:${action}`;
+  if (handledReactionActionKeys.has(key)) return false;
+  handledReactionActionKeys.add(key);
+  setTimeout(() => handledReactionActionKeys.delete(key), 60000);
+  return true;
+}
+
+async function forgetBotReply(message, actionName) {
+  const localDeleted = await deleteLocalShortMemoryForMessage(message);
+  const discordDeleted = await deleteShortMemoryThreadEntriesForMessage(message);
+  const rememberedReply = lastReplyByChannelId.get(String(message.channelId));
+  if (rememberedReply?.id === message.id) {
+    lastReplyByChannelId.delete(String(message.channelId));
+  }
+  conversationHistory.splice(
+    0,
+    conversationHistory.length,
+    ...conversationHistory.filter(
+      (entry) => !(entry.role === "assistant" && String(entry.content || "").trim() === String(message.content || "").trim()),
+    ),
+  );
+  console.log(
+    `${actionName} ${agentName} reply ${message.id}; removed ${localDeleted} local and ${discordDeleted} Discord shortmemory entries.`,
+  );
+  return { localDeleted, discordDeleted };
+}
+
+async function findUserMessageBeforeBotReply(botReply) {
+  if (botReply.reference?.messageId && botReply.channel?.messages?.fetch) {
+    const referencedMessage = await botReply.channel.messages.fetch(botReply.reference.messageId).catch(() => null);
+    if (
+      referencedMessage?.author?.id &&
+      String(referencedMessage.author.id) !== String(bot.user.id) &&
+      referencedMessage.content?.trim() &&
+      !isWholeReplyPipeCommandMessage(referencedMessage)
+    ) {
+      return referencedMessage;
+    }
+  }
+
+  if (!botReply.channel?.messages?.fetch) return null;
+  const recentMessages = await botReply.channel.messages.fetch({ limit: 50, before: botReply.id }).catch(() => null);
+  if (!recentMessages?.values) return null;
+
+  return [...recentMessages.values()]
+    .find((recentMessage) =>
+      recentMessage.author?.id &&
+      String(recentMessage.author.id) !== String(bot.user.id) &&
+      recentMessage.content?.trim() &&
+      !isWholeReplyPipeCommandMessage(recentMessage)
+    ) || null;
+}
+
+async function handleRedoReaction({ message, userId, source }) {
+  try {
+    if (!rememberReactionAction(message, userId, "redo")) return;
+
+    if (String(message.author?.id) !== String(bot.user.id)) {
+      console.log(
+        `Ignored 🔁 reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+      );
+      return;
+    }
+
+    const userMessage = await findUserMessageBeforeBotReply(message);
+    if (!userMessage) {
+      console.error(`Could not redo ${agentName} reply ${message.id}: no earlier user message found.`);
+      return;
+    }
+
+    await forgetBotReply(message, "Redid");
+    await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
+    await userMessage.channel.sendTyping();
+    await sendRegeneratedReply(userMessage, userMessage.content);
+    console.log(
+      `Redid ${agentName} reply ${message.id} from ${source} reaction by ${userId} using user message ${userMessage.id}.`,
+    );
+  } catch (error) {
+    console.error(`Error redoing reply from reaction: ${error.message}`);
+  }
+}
+
+async function handleRewindReaction({ message, userId, source }) {
+  try {
+    if (!rememberReactionAction(message, userId, "rewind")) return;
+
+    if (String(message.author?.id) !== String(bot.user.id)) {
+      console.log(
+        `Ignored ⏪ reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+      );
+      return;
+    }
+
+    const userMessage = await findUserMessageBeforeBotReply(message);
+    await forgetBotReply(message, "Rewound");
+    await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
+
+    let userLocalDeleted = 0;
+    let userDiscordDeleted = 0;
+    if (userMessage) {
+      userLocalDeleted = await deleteLocalShortMemoryForMessage(userMessage);
+      userDiscordDeleted = await deleteShortMemoryThreadEntriesForMessage(userMessage);
+      conversationHistory.splice(
+        0,
+        conversationHistory.length,
+        ...conversationHistory.filter(
+          (entry) => !(entry.role === "user" && String(entry.content || "").includes(String(userMessage.content || "").trim())),
+        ),
+      );
+    }
+
+    console.log(
+      `Rewound ${agentName} reply ${message.id} from ${source} reaction by ${userId}; removed previous user message ${userMessage?.id || "none"} from shortmemory only (${userLocalDeleted} local, ${userDiscordDeleted} Discord).`,
+    );
+  } catch (error) {
+    console.error(`Error rewinding reply from reaction: ${error.message}`);
+  }
+}
+
+function clearPendingReplyEdit(channelId, userId) {
+  const pending = pendingReplyEditsByChannelId.get(String(channelId));
+  if (!pending || String(pending.userId) !== String(userId)) return;
+  pendingReplyEditsByChannelId.delete(String(channelId));
+}
+
+function setPendingReplyEdit(message, userId) {
+  const channelId = String(message.channelId);
+  pendingReplyEditsByChannelId.set(channelId, {
+    channelId,
+    messageId: String(message.id),
+    userId: String(userId),
+    createdAt: Date.now(),
+    originalContent: message.content || "",
+    acknowledgementMessageId: null,
+  });
+  setTimeout(() => clearPendingReplyEdit(channelId, userId), 5 * 60 * 1000);
+}
+
+function setPendingReplyEditAcknowledgement(channelId, userId, acknowledgementMessage) {
+  const pending = pendingReplyEditsByChannelId.get(String(channelId));
+  if (!pending || String(pending.userId) !== String(userId)) return;
+  pending.acknowledgementMessageId = acknowledgementMessage?.id || null;
+}
+
+async function deletePendingReplyEditAcknowledgement(channel, pending) {
+  if (!pending?.acknowledgementMessageId || !channel?.messages?.fetch) return;
+  const acknowledgement = await channel.messages.fetch(pending.acknowledgementMessageId).catch((error) => {
+    if (isMissingDiscordResourceError(error)) return null;
+    throw error;
+  });
+  if (acknowledgement) {
+    await deleteDiscordMessageIfExists(acknowledgement, `Reply edit acknowledgement ${acknowledgement.id}`);
+  }
+}
+
+function updateConversationHistoryAssistantText(originalContent, replacementContent) {
+  const originalText = String(originalContent || "").trim();
+  for (let index = conversationHistory.length - 1; index >= 0; index -= 1) {
+    const entry = conversationHistory[index];
+    if (entry.role !== "assistant") continue;
+    if (String(entry.content || "").trim() !== originalText) continue;
+    entry.content = replacementContent;
+    return true;
+  }
+  return false;
+}
+
+async function removeMatchingUserReaction(message, userId, emojiMatcher) {
+  for (const reaction of message.reactions?.cache?.values?.() || []) {
+    if (!emojiMatcher(reaction.emoji)) continue;
+    await reaction.users.remove(userId).catch((error) => {
+      console.error(`Could not remove reaction ${reaction.emoji?.name || "unknown"} from ${userId}: ${error.message}`);
+    });
+  }
+}
+
+async function handlePendingReplyEdit(message) {
+  const pending = pendingReplyEditsByChannelId.get(String(message.channelId));
+  if (!pending) return false;
+  if (String(message.author?.id) !== String(pending.userId)) return false;
+
+  pendingReplyEditsByChannelId.delete(String(message.channelId));
+  const replacementContent = String(message.content || "").trim();
+  if (!replacementContent) {
+    await deletePendingReplyEditAcknowledgement(message.channel, pending);
+    await replyWithTemporaryError(message, "Replacement text was blank, edit cancelled.");
+    return true;
+  }
+
+  const targetMessage = await message.channel.messages.fetch(pending.messageId).catch((error) => {
+    if (isMissingDiscordResourceError(error)) return null;
+    throw error;
+  });
+  if (!targetMessage) {
+    await deletePendingReplyEditAcknowledgement(message.channel, pending);
+    await replyWithTemporaryError(message, "Could not edit that reply because it was already deleted.");
+    return true;
+  }
+
+  const originalContent = targetMessage.content || pending.originalContent || "";
+  const originalSnapshot = {
+    channelId: targetMessage.channelId,
+    messageId: targetMessage.id,
+    content: originalContent,
+  };
+  const editedMessage = await targetMessage.edit(replacementContent);
+  await updateLocalShortMemoryForMessageSnapshot(originalSnapshot, replacementContent);
+  await updateShortMemoryThreadEntriesForMessageSnapshot(originalSnapshot, replacementContent);
+  updateConversationHistoryAssistantText(originalContent, replacementContent);
+  const rememberedReply = lastReplyByChannelId.get(String(targetMessage.channelId));
+  if (rememberedReply?.id === targetMessage.id) {
+    rememberSentReply(targetMessage.channelId, editedMessage);
+    rememberedReply.content = replacementContent;
+  }
+
+  await deleteDiscordMessageIfExists(message, `Technical edit message ${message.id}`);
+  await deletePendingReplyEditAcknowledgement(message.channel, pending);
+  console.log(
+    `Edited ${agentName} reply ${targetMessage.id} from ${message.author?.id}; replacement kept out of shortmemory.`,
+  );
+  return true;
+}
+
+async function handleMemoReaction({ message, userId, source }) {
+  try {
+    if (!rememberReactionAction(message, userId, "replace")) return;
+
+    if (String(message.author?.id) !== String(bot.user.id)) {
+      console.log(
+        `Ignored replace reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+      );
+      return;
+    }
+
+    setPendingReplyEdit(message, userId);
+    await removeMatchingUserReaction(message, userId, isMemoReactionEmoji);
+    const acknowledgement = await replyTemporarily(message, "your next reply replaces the content of my last reply");
+    setPendingReplyEditAcknowledgement(message.channelId, userId, acknowledgement);
+    console.log(
+      `Acknowledged replace reaction on ${agentName} reply ${message.id} from ${source} reaction by ${userId}.`,
+    );
+  } catch (error) {
+    console.error(`Error handling replace reaction: ${error.message}`);
+  }
+}
+
+async function handleMusicReaction({ message, userId, source }) {
+  try {
+    if (!rememberReactionAction(message, userId, "music")) return;
+
+    if (String(message.author?.id) !== String(bot.user.id)) {
+      console.log(
+        `Ignored 🎵 reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+      );
+      return;
+    }
+
+    const musicSkill = skills.find((skill) => skill.name === "music" && typeof skill.runMusicRequest === "function");
+    if (!musicSkill) {
+      await replyWithTemporaryError(message, "Music skill is not enabled for this agent.");
+      return;
+    }
+
+    await message.channel.sendTyping();
+    const musicLink = await musicSkill.runMusicRequest("");
+    await safeReply(message, musicLink);
+    console.log(
+      `Posted music from ${source} reaction by ${userId} on ${agentName} reply ${message.id}.`,
+    );
+  } catch (error) {
+    await replyWithTemporaryError(message, `Error finding music: ${error.message}`).catch(() => {});
+    console.error(`Error handling music reaction: ${error.message}`);
+  }
+}
+
 bot.on("messageReactionAdd", async (reaction, user) => {
   if (user.bot) return;
 
   try {
     if (reaction.partial) reaction = await reaction.fetch();
-    if (!isDeleteReactionEmoji(reaction.emoji)) return;
+    if (
+      !isDeleteReactionEmoji(reaction.emoji) &&
+      !isRedoReactionEmoji(reaction.emoji) &&
+      !isRewindReactionEmoji(reaction.emoji) &&
+      !isReplaceReactionEmoji(reaction.emoji) &&
+      !isMusicReactionEmoji(reaction.emoji) &&
+      !isMemoReactionEmoji(reaction.emoji)
+    ) return;
 
     const message = await reaction.message.fetch();
-    await handleDeleteReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
+    if (isDeleteReactionEmoji(reaction.emoji)) {
+      await handleDeleteReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
+      return;
+    }
+    if (isRedoReactionEmoji(reaction.emoji)) {
+      await handleRedoReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
+      return;
+    }
+    if (isRewindReactionEmoji(reaction.emoji)) {
+      await handleRewindReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
+      return;
+    }
+    if (isMusicReactionEmoji(reaction.emoji)) {
+      await handleMusicReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
+      return;
+    }
+    await handleMemoReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
   } catch (error) {
     console.error(`Error handling reaction event: ${error.message}`);
   }
@@ -1996,15 +2854,45 @@ bot.on("raw", async (event) => {
 
   const data = event.d;
   if (String(data.user_id) === String(bot.user.id)) return;
-  if (!isDeleteReactionEmoji(data.emoji)) return;
+  if (
+    !isDeleteReactionEmoji(data.emoji) &&
+    !isRedoReactionEmoji(data.emoji) &&
+    !isRewindReactionEmoji(data.emoji) &&
+    !isReplaceReactionEmoji(data.emoji) &&
+    !isMusicReactionEmoji(data.emoji) &&
+    !isMemoReactionEmoji(data.emoji)
+  ) return;
 
   try {
     const channel = await bot.channels.fetch(data.channel_id);
     if (!channel?.messages?.fetch) {
       throw new Error(`Could not fetch channel ${data.channel_id} for raw reaction.`);
     }
-    const message = await channel.messages.fetch(data.message_id);
-    await handleDeleteReaction({ message, userId: String(data.user_id), source: "raw" });
+    const message = await channel.messages.fetch(data.message_id).catch((error) => {
+      if (isMissingDiscordResourceError(error)) {
+        console.log(`Ignored raw reaction for already deleted message ${data.message_id}.`);
+        return null;
+      }
+      throw error;
+    });
+    if (!message) return;
+    if (isDeleteReactionEmoji(data.emoji)) {
+      await handleDeleteReaction({ message, userId: String(data.user_id), source: "raw" });
+      return;
+    }
+    if (isRedoReactionEmoji(data.emoji)) {
+      await handleRedoReaction({ message, userId: String(data.user_id), source: "raw" });
+      return;
+    }
+    if (isRewindReactionEmoji(data.emoji)) {
+      await handleRewindReaction({ message, userId: String(data.user_id), source: "raw" });
+      return;
+    }
+    if (isMusicReactionEmoji(data.emoji)) {
+      await handleMusicReaction({ message, userId: String(data.user_id), source: "raw" });
+      return;
+    }
+    await handleMemoReaction({ message, userId: String(data.user_id), source: "raw" });
   } catch (error) {
     console.error(`Error handling raw reaction event: ${error.message}`);
   }
@@ -2013,15 +2901,22 @@ bot.on("raw", async (event) => {
 bot.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  for (const skill of skills) {
-    if (await skill.handleInteraction?.(interaction)) return;
+  if (!(await userCanControlBot(interaction))) {
+    await rejectUnauthorizedControl(interaction);
+    console.log(
+      `Rejected ${agentName} slash command /${interaction.commandName} from unauthorized user ${interaction.user?.tag || interaction.user?.id || "unknown"}.`,
+    );
+    return;
   }
+
+  if (await handleSkillInteraction(interaction)) return;
 
   if (interaction.commandName === "clearshortmemory") {
     await interaction.deferReply({ ephemeral: true });
 
     try {
       conversationHistory.length = 0;
+      await backupFileBeforeOverwrite(shortMemoryPath, "clearshortmemory");
       await writeFile(shortMemoryPath, "", "utf8");
       const deletedDiscordEntries = await deleteShortMemoryThreadEntries();
       await interaction.editReply(
@@ -2029,22 +2924,6 @@ bot.on("interactionCreate", async (interaction) => {
       );
     } catch (error) {
       await interaction.editReply(`Error clearing shortmemory: ${error.message}`);
-    }
-    return;
-  }
-
-  if (interaction.commandName === "clean") {
-    await interaction.deferReply({ ephemeral: true });
-
-    try {
-      const target = interaction.options.getString("target", true);
-      if (target !== "adjustments") {
-        throw new Error(`Unsupported clean target: ${target}`);
-      }
-      const deleted = await cleanMemoryForumPost("adjustments");
-      await interaction.editReply(`Cleaned adjustments for ${agentName}. Deleted ${deleted} messages.`);
-    } catch (error) {
-      await interaction.editReply(`Error cleaning: ${error.message}`);
     }
     return;
   }
@@ -2065,6 +2944,34 @@ bot.on("interactionCreate", async (interaction) => {
       await interaction.editReply(
         `Error setting up memory forum: ${error.message}\nSet memory_forum_channel_id in this agent's settings, then make sure the bot can view and send messages in that forum.`,
       );
+    }
+    return;
+  }
+
+  if (interaction.commandName === "raw") {
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+      const rawText = await readRawOpenRouterText();
+      if (!rawText.trim()) {
+        await interaction.editReply(`${agentName} has not uploaded any OpenRouter text yet.`);
+        return;
+      }
+
+      if (rawText.length <= 1800) {
+        await interaction.editReply(`Latest OpenRouter text for ${agentName}:\n\`\`\`text\n${rawText}\n\`\`\``);
+        return;
+      }
+
+      const attachment = new AttachmentBuilder(Buffer.from(rawText, "utf8"), {
+        name: `${agentName.toLowerCase()}-raw.txt`,
+      });
+      await interaction.editReply({
+        content: `Latest OpenRouter text for ${agentName} is attached.`,
+        files: [attachment],
+      });
+    } catch (error) {
+      await interaction.editReply(`Error reading raw OpenRouter text: ${error.message}`);
     }
     return;
   }
@@ -2107,10 +3014,12 @@ bot.on("interactionCreate", async (interaction) => {
 
     try {
       const channelId = interaction.options.getString("channel_id", true).trim();
-      const entryLimit = Math.min(conversationHistoryLimit, 100);
-      const result = await scrapeShortMemoryFromChannel(channelId, entryLimit);
+      const result = await scrapeShortMemoryFromChannel(channelId);
+      const anchorText = result.anchorMessageId
+        ? ` Anchor was ${agentName}'s latest reply ${result.anchorMessageId}.`
+        : ` No ${agentName} reply anchor was found, so it used all readable messages.`;
       await interaction.editReply(
-        `Added ${result.appended} messages to shortmemory from channel ${channelId}, ending at ${agentName}'s latest reply ${result.anchorMessageId}. Limit came from conversation_history_limit: ${entryLimit}.`,
+        `Added ${result.appended} new messages to shortmemory from channel ${channelId}. Selected ${result.selected} message entries from ${result.fetched} fetched messages, sorted by timestamp.${anchorText}`,
       );
     } catch (error) {
       await interaction.editReply(`Error scraping shortmemory: ${error.message}`);
@@ -2122,26 +3031,15 @@ bot.on("interactionCreate", async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      const entryLimit = Math.min(conversationHistoryLimit, 100);
-      const result = await scrapeShortMemoryFromUserDm(interaction.user, entryLimit);
+      const result = await scrapeShortMemoryFromUserDm(interaction.user);
+      const anchorText = result.anchorMessageId
+        ? ` Anchor was ${agentName}'s latest DM reply ${result.anchorMessageId}.`
+        : ` No ${agentName} DM reply anchor was found, so it used all readable DM messages.`;
       await interaction.editReply(
-        `Added ${result.appended} DM messages to shortmemory, ending at ${agentName}'s latest DM reply ${result.anchorMessageId}. Limit came from conversation_history_limit: ${entryLimit}.`,
+        `Added ${result.appended} new DM messages to shortmemory. Selected ${result.selected} message entries from ${result.fetched} fetched messages, sorted by timestamp.${anchorText}`,
       );
     } catch (error) {
       await interaction.editReply(`Error scraping DM shortmemory: ${error.message}`);
-    }
-    return;
-  }
-
-  if (interaction.commandName === "uploadstory") {
-    await interaction.deferReply({ ephemeral: true });
-
-    try {
-      const filename = interaction.options.getString("filename", true);
-      const result = await uploadStoryFile(filename);
-      await interaction.editReply(`Uploaded ${result.fileName} to stories in ${result.chunks} message${result.chunks === 1 ? "" : "s"}.`);
-    } catch (error) {
-      await interaction.editReply(`Error uploading story: ${error.message}`);
     }
     return;
   }
@@ -2151,10 +3049,10 @@ bot.on("interactionCreate", async (interaction) => {
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    if (personaSourceThreadId) {
-      const characterCount = await reloadPersonaFromConfiguredThread();
+    const characterCount = await reloadPersonaFromDiscordSource();
+    if (characterCount) {
       await interaction.editReply(
-        `Grabbed persona from forum post/thread ${personaSourceThreadId} and reloaded ${agentName}. Persona is ${characterCount} characters.`,
+        `Grabbed persona from Discord persona source and reloaded ${agentName}. Persona is ${characterCount} characters.`,
       );
       return;
     }

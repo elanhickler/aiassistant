@@ -4,6 +4,7 @@
 agents/*/secrets/
 agents/*/soul/
 agents/*/settings.jsonc
+agents/*/backups/
 
 discord-bot/regenerated/
 discord-bot/node_modules/
