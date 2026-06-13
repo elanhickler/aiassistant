@@ -2519,6 +2519,41 @@ bot.on("messageCreate", async (message) => {
   }
 });
 
+bot.on("messageUpdate", async (oldMessage, newMessage) => {
+  try {
+    if (newMessage.partial) newMessage = await newMessage.fetch();
+    if (!newMessage?.content?.trim()) return;
+    if (String(newMessage.author?.id) === String(bot.user.id)) return;
+
+    const oldContent = oldMessage?.partial ? "" : String(oldMessage?.content || "");
+    const snapshot = {
+      channelId: newMessage.channelId,
+      messageId: newMessage.id,
+      content: oldContent,
+    };
+    const localUpdated = await updateLocalShortMemoryForMessageSnapshot(snapshot, newMessage.content);
+    const discordUpdated = await updateShortMemoryThreadEntriesForMessageSnapshot(snapshot, newMessage.content);
+    if (localUpdated || discordUpdated) {
+      conversationHistory.splice(
+        0,
+        conversationHistory.length,
+        ...conversationHistory.map((entry) => {
+          if (entry.role !== "user") return entry;
+          if (String(entry.content || "").includes(oldContent.trim())) {
+            return { ...entry, content: String(entry.content || "").replace(oldContent.trim(), newMessage.content.trim()) };
+          }
+          return entry;
+        }),
+      );
+      console.log(
+        `Updated ${agentName} shortmemory for edited user message ${newMessage.id}: local ${localUpdated}, Discord ${discordUpdated}.`,
+      );
+    }
+  } catch (error) {
+    console.error(`Error updating shortmemory from edited message: ${error.message}`);
+  }
+});
+
 async function handleDeleteReaction({ message, userId, source }) {
   try {
     const key = `${message.channelId}:${message.id}:${userId}`;
