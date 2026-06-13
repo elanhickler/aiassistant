@@ -2739,6 +2739,14 @@ async function handlePendingReplyEdit(message) {
   if (String(message.author?.id) !== String(pending.userId)) return false;
 
   pendingReplyEditsByChannelId.delete(String(message.channelId));
+  const targetMessage = await message.channel.messages.fetch(pending.messageId).catch((error) => {
+    if (isMissingDiscordResourceError(error)) return null;
+    throw error;
+  });
+  if (targetMessage) {
+    await removeMatchingUserReaction(targetMessage, pending.userId, isMemoReactionEmoji);
+  }
+
   const replacementContent = String(message.content || "").trim();
   if (!replacementContent) {
     await deletePendingReplyEditAcknowledgement(message.channel, pending);
@@ -2746,10 +2754,6 @@ async function handlePendingReplyEdit(message) {
     return true;
   }
 
-  const targetMessage = await message.channel.messages.fetch(pending.messageId).catch((error) => {
-    if (isMissingDiscordResourceError(error)) return null;
-    throw error;
-  });
   if (!targetMessage) {
     await deletePendingReplyEditAcknowledgement(message.channel, pending);
     await replyWithTemporaryError(message, "Could not edit that reply because it was already deleted.");
