@@ -1376,6 +1376,8 @@ function helpCommandLists() {
   ];
   const pipeCommands = [
     [`||${agentCommandName} reply||`, "Reply to the last non-reply message without adding this command to shortmemory."],
+    [`||${agentCommandName} continue||`, "Continue from recent context without adding this command to shortmemory."],
+    [`||${agentCommandName} continue: text||`, "Continue with one-time instructions without adding this command to shortmemory."],
     [`||${agentCommandName} adjust: text||`, "Redo the previous bot reply with adjustment instructions; deletes the old bot reply and its assistant shortmemory entry."],
     [`||${agentCommandName} summarize||`, "Write soul/longmemory.txt."],
     [`||${agentCommandName} story||`, "Write a short story from recent context and memory."],
@@ -1911,12 +1913,12 @@ function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
 
-  const commandMatch = targetedText.match(/^(reply|adjust|subtext|summarize|story|music|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
+  const commandMatch = targetedText.match(/^(reply|continue|adjust|subtext|summarize|story|music|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
   if (!commandMatch) return null;
 
   const kind = commandMatch[1].toLowerCase();
   const content = (commandMatch[2] || "").trimStart().trimEnd();
-  if (!["reply", "dream", "sleep", "wake", "away", "state", "status", "summarize", "story", "music"].includes(kind) && !content) return null;
+  if (!["reply", "continue", "dream", "sleep", "wake", "away", "state", "status", "summarize", "story", "music"].includes(kind) && !content) return null;
   return {
     kind,
     content,
@@ -2089,20 +2091,38 @@ async function sendAdjustedReply(originalUserMessage, originalReplyText, adjustI
   return sentMessage;
 }
 
-async function sendPipeReply(message) {
+async function sendPipeReply(message, instructions = "") {
   const targetMessage = await findLastNonReplyPipeUserMessage(message);
   if (!targetMessage) {
     throw new Error("Could not find a previous non-reply message to answer.");
   }
-  await sendRegeneratedReply(targetMessage, targetMessage.content);
+  if (!instructions.trim()) {
+    await sendRegeneratedReply(targetMessage, targetMessage.content);
+    return;
+  }
+
+  const formattedUserContent = formatUserContentWithPipeSubtext(targetMessage, targetMessage.content || "");
+  await generateReplyFromContext(
+    targetMessage,
+    [
+      `${targetMessage.author.username}: ${formattedUserContent}`,
+      "",
+      "# Continue Instructions",
+      "The user is asking the agent to continue from the current scene/context using these one-time instructions.",
+      "Use the instructions naturally in the next reply. Do not quote or mention the command.",
+      instructions.trim(),
+    ].join("\n"),
+    null,
+    (sentReply) => safeReply(targetMessage, sentReply),
+  ).then((sentMessage) => rememberSentReply(targetMessage.channelId, sentMessage));
 }
 
 async function handlePipeReply(message) {
   const command = await parseWholeMessagePipeCommand(message);
-  if (command?.kind !== "reply") return false;
+  if (command?.kind !== "reply" && command?.kind !== "continue") return false;
 
   await message.channel.sendTyping();
-  await sendPipeReply(message);
+  await sendPipeReply(message, command.kind === "continue" ? command.content : "");
   return true;
 }
 
@@ -2111,7 +2131,7 @@ function isWholeReplyPipeCommandMessage(message) {
   const wholePipeCommandMatch = content.match(/^\|\|([\s\S]*?)\|\|$/);
   if (!wholePipeCommandMatch) return false;
   const command = parsePipeCommandText(wholePipeCommandMatch[1], message.channel?.isDMBased?.());
-  return command?.kind === "reply";
+  return command?.kind === "reply" || command?.kind === "continue";
 }
 
 async function findLastNonReplyPipeUserMessage(message) {

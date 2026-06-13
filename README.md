@@ -94,6 +94,8 @@ Slash commands are control actions. Only users listed in `control_user_ids` can 
 ## Pipe Text
 
 * `||@agent reply||` : Has the agent continue the story from recent context. In DMs, `@agent` is optional.
+* `||@agent continue||` : Has the agent continue the story from recent context without adding the command itself to shortmemory. In DMs, `@agent` is optional.
+* `||@agent continue: instructions||` : Has the agent continue with one-time instructions. The command itself is not added to shortmemory.
 * `normal text ||@agent subtext: private text||` : Inline private subtext lets you communicate assumptions and quick persona adjustments. It is not spoken text to quote or answer directly, and it may be loosely stored later by summaries. In DMs, `@agent` is optional.
 * `||@agent adjust: adjustment instructions||` : Redoes the previous bot reply with adjustment instructions. The bot deletes the old reply, removes that assistant shortmemory entry, and writes a replacement reply to the original user message.
 * `||@agent summarize||` : Summarizes recent shortmemory into `soul/longmemory.txt`, posts a longmemory preview, and cleans adjustment audit messages. In DMs, `@agent` is optional.
