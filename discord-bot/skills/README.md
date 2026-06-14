@@ -6,7 +6,7 @@ Optional skills and core behavior modules live here. Agents choose optional skil
 
 * `README.md` : This skills overview.
 * `discordstatusupdate.js` : Implemented optional status-note skill. It runs after summarization, asks `utility_model` for a concise natural-language status, writes status fields into `soul/status.json`, and mirrors the result through the status memory post.
-* `music.js` : Implemented optional pipe-command music skill. It can infer music from shortmemory, classify the request as a known song or a vibe, find a music link from enabled music sites, format the link, and archive it to `music_skill.music_thread_id`. Site switches live in `music_skill`; `website_config_url` can point at the static website's `music-sites.json`.
+* `music.js` : Implemented optional music search and link-formatting hook skill. Discord pipe commands and reactions are one interface; future local or website interfaces can call the same hooks.
 * `placeholders.js` : Registry of planned skills that are allowed to be documented without being implemented.
 * `speak.js` : Implemented optional text-to-speech and voice-training hook skill. Discord pipe commands are one interface; future local or website interfaces can call the same hooks.
 * `story.js` : Core story system. It owns `||@agent story||`, `||@agent story: text||`, `/uploadstory`, local story files, story recall context, and the Discord `stories` memory post.
@@ -39,7 +39,7 @@ These are always loaded and should not be listed in `enabled_skills`.
 
 ## Implemented Optional Skills
 
-* `music` : Finds and formats music links through natural language intent, `||@agent music||`, `||@agent music: description||`, or `:musical_note:` reactions. Natural language intent is gated by `intent_triggers.music` before it spends tokens on an AI intent check.
+* `music` : Finds and formats music links through natural language intent, `||@agent music||`, `||@agent music: description||`, or `:musical_note:` reactions. The skill exposes `findMusic`, `findMusicFromConversation`, and `formatMusicLink` so non-Discord interfaces can reuse the same behavior. Natural language intent is gated by `intent_triggers.music` before it spends tokens on an AI intent check.
 * `discordstatusupdate` : Runs after successful summaries and handles `||@agent status||` and `||@agent status: text||`. It writes a human-readable status note into `soul/status.json`; other skills may only provide optional hints when listed in `discord_status_update.source_skills`.
 * `speak` : Generates speech with `||@agent speak: text||` and can upload an attached audio sample for provider voice training with `||@agent speak: train voice title | transcript||`. The skill stores generated audio and voice model logs locally and keeps provider hooks reusable outside Discord.
 * `vision` : Describes attached images through `||@agent vision: text||`. The description is an uncertain observation aid, not durable truth, and not automatic image-skill training.

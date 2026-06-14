@@ -28,6 +28,7 @@ Starter project for a multi-agent AI assistant system.
         * `visualexpression.js` : Optional visual prompt/style guidance and future image planning skill.
 * `docs/` : Planning and architecture notes.
     * `speak-skill.md` : Interface-neutral text-to-speech and voice-training skill notes.
+    * `music-skill.md` : Interface-neutral music search and link-formatting skill notes.
     * `vision-skill.md` : Boundary and usage notes for the standalone image-description skill.
     * `visual-expression-plan.md` : Future local-first generated visual expression pipeline for emojis, self-images, scenes, backgrounds, thoughts, and dreams.
     * `visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
@@ -182,6 +183,7 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * sleep timer : When status changes to `sleeping`, `utility_model` estimates `sleep_planned_minutes` and stores `sleep_remaining_minutes` in `soul/status.json`. Passing time counts that value down. Extra pass-time context can adjust the timer; interruptions reduce it faster, restful protection can extend it. If it reaches zero or below, status becomes `awake` and `woke_minutes_ago` records how long ago the agent woke.
 * `enabled_skills` : Optional implemented skills may contribute small context blocks. Story and time are core systems and always loaded.
 * `speak_skill` : Settings for the optional TTS and voice-training skill. Discord can call it through `speak:`, but the skill is meant to be reusable from local or website interfaces too.
+* `music_skill` : Settings for the optional music search skill. Discord can call it through `music:`, but the skill exposes hooks for local or website interfaces too.
 * `vision_skill` : Settings for the optional standalone image-description skill. Vision descriptions are uncertain observations and do not train image generation by themselves.
 * `soul/status.json` : Current agent state used by core replies and status-aware skills. `mode` is the primary state; `status` contains boolean flags. Current modes are `awake`, `sleepy`, `sleeping`, `dreaming`, and `away`. `away` blocks normal replies.
 * `soul/dreams/` : Dream output folder used by the pipe dream command.

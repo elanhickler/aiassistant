@@ -52,8 +52,8 @@ export function createMusicSkill(context) {
     return (await readShortMemoryEntries(shortMemoryPath)).slice(-limit);
   }
 
-  async function inferMusicIntent(sourceText) {
-    const text = sourceText || (await recentShortMemoryText());
+  async function inferMusicIntent(sourceText, { useRecentContext = true } = {}) {
+    const text = sourceText || (useRecentContext ? await recentShortMemoryText() : "");
     if (!text) throw new Error("shortmemory has no recent conversation to infer music from.");
     const messages = [
       {
@@ -315,7 +315,13 @@ export function createMusicSkill(context) {
     };
   }
 
-  async function runMusicRequest(input = "") {
+  async function findMusic({ input = "", sourceText = "", useRecentContext = true } = {}) {
+    const requestText = String(input || sourceText || "");
+    return runMusicRequest(requestText, { useRecentContext });
+  }
+
+  async function runMusicRequest(input = "", options = {}) {
+    const useRecentContext = options.useRecentContext !== false;
     const parsedMusicLink = input ? parseMusicLinkInput(input) : null;
 
     if (parsedMusicLink) {
@@ -331,7 +337,7 @@ export function createMusicSkill(context) {
       return formattedMusicLink;
     }
 
-    const intent = await inferMusicIntent(input || "");
+    const intent = await inferMusicIntent(input || "", { useRecentContext });
     if (intent.mode === "known_song") {
       const candidate = await chooseKnownSongCandidate(intent);
       if (candidate) {
@@ -358,18 +364,25 @@ export function createMusicSkill(context) {
     return formattedMusicLink;
   }
 
-  async function runNaturalMusicRequest(sourceText = "") {
+  async function findMusicFromConversation(sourceText = "") {
     if (parseMusicLinkInput(sourceText) || musicUrlSite(sourceText)) {
-      return runMusicRequest(sourceText);
+      return findMusic({ input: sourceText });
     }
 
-    return runMusicRequest([
+    return findMusic({
+      input: [
       "# Recent Conversation",
       await recentShortMemoryText() || "(empty)",
       "",
       "# Latest User Message",
       sourceText,
-    ].join("\n"));
+      ].join("\n"),
+      useRecentContext: false,
+    });
+  }
+
+  async function runNaturalMusicRequest(sourceText = "") {
+    return findMusicFromConversation(sourceText);
   }
 
   async function handlePipeCommand(command, message) {
@@ -399,6 +412,9 @@ export function createMusicSkill(context) {
       };
     },
     handlePipeCommand,
+    findMusic,
+    findMusicFromConversation,
+    formatMusicLink,
     runMusicRequest,
     runNaturalMusicRequest,
     shouldRespondWithMusic,
