@@ -28,6 +28,7 @@ In servers, use the agent name.
 ||@agent visual memory: memory-id||
 ||@agent visual tags||
 ||@agent visual stats||
+||@agent visual files||
 ||@agent visual context||
 ||@agent visual context: search text||
 ||@agent visual show||
@@ -69,6 +70,7 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual memory: memory-id` : Show details for a specific visual memory.
 * `visual tags` : Show recall tags used by visual memories.
 * `visual stats` : Show counts for local visual requests, reviews, and memories.
+* `visual files` : Show local files and folders used by visual expression.
 * `visual context` : Show remembered visual guidance that can enter hidden context.
 * `visual context: search text` : Show matching remembered visual guidance that can enter hidden context.
 * `visual show` : Show compact details and recent notes for the latest local visual request.
@@ -170,6 +172,18 @@ request_status: queued 2, failed 1
 reviews: 2
 memories: 1
 recall_tags: 2
+```
+
+For `visual files`, expected response:
+
+```text
+visual files:
+output_folder: regenerated/visualexpression
+requests_folder: regenerated/visualexpression/requests
+prompts_folder: regenerated/visualexpression/prompts
+request_log: regenerated/visualexpression/requests.jsonl
+review_log: regenerated/visualexpression/reviews.jsonl
+visual_memory: regenerated/visualexpression/visual-memory.jsonl
 ```
 
 For `visual context`, expected response:

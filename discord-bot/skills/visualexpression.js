@@ -550,6 +550,23 @@ export function createVisualExpressionSkill(context) {
     ].join("\n");
   }
 
+  function relativeAgentPath(filePath) {
+    return path.relative(agentFolder, filePath).replace(/\\/g, "/");
+  }
+
+  function formatVisualFiles() {
+    return [
+      "visual files:",
+      `output_folder: ${relativeAgentPath(outputFolder)}`,
+      `requests_folder: ${relativeAgentPath(requestFolder)}`,
+      `prompts_folder: ${relativeAgentPath(promptFolder)}`,
+      `request_log: ${relativeAgentPath(requestLogPath)}`,
+      `review_log: ${relativeAgentPath(reviewLogPath)}`,
+      `visual_memory: ${relativeAgentPath(visualMemoryPath)}`,
+      `absolute_output_folder: ${outputFolder}`,
+    ].join("\n");
+  }
+
   async function formatVisualMemoryContext({ query = "" } = {}) {
     const limit = Math.max(0, Number(settings.max_visual_memories_per_context || 0));
     if (limit <= 0) return "";
@@ -955,6 +972,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatVisualStats());
         return true;
       }
+      if (command.action === "files") {
+        await safeReply(message, formatVisualFiles());
+        return true;
+      }
       if (command.action === "context") {
         const contextText = await formatVisualMemoryContext({ query: command.content });
         await safeReply(message, contextText || (command.content
@@ -1034,6 +1055,7 @@ export function createVisualExpressionSkill(context) {
     formatVisualMemoryTags,
     formatVisualMemoryContext,
     formatVisualStats,
+    formatVisualFiles,
     noteRequest,
     processQueuedRequests,
     promoteRequest,
