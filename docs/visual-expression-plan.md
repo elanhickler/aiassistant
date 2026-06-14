@@ -23,6 +23,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `docs/visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
 * `docs/visual-expression-request.md` : Request object format for future generated visual expressions.
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
+* `docs/visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
 
 ## Internet References
 
@@ -55,3 +56,4 @@ Requests should follow `docs/visual-expression-request.md` so manual Yculth acti
 * The agent should not generate visuals on every reply.
 * The first useful behavior is likely manual/local: generate a visual from selected context in Yculth, then later let the bot request it automatically.
 * Generated visuals should be attached to memory only when they become meaningful, not merely because they exist.
+* Generated visuals become durable soul material only through the promotion rules in `docs/visual-promotion.md`.

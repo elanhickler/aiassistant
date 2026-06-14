@@ -210,7 +210,16 @@
             "allow_internet_reference_downloads": false,
             // descrip: If true, future implementation must keep source URL, creator/license when known, and download time beside downloaded references.
             // default: true
-            "require_reference_attribution_notes": true
+            "require_reference_attribution_notes": true,
+            // descrip: If true, future tooling may offer a promote button for generated visuals. Promotion should still be user-confirmed.
+            // default: true
+            "allow_manual_promotion": true,
+            // descrip: Destination folder for generated visuals promoted into durable character art.
+            // default: "soul/art"
+            "promoted_art_folder": "soul/art",
+            // descrip: Destination folder for generated visuals promoted into durable custom emoji material.
+            // default: "soul/emojis"
+            "promoted_emoji_folder": "soul/emojis"
         }
     },
     // descrip: Maximum number of recent chat messages remembered as hidden context. These messages are sent privately to OpenRouter with each request, which uses input tokens and increases API cost.

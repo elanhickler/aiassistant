@@ -28,6 +28,7 @@ Starter project for a multi-agent AI assistant system.
     * `visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
     * `visual-expression-request.md` : Request object format for future generated visual expressions.
     * `visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
+    * `visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
     * `visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
     * `regenerated/` : Generated dependency area, ignored by git.
         * `node_modules/` : Installed npm packages.
@@ -166,6 +167,7 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `planned_skill_settings.tts` : Placeholder settings for future normal expressive voice output. Fish Audio is the first planned provider. Yculth can use these settings for local TTS tests, but Discord/runtime voice hooks are not implemented yet.
 * `planned_skill_settings.visualexpression` : Placeholder settings for future AI-chosen generated visuals. The intended outputs are emojis, self-images, scenes, backgrounds, thoughts, and dreams. Yculth imagegen is the intended local-first generation surface; Discord posting behavior is not implemented yet.
 * `soul/visual-references/` : Future folder for downloaded or manually collected visual references. Keep source and attribution notes beside internet downloads; generated outputs belong in `regenerated/visualexpression/`.
+* visual promotion : Generated visuals stay in `regenerated/visualexpression/` until the user promotes them into `soul/art/` or `soul/emojis/`.
 
 ## Memory Maintenance Flow
 
