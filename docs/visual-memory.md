@@ -70,6 +70,8 @@ Suggested `memory_type` values:
 
 Visual memory should be recalled by tags and summary, not by reading every prompt.
 
+The current local search is deterministic and weighted. Matches in `summary`, output type, memory type, and style rank above incidental prompt text.
+
 For a normal reply, the context assembler should only include visual memory when:
 
 * the user asks about appearance, image, art, emoji, location, dream, scene, or memory.

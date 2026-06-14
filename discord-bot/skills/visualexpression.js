@@ -405,25 +405,37 @@ export function createVisualExpressionSkill(context) {
     return memories.sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""));
   }
 
-  function visualMemorySearchText(memory) {
-    return [
-      memory.id,
-      memory.output_type,
-      memory.memory_type,
-      memory.summary,
-      memory.prompt,
-      memory.style_preset,
-      memory.source_review_state,
-    ].map((part) => String(part || "").toLowerCase()).join("\n");
+  function visualMemorySearchScore(memory, searchText) {
+    if (!searchText) return 1;
+    const fields = [
+      { value: memory.summary, weight: 6 },
+      { value: memory.output_type, weight: 5 },
+      { value: memory.memory_type, weight: 5 },
+      { value: memory.style_preset, weight: 4 },
+      { value: memory.source_review_state, weight: 3 },
+      { value: memory.id, weight: 2 },
+      { value: memory.prompt, weight: 1 },
+    ];
+    return fields.reduce((score, field) => {
+      const value = String(field.value || "").toLowerCase();
+      return value.includes(searchText) ? score + field.weight : score;
+    }, 0);
+  }
+
+  function filterVisualMemories(memories, query = "") {
+    const searchText = String(query || "").trim().toLowerCase();
+    if (!searchText) return memories;
+    return memories
+      .map((memory) => ({ memory, score: visualMemorySearchScore(memory, searchText) }))
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .map((entry) => entry.memory);
   }
 
   async function formatVisualMemoryList({ limit = 8, query = "" } = {}) {
     const searchText = String(query || "").trim().toLowerCase();
     const allMemories = await readAllVisualMemories();
-    const memories = (searchText
-      ? allMemories.filter((memory) => visualMemorySearchText(memory).includes(searchText))
-      : allMemories
-    ).slice(0, limit);
+    const memories = filterVisualMemories(allMemories, searchText).slice(0, limit);
     if (memories.length === 0) {
       return searchText ? `no visual memories found for: ${query}` : "no visual memories found";
     }
@@ -443,10 +455,7 @@ export function createVisualExpressionSkill(context) {
 
     const searchText = String(query || "").trim().toLowerCase();
     const allMemories = await readAllVisualMemories();
-    const memories = (searchText
-      ? allMemories.filter((memory) => visualMemorySearchText(memory).includes(searchText))
-      : allMemories
-    ).slice(0, limit);
+    const memories = filterVisualMemories(allMemories, searchText).slice(0, limit);
     if (memories.length === 0) return "";
 
     return [
