@@ -2,6 +2,8 @@
 
 Use this format when a generated visual expression is saved.
 
+Use `docs/visual-request-lifecycle.md` for request state changes before a completed output is written here.
+
 Generated outputs belong in:
 
 ```text

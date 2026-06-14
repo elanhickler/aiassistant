@@ -33,6 +33,7 @@ Starter project for a multi-agent AI assistant system.
     * `visual-reference-acquisition.md` : Rules for finding and downloading internet visual references.
     * `visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
     * `visual-reference-selection.md` : Rules for choosing relevant references for one visual request.
+    * `visual-request-lifecycle.md` : State flow for queued, generating, previewed, saved, promoted, failed, and cancelled visual requests.
     * `regenerated/` : Generated dependency area, ignored by git.
         * `node_modules/` : Installed npm packages.
         * `package-lock.json` : Exact generated dependency versions.

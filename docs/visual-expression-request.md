@@ -4,6 +4,8 @@ Use this format when an agent or local tool wants to request a generated visual 
 
 This is a planning contract only. It is not wired into the Discord runtime yet.
 
+Use `docs/visual-request-lifecycle.md` for request state changes after creation.
+
 ## Request Object
 
 ```json
