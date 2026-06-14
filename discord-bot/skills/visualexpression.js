@@ -241,6 +241,43 @@ export function createVisualExpressionSkill(context) {
     ].join("\n");
   }
 
+  async function findRequestByIdOrLatestQueued(requestId) {
+    const targetId = String(requestId || "").trim();
+    if (targetId) {
+      const request = (await readAllRequests()).find((candidate) => candidate.id === targetId);
+      if (!request) throw new Error(`Visual request not found: ${targetId}`);
+      return request;
+    }
+
+    const latestQueued = (await readQueuedRequests())[0];
+    if (!latestQueued) throw new Error("No queued visual request found to cancel.");
+    return latestQueued;
+  }
+
+  async function cancelRequest(requestId = "") {
+    const request = await findRequestByIdOrLatestQueued(requestId);
+    const status = request?.result?.status || "unknown";
+    if (status !== "queued") {
+      throw new Error(`Visual request ${request.id} is ${status}, only queued requests can be cancelled.`);
+    }
+
+    const cancelledAt = new Date().toISOString();
+    const nextRequest = {
+      ...request,
+      result: {
+        ...(request.result || {}),
+        status: "cancelled",
+        cancelled_at: cancelledAt,
+        message: "cancelled by visual pipe command",
+      },
+    };
+    await appendRequestEvent(request.id, "cancelled", "visual request cancelled by pipe command", {
+      updated_at: cancelledAt,
+    });
+    await writeRequest(nextRequest);
+    return nextRequest;
+  }
+
   async function markRequestProviderUnimplemented(request) {
     const assemblingAt = new Date().toISOString();
     const failedAt = new Date().toISOString();
@@ -322,6 +359,11 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatRequestList());
         return true;
       }
+      if (command.action === "cancel") {
+        const cancelled = await cancelRequest(command.content);
+        await safeReply(message, `visual request cancelled\nid: ${cancelled.id}`);
+        return true;
+      }
       const request = await queueVisualRequest(command, message);
       await safeReply(message, [
         "visual request queued",
@@ -331,6 +373,7 @@ export function createVisualExpressionSkill(context) {
       ].join("\n"));
       return true;
     },
+    cancelRequest,
     formatRequestList,
     processQueuedRequests,
     onReady() {

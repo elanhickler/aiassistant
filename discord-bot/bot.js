@@ -1420,6 +1420,8 @@ function helpCommandLists() {
       [`||${agentCommandName} visual dream: text||`, "Queue a local dream visual request from text."],
       [`||${agentCommandName} visual emoji: text||`, "Queue a local emoji visual request from text."],
       [`||${agentCommandName} visual requests||`, "Show recent local visual requests and statuses."],
+      [`||${agentCommandName} visual cancel||`, "Cancel the latest queued local visual request without deleting files."],
+      [`||${agentCommandName} visual cancel: request-id||`, "Cancel a specific queued local visual request without deleting files."],
       [`||${agentCommandName} visual process||`, "Dry-run queued local visual requests to the current provider-unimplemented state."],
     );
   }
@@ -1935,13 +1937,13 @@ function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
 
-  const visualMatch = targetedText.match(/^visual(?:\s+(requests|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
+  const visualMatch = targetedText.match(/^visual(?:\s+(requests|cancel|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
   if (visualMatch) {
     const visualKeyword = (visualMatch[1] || "").toLowerCase();
     return {
       kind: "visual",
-      action: ["process", "requests"].includes(visualKeyword) ? visualKeyword : "",
-      outputType: ["process", "requests"].includes(visualKeyword) ? "" : visualKeyword,
+      action: ["cancel", "process", "requests"].includes(visualKeyword) ? visualKeyword : "",
+      outputType: ["cancel", "process", "requests"].includes(visualKeyword) ? "" : visualKeyword,
       content: (visualMatch[2] || "").trimStart().trimEnd(),
     };
   }

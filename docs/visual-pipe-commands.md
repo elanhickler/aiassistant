@@ -20,6 +20,8 @@ In servers, use the agent name.
 ||@agent visual thought: prompt text||
 ||@agent visual dream: prompt text||
 ||@agent visual requests||
+||@agent visual cancel||
+||@agent visual cancel: request-id||
 ||@agent visual process||
 ```
 
@@ -36,6 +38,8 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual thought: text` : Request an internal or symbolic image.
 * `visual dream: text` : Request a dream image. This should usually require sleep or dream context.
 * `visual requests` : Show recent local visual requests and statuses.
+* `visual cancel` : Cancel the latest queued local visual request without deleting files.
+* `visual cancel: request-id` : Cancel a specific queued local visual request without deleting files.
 * `visual process` : Process queued local visual requests as far as the current implementation can. Right now this records a provider-unimplemented failure instead of generating an image.
 
 ## Output
@@ -59,6 +63,13 @@ For `visual requests`, expected response:
 ```text
 visual requests:
 * request-id : queued : dream : blue hallway dream
+```
+
+For `visual cancel`, expected response:
+
+```text
+visual request cancelled
+id: request-id
 ```
 
 The request should then follow:
