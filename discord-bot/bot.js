@@ -6,7 +6,9 @@ import { buildOpenRouterMessages } from "./context.js";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
 import {
   createRuntimeSkills,
+  implementedOptionalPipeCommandNames,
   normalizeEnabledSkillNames,
+  optionalPipeCommandsAllowedWithoutContentNames,
   skillHandlers,
   skillLoadSummary,
   skillName,
@@ -1937,11 +1939,6 @@ const pipeCommandNames = [
   "subtext",
   "summarize",
   "story",
-  "code",
-  "file",
-  "music",
-  "speak",
-  "vision",
   "dream",
   "sleep",
   "wake",
@@ -1950,6 +1947,7 @@ const pipeCommandNames = [
   "status",
   "passtimeminutes",
   "passtimehours",
+  ...implementedOptionalPipeCommandNames(),
 ];
 const pipeCommandsAllowedWithoutContent = new Set([
   "reply",
@@ -1962,9 +1960,7 @@ const pipeCommandsAllowedWithoutContent = new Set([
   "status",
   "summarize",
   "story",
-  "music",
-  "speak",
-  "vision",
+  ...optionalPipeCommandsAllowedWithoutContentNames(),
 ]);
 const pipeCommandPattern = new RegExp(
   `^(${pipeCommandNames.join("|")})(?:\\s*:\\s*([\\s\\S]*))?$`,

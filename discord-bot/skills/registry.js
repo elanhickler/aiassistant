@@ -26,6 +26,22 @@ const optionalSkillFactories = new Map([
   ["visualexpression", createVisualExpressionSkill],
 ]);
 
+const optionalPipeCommandNames = [
+  "code",
+  "file",
+  "music",
+  "speak",
+  "vision",
+  "image",
+  "visual",
+];
+
+const optionalPipeCommandsAllowedWithoutContent = [
+  "music",
+  "speak",
+  "vision",
+];
+
 const placeholderSkillNames = new Set(plannedSkillNames());
 
 export function implementedOptionalSkillNames() {
@@ -42,6 +58,14 @@ export function normalizeEnabledSkillNames(skillNames) {
     normalized.push(name);
   }
   return normalized;
+}
+
+export function implementedOptionalPipeCommandNames() {
+  return [...optionalPipeCommandNames];
+}
+
+export function optionalPipeCommandsAllowedWithoutContentNames() {
+  return [...optionalPipeCommandsAllowedWithoutContent];
 }
 
 export function createRuntimeSkills(enabledSkills, context) {
