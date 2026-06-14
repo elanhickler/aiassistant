@@ -88,6 +88,52 @@
         "jamendo_enabled": false,
         "newgrounds_audio_enabled": false
     },
+    // descrip: Speak skill settings. The speak skill is interface-neutral TTS/voice-training plumbing; Discord is only one possible interface.
+    // default: Fish Audio provider, disabled until speak is listed in enabled_skills
+    "speak_skill": {
+        // descrip: Voice output and voice training provider.
+        // default: "fishaudio"
+        "provider": "fishaudio",
+        // descrip: Agent-local secret file for the Fish Audio API key.
+        // default: "secrets/fish_audio_api_key.txt"
+        "api_key_file": "secrets/fish_audio_api_key.txt",
+        // descrip: Fish Audio TTS model header.
+        // default: "s2-pro"
+        "model": "s2-pro",
+        // descrip: Fish Audio cloned voice/reference id used for generated speech. Leave blank until a voice model is trained or chosen.
+        // default: ""
+        "reference_id": "",
+        // descrip: Folder under the agent where generated audio and voice model logs are saved.
+        // default: "regenerated/speak"
+        "output_folder": "regenerated/speak",
+        // descrip: JSONL file under output_folder where voice training API responses are logged.
+        // default: "voice-models.jsonl"
+        "voice_model_log_file": "voice-models.jsonl",
+        // descrip: Fish Audio generated audio format.
+        // default: "mp3"
+        "format": "mp3",
+        // descrip: Fish Audio latency-quality mode.
+        // default: "normal"
+        "latency": "normal",
+        // descrip: Speech speed multiplier.
+        // range: 0.5 to 2.
+        // default: 1
+        "speed": 1,
+        // descrip: Fish Audio prosody volume adjustment.
+        // range: -20 to 20.
+        // default: 0
+        "volume": 0,
+        // descrip: Visibility for newly trained Fish Audio voice models.
+        // default: "private"
+        "training_visibility": "private",
+        // descrip: If true, Fish Audio may clean and normalize training audio before creating a voice model.
+        // default: true
+        "enhance_audio_quality": true,
+        // descrip: Maximum Discord audio attachment bytes accepted for voice training upload.
+        // range: 1 or higher.
+        // default: 25000000
+        "max_training_audio_bytes": 25000000
+    },
     // descrip: Vision skill settings. The vision skill describes attached images, but does not update memory or image-generation guidance by itself.
     // default: use a vision-capable OpenRouter model
     "vision_skill": {

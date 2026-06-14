@@ -51,6 +51,7 @@ Settings are loaded from root `settings.jsonc` first, then merged with `agents/<
 * `identity.mention_role_ids` : Optional Discord role IDs that count as targeting this agent inside pipe commands.
 * `enabled_skills` : Optional implemented skills to load. Story and time are core systems and always loaded.
 * `skill_aliases` : Pipe command aliases for canonical skills or commands. This can be overridden per agent, for example to let `image:` also be called `paint:`.
+* `speak_skill` : Settings for the optional text-to-speech and voice-training skill. Provider hooks should stay reusable outside Discord.
 * `discord_status_update.source_skills` : Optional enabled skills allowed to provide hints for natural-language status notes after summarization. Unknown or unavailable skills are ignored.
 * `vision_skill` : Settings for the optional standalone image-description skill. Vision descriptions are uncertain observations and should not be treated as durable truth without user confirmation.
 * `global_persona_file` : Repo-level persona addition appended to every agent persona at runtime.
@@ -153,7 +154,7 @@ Implemented skills live in `discord-bot/skills/`.
 * Status-aware skills use `soul/status.json` and should clearly state which modes they require.
 * Planned placeholder skills should not be enabled until they are implemented.
 * Optional skill-specific memory forum posts are created only when the skill is enabled and implemented. Core posts for time and story behavior are always available through the standard memory forum posts.
-* `planned_skill_settings.tts` : Placeholder settings for normal expressive voice output. Fish Audio is the first planned provider; this is local Yculth TTS only until a runtime skill is implemented.
+* `speak_skill` : Implemented optional runtime skill for normal expressive voice output and Fish Audio voice-training hooks. Discord is only one possible interface for this skill.
 * `planned_skill_settings.visualexpression` : Placeholder settings for future AI-chosen generated visuals. The public Discord-facing workflow is `||@agent image: text||`, which records natural-language prompt/style critique for future image prompts. Intended output types are emojis, self-images, scenes, backgrounds, thoughts, and dreams. Keep this local-first until Discord posting behavior is deliberately designed. Internet reference downloads should go to `soul/visual-references/`; generated images should go to `regenerated/visualexpression/`.
 
 ## Current Architecture

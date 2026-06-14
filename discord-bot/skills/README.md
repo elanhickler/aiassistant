@@ -8,6 +8,7 @@ Optional skills and core behavior modules live here. Agents choose optional skil
 * `discordstatusupdate.js` : Implemented optional status-note skill. It runs after summarization, asks `utility_model` for a concise natural-language status, writes status fields into `soul/status.json`, and mirrors the result through the status memory post.
 * `music.js` : Implemented optional pipe-command music skill. It can infer music from shortmemory, classify the request as a known song or a vibe, find a music link from enabled music sites, format the link, and archive it to `music_skill.music_thread_id`. Site switches live in `music_skill`; `website_config_url` can point at the static website's `music-sites.json`.
 * `placeholders.js` : Registry of planned skills that are allowed to be documented without being implemented.
+* `speak.js` : Implemented optional text-to-speech and voice-training hook skill. Discord pipe commands are one interface; future local or website interfaces can call the same hooks.
 * `story.js` : Core story system. It owns `||@agent story||`, `||@agent story: text||`, `/uploadstory`, local story files, story recall context, and the Discord `stories` memory post.
 * `time.js` : Core time system. It owns sleep, wake, status, time passage, and dream behavior.
 * `vision.js` : Implemented optional image-description skill. It describes an attached image or an image in the replied-to message, but does not update memory or image-generation guidance by itself.
@@ -40,6 +41,7 @@ These are always loaded and should not be listed in `enabled_skills`.
 
 * `music` : Finds and formats music links through natural language intent, `||@agent music||`, `||@agent music: description||`, or `:musical_note:` reactions. Natural language intent is gated by `intent_triggers.music` before it spends tokens on an AI intent check.
 * `discordstatusupdate` : Runs after successful summaries and handles `||@agent status||` and `||@agent status: text||`. It writes a human-readable status note into `soul/status.json`; other skills may only provide optional hints when listed in `discord_status_update.source_skills`.
+* `speak` : Generates speech with `||@agent speak: text||` and can upload an attached audio sample for provider voice training with `||@agent speak: train voice title | transcript||`. The skill stores generated audio and voice model logs locally and keeps provider hooks reusable outside Discord.
 * `vision` : Describes attached images through `||@agent vision: text||`. The description is an uncertain observation aid, not durable truth, and not automatic image-skill training.
 * `visualexpression` : Planning-only bridge for future generated emojis, self-images, scenes, backgrounds, thoughts, and dreams. The public pipe command is `||@agent image: text||`, which records natural-language prompt/style critique for future image prompts. Legacy `visual ...` request-queue commands remain available internally for debugging, but should not be treated as the normal user workflow.
 
@@ -54,4 +56,4 @@ These are placeholders only. Enabling them should error until they are implement
 * `summarization` : Future shortmemory to longmemory maintenance workflow.
 * `art` : Future art prompt, reference, and visual memory workflow.
 * `settings` : Future Discord-editable settings workflow.
-* `tts` : Future normal expressive voice output for adult-permitted AI character chat. Fish Audio is the first planned provider through a `SpeechOutputProvider` wrapper; the local Yculth Voice page is the first test surface.
+* `tts` : Older placeholder name for local voice-output experiments. Prefer the implemented `speak` skill for runtime TTS and provider voice-training hooks.

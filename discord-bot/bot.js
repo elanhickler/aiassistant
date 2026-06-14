@@ -7,6 +7,7 @@ import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js"
 import { createMusicSkill } from "./skills/music.js";
 import { plannedSkillNames } from "./skills/placeholders.js";
 import { createDiscordStatusUpdateSkill } from "./skills/discordstatusupdate.js";
+import { createSpeakSkill } from "./skills/speak.js";
 import { createStorySkill } from "./skills/story.js";
 import { createTimeSkill } from "./skills/time.js";
 import { createVisionSkill } from "./skills/vision.js";
@@ -665,6 +666,7 @@ const coreSkillFactories = [
 const skillFactories = new Map([
   ["discordstatusupdate", createDiscordStatusUpdateSkill],
   ["music", createMusicSkill],
+  ["speak", createSpeakSkill],
   ["vision", createVisionSkill],
   ["visualexpression", createVisualExpressionSkill],
 ]);
@@ -1450,6 +1452,15 @@ function helpCommandLists() {
     );
   }
 
+  if (enabledSkills.includes("speak")) {
+    pipeCommands.push(...pipeRowsWithAliases(
+      agentCommandName,
+      "speak",
+      ": text",
+      "Generate spoken audio from text, or train a voice with speak: train voice title | transcript plus an audio attachment.",
+    ));
+  }
+
   if (enabledSkills.includes("visualexpression")) {
     pipeCommands.push(...pipeRowsWithAliases(
       agentCommandName,
@@ -2004,12 +2015,12 @@ function parsePipeCommandText(text, isDm) {
     };
   }
 
-  const commandMatch = canonicalTargetedText.match(/^(reply|continue|adjust|subtext|summarize|story|music|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
+  const commandMatch = canonicalTargetedText.match(/^(reply|continue|adjust|subtext|summarize|story|music|speak|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
   if (!commandMatch) return null;
 
   const kind = commandMatch[1].toLowerCase();
   const content = (commandMatch[2] || "").trimStart().trimEnd();
-  if (!["reply", "continue", "dream", "sleep", "wake", "away", "state", "status", "summarize", "story", "music", "vision"].includes(kind) && !content) return null;
+  if (!["reply", "continue", "dream", "sleep", "wake", "away", "state", "status", "summarize", "story", "music", "speak", "vision"].includes(kind) && !content) return null;
   return {
     kind,
     content,
