@@ -4,6 +4,8 @@ Visual review is how generated outputs are judged before they are promoted, post
 
 This is a planning contract only. It is not wired into the Discord runtime yet.
 
+Use `docs/visual-variants.md` when reviewing multiple variants of the same request.
+
 ## Default Rule
 
 Generated visuals start as unreviewed experiments.

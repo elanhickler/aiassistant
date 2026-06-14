@@ -43,6 +43,10 @@ Use one JSON object per generated image.
   "width": 768,
   "height": 1152,
   "seed": "",
+  "variant_group_id": "",
+  "variant_index": 1,
+  "variant_count": 1,
+  "parent_output_id": "",
   "source_reference_ids": [],
   "source_memory": {
     "message_id": "",
@@ -66,6 +70,8 @@ Prompt files should be human-readable Markdown.
 * provider : yculth-imagegen
 * model :
 * seed :
+* variant_group_id :
+* variant_index : 1 of 1
 * size : 768 x 1152
 
 ## Prompt
@@ -103,6 +109,7 @@ regenerated/visualexpression/reviews.jsonl
 ```
 
 Use `docs/visual-review.md` for review states, scores, and promotion checks.
+Use `docs/visual-variants.md` when outputs belong to a variant group.
 
 ## Rules
 

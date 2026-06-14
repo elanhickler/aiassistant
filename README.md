@@ -34,6 +34,7 @@ Starter project for a multi-agent AI assistant system.
     * `visual-privacy-boundary.md` : Rules for what visual tooling may send to providers, web search, or Discord.
     * `visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
     * `visual-review.md` : Review notes for judging generated outputs before posting, promotion, or memory.
+    * `visual-variants.md` : Variant group rules for exploring alternate versions of the same visual idea.
     * `visual-memory.md` : Compact memory notes for meaningful visuals that should be recallable later.
     * `visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
     * `visual-discord-posting.md` : Rules for posting selected generated visuals back into Discord.

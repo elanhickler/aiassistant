@@ -34,6 +34,12 @@ Use `docs/visual-provider-contract.md` when a request is submitted to a generato
     "model": "",
     "seed": ""
   },
+  "variants": {
+    "variant_group_id": "",
+    "variant_count": 1,
+    "variant_strategy": "same prompt, different seeds",
+    "parent_output_id": ""
+  },
   "result": {
     "status": "queued",
     "local_path": "",
@@ -99,3 +105,4 @@ Only send focused provider input to image generation.
 Do not send full shortmemory, full longmemory, secret values, local settings, or raw Discord message dumps to the provider.
 
 Use `docs/visual-provider-contract.md` for provider input, output, and error handling.
+Use `docs/visual-variants.md` when a request asks for more than one intentional variant.

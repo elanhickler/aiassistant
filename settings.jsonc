@@ -201,6 +201,13 @@
             // range: 0 or higher.
             // default: 1
             "max_visuals_per_reply": 1,
+            // descrip: Maximum visual variants future tooling may generate for one visual request before review.
+            // range: 1 or higher.
+            // default: 3
+            "max_variants_per_request": 3,
+            // descrip: Default variant strategy for future visual requests.
+            // default: "same prompt, different seeds"
+            "default_variant_strategy": "same prompt, different seeds",
             // descrip: Maximum characters of selected memory/reference context to use while assembling a future visual prompt.
             // range: 0 or higher.
             // default: 4000
