@@ -9,6 +9,7 @@ import { plannedSkillNames } from "./skills/placeholders.js";
 import { createDiscordStatusUpdateSkill } from "./skills/discordstatusupdate.js";
 import { createStorySkill } from "./skills/story.js";
 import { createTimeSkill } from "./skills/time.js";
+import { createVisualExpressionSkill } from "./skills/visualexpression.js";
 
 const require = createRequire(import.meta.url);
 const { AttachmentBuilder, Client, GatewayIntentBits, Partials } = require("./regenerated/node_modules/discord.js");
@@ -628,6 +629,7 @@ const coreSkillFactories = [
 const skillFactories = new Map([
   ["discordstatusupdate", createDiscordStatusUpdateSkill],
   ["music", createMusicSkill],
+  ["visualexpression", createVisualExpressionSkill],
 ]);
 const placeholderSkillNames = new Set(plannedSkillNames());
 let skills = [];
