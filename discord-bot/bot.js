@@ -214,6 +214,17 @@ function openRouterProviderOptions() {
   return { ignore };
 }
 
+function countCjkCharacters(text) {
+  return (String(text || "").match(/[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/gu) || []).length;
+}
+
+function shouldRetryForUnexpectedReplyLanguage(reply) {
+  const compactReply = String(reply || "").replace(/\s+/g, "");
+  if (!compactReply) return false;
+  const cjkCharacters = countCjkCharacters(compactReply);
+  return cjkCharacters >= 4 && cjkCharacters / compactReply.length >= 0.15;
+}
+
 async function deleteDiscordMessageIfExists(message, label) {
   try {
     await message.delete();
@@ -2496,7 +2507,7 @@ async function askOpenRouter(message) {
     );
   }
 
-  const messages = await buildOpenRouterMessages({
+  let messages = await buildOpenRouterMessages({
     agentName,
     conversationHistory,
     conversationHistoryLimit,
@@ -2509,47 +2520,70 @@ async function askOpenRouter(message) {
     skills,
     timePassages: pendingTimePassages,
   });
-  await writeRawOpenRouterText(messages, "normal reply");
 
-  let response;
-  try {
-    response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openrouterApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: Number(requiredSetting("chaos")),
-        max_tokens: Number(requiredSetting("max_tokens")),
-        provider: openRouterProviderOptions(),
-      }),
-    });
-  } catch (error) {
-    console.error(`OpenRouter fetch failed for ${agentName}: ${formatErrorForLog(error)}`);
-    throw new Error(`OpenRouter fetch failed: ${error.cause?.message || error.message}`, { cause: error });
-  }
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await writeRawOpenRouterText(messages, attempt === 0 ? "normal reply" : "normal reply language retry");
 
-  if (!response.ok) {
-    throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
-  }
-
-  const payload = await response.json();
-  const choice = payload.choices?.[0];
-  const reply = choice?.message?.content?.trim();
-  if (!reply) {
-    if (choice?.error?.message) {
-      throw new Error(`OpenRouter generation error ${choice.error.code || "unknown"}: ${choice.error.message}`);
+    let response;
+    try {
+      response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openrouterApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: Number(requiredSetting("chaos")),
+          max_tokens: Number(requiredSetting("max_tokens")),
+          provider: openRouterProviderOptions(),
+        }),
+      });
+    } catch (error) {
+      console.error(`OpenRouter fetch failed for ${agentName}: ${formatErrorForLog(error)}`);
+      throw new Error(`OpenRouter fetch failed: ${error.cause?.message || error.message}`, { cause: error });
     }
-    const messageKeys = choice?.message ? Object.keys(choice.message).join(", ") : "none";
-    const refusal = choice?.message?.refusal ? ` refusal=${JSON.stringify(choice.message.refusal).slice(0, 500)}` : "";
-    const finishReason = choice?.finish_reason || choice?.native_finish_reason || "unknown";
-    console.error(`OpenRouter empty reply payload: ${JSON.stringify(payload).slice(0, 2000)}`);
-    throw new Error(`OpenRouter returned an empty reply. finish_reason=${finishReason}; message_keys=${messageKeys}.${refusal}`);
+
+    if (!response.ok) {
+      throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
+    }
+
+    const payload = await response.json();
+    const choice = payload.choices?.[0];
+    const reply = choice?.message?.content?.trim();
+    if (!reply) {
+      if (choice?.error?.message) {
+        throw new Error(`OpenRouter generation error ${choice.error.code || "unknown"}: ${choice.error.message}`);
+      }
+      const messageKeys = choice?.message ? Object.keys(choice.message).join(", ") : "none";
+      const refusal = choice?.message?.refusal ? ` refusal=${JSON.stringify(choice.message.refusal).slice(0, 500)}` : "";
+      const finishReason = choice?.finish_reason || choice?.native_finish_reason || "unknown";
+      console.error(`OpenRouter empty reply payload: ${JSON.stringify(payload).slice(0, 2000)}`);
+      throw new Error(`OpenRouter returned an empty reply. finish_reason=${finishReason}; message_keys=${messageKeys}.${refusal}`);
+    }
+
+    if (attempt === 0 && shouldRetryForUnexpectedReplyLanguage(reply)) {
+      console.warn(`Retrying ${agentName} reply because the first OpenRouter reply appeared to use the wrong visible language.`);
+      messages = [
+        ...messages,
+        { role: "assistant", content: reply },
+        {
+          role: "user",
+          content: [
+            "Rewrite your previous reply in English only.",
+            "Preserve the same meaning, roleplay tone, and emotional continuity.",
+            "Do not mention translation, language, policy, or this correction.",
+          ].join(" "),
+        },
+      ];
+      continue;
+    }
+
+    return reply;
   }
-  return reply;
+
+  throw new Error("OpenRouter reply failed the visible language check after retry.");
 }
 
 bot.on("messageCreate", async (message) => {

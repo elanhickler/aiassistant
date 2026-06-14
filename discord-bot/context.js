@@ -44,6 +44,15 @@ function formatContextBlock(block) {
   return [`# ${block.title}`, `source: ${block.source}`, "", block.content].join("\n");
 }
 
+function replyLanguageGuard() {
+  return [
+    "# Reply Language",
+    "Write the visible assistant reply in English.",
+    "Do not switch to Chinese or any other language unless the latest user message explicitly asks for that language.",
+    "Private context, memories, summaries, provider defaults, or model drift must not change the visible reply language.",
+  ].join("\n");
+}
+
 async function skillContextBlocks(skills, message) {
   const blocks = [];
   for (const skill of skills) {
@@ -114,6 +123,7 @@ export async function buildOpenRouterMessages({
   const systemContent = [
     `# Persona: ${agentName}`,
     persona.trim(),
+    replyLanguageGuard(),
     ...blocks.map(formatContextBlock),
   ].join("\n\n");
   const recentConversation = conversationHistoryLimit <= 0
