@@ -16,13 +16,13 @@ Starter project for a multi-agent AI assistant system.
     * `context.js` : Builds OpenRouter request context from persona, longmemory, recent shortmemory, and enabled skill context blocks.
     * `memory.js` : Shared shortmemory parsing and formatting helpers.
     * `package.json` : Runtime scripts for installing dependencies, checking syntax, and starting the bot.
-    * `skills/` : Optional skill modules loaded through each agent's `enabled_skills` setting.
+    * `skills/` : Core behavior modules plus optional skills loaded through each agent's `enabled_skills` setting.
         * `README.md` : Skills overview.
         * `discordstatusupdate.js` : Optional status-note skill that updates natural-language status after summarization.
         * `music.js` : Optional pipe-command music skill.
         * `placeholders.js` : Registry of planned skills that are documented but not implemented yet.
-        * `story.js` : Optional pipe-command story generation and story upload skill.
-        * `time.js` : Optional pipe-command time, sleep, status, and dream skill.
+        * `story.js` : Core story generation, recall, and story upload system.
+        * `time.js` : Core time, sleep, status, and dream system.
     * `regenerated/` : Generated dependency area, ignored by git.
         * `node_modules/` : Installed npm packages.
         * `package-lock.json` : Exact generated dependency versions.
@@ -71,7 +71,7 @@ npm.cmd start
 * `global_persona_file` : Repo-level persona addition appended to every agent persona at runtime.
 * `intent_triggers` : Cheap local trigger words that decide whether a skill is allowed to spend tokens on an AI intent check. For example, music intent only checks OpenRouter when a message contains a configured music trigger.
 * `control_user_ids` : Discord user IDs allowed to run slash-command control actions. If blank, everyone can run slash-command controls.
-* common per-agent overrides : `enabled_skills`, Discord thread IDs, reply channel IDs, and skill-specific thread IDs such as `music_skill.music_thread_id`.
+* common per-agent overrides : optional `enabled_skills`, Discord thread IDs, reply channel IDs, and skill-specific thread IDs such as `music_skill.music_thread_id`.
 
 ## Discord Slash Commands
 
@@ -84,7 +84,7 @@ Slash commands are control actions. Only users listed in `control_user_ids` can 
 * `/syncshortmemory direction` : Syncs shortmemory between local `soul/shortmemory.jsonl` and the Discord shortmemory forum post. Direction can be `both`, `local to discord`, or `discord to local`.
 * `/scrapeshortmemory channel_id` : Reads all available message pages from a channel, anchors at the agent's latest reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
 * `/scrapedmshortmemory` : Reads all available DM message pages with the command user, anchors at the agent's latest DM reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
-* `/uploadstory filename` : Story skill command that uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
+* `/uploadstory filename` : Story command that uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
 * `❌ delete reaction` : React to a bot reply with `:x:` to delete that reply and remove its matching assistant entry from local and Discord shortmemory.
 * `🔁 redo reaction` : React to a bot reply with `:repeat:` to delete that reply from memory and generate a fresh answer to the previous user message.
 * `⏪ rewind reaction` : React to a bot reply with `:rewind:` to delete that bot reply, remove that one assistant shortmemory entry, and remove the previous user message from shortmemory only. It does not delete the user's Discord message.
@@ -99,9 +99,9 @@ Slash commands are control actions. Only users listed in `control_user_ids` can 
 * `normal text ||@agent subtext: private text||` : Inline private subtext lets you communicate assumptions and quick persona adjustments. It is not spoken text to quote or answer directly, and it may be loosely stored later by summaries. In DMs, `@agent` is optional.
 * `||@agent adjust: adjustment instructions||` : Redoes the previous bot reply with adjustment instructions. The bot deletes the old reply, removes that assistant shortmemory entry, and writes a replacement reply to the original user message.
 * `||@agent summarize||` : Summarizes recent shortmemory into `soul/longmemory.txt`, posts a longmemory preview, and cleans adjustment audit messages. In DMs, `@agent` is optional.
-* `||@agent story||` : Story skill command that writes an evidence-grounded short story from saved stories, recent shortmemory, and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@agent` is optional.
-* `||@agent story: story prompt||` : Story skill command that searches saved stories, shortmemory, and longmemory for the requested subject, then writes only what the evidence supports.
-* story recall : When the story skill is enabled, normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and longmemory context, and let the agent answer with a focused summary or explanation without inventing unsupported details.
+* `||@agent story||` : Story command that writes an evidence-grounded short story from saved stories, recent shortmemory, and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@agent` is optional.
+* `||@agent story: story prompt||` : Story command that searches saved stories, shortmemory, and longmemory for the requested subject, then writes only what the evidence supports.
+* story recall : Normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and longmemory context, and let the agent answer with a focused summary or explanation without inventing unsupported details.
 * natural music intent : If `music` is enabled and a message matches `intent_triggers.music`, the bot asks a small AI intent question. If the answer says the user wants music now, it posts a formatted music link instead of a normal reply.
 * `||@agent music||` : Optional `music` skill. Infers the latest music request from shortmemory, posts a formatted music link, and archives it to the configured music thread. The `:musical_note:` reaction does the same thing without needing command text. In DMs, `@agent` is optional.
 * `||@agent music: description or link||` : Optional `music` skill with direct input. Can use a music description, a specific music link, or `Artist - Song | https://...`.
@@ -148,15 +148,16 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `origin_summary_settings.summary_policy` : Origin summary guidance. This controls how `soul/origin.md` becomes `soul/origin_summary.md`, with more emphasis on memorable lore, triggers, voice anchors, and roleplay hooks.
 * automatic summarization : Runs in the background after enough new shortmemory has accumulated. It uses `conversation_history_limit` as the rough trigger size and does not block normal chat replies.
 * automatic Discord status update : When `discordstatusupdate` is enabled, successful summarization writes a concise human-readable status into `soul/status.json` and mirrors it to the `status` Discord forum post.
-* `dream_settings` : Controls the dream part of the `time` skill. `||@agent dream||` requires `soul/status.json` mode `sleeping`, reads configured source files and previous dreams, writes a dream draft into `soul/dreams`, and does not update longmemory. When status changes to sleeping, `utility_model` may decide to create an immediate dream.
+* `dream_settings` : Controls the dream part of the core time system. `||@agent dream||` requires `soul/status.json` mode `sleeping`, reads configured source files and previous dreams, writes a dream draft into `soul/dreams`, and does not update longmemory. When status changes to sleeping, `utility_model` may decide to create an immediate dream.
 * `||@agent passtimeminutes: 60||` : Adds a one-shot hidden time passage block to the next normal reply.
 * `||@agent passtimehours: 8||` : Adds a longer one-shot hidden time passage block to the next normal reply.
 * sleep timer : When status changes to `sleeping`, `utility_model` estimates `sleep_planned_minutes` and stores `sleep_remaining_minutes` in `soul/status.json`. Passing time counts that value down. Extra pass-time context can adjust the timer; interruptions reduce it faster, restful protection can extend it. If it reaches zero or below, status becomes `awake` and `woke_minutes_ago` records how long ago the agent woke.
-* `enabled_skills` : Implemented skills may contribute small context blocks.
+* `enabled_skills` : Optional implemented skills may contribute small context blocks. Story and time are core systems and always loaded.
 * `soul/status.json` : Current agent state used by core replies and status-aware skills. `mode` is the primary state; `status` contains boolean flags. Current modes are `awake`, `sleepy`, `sleeping`, `dreaming`, and `away`. `away` blocks normal replies.
 * `soul/dreams/` : Dream output folder used by the pipe dream command.
-* `soul/stories/` : Story skill output folder used by `||@agent story||`. Story generation and recall search `.md` and `.txt` files here, then combine relevant story text with shortmemory and longmemory as evidence.
+* `soul/stories/` : Story output folder used by `||@agent story||`. Story generation and recall search `.md` and `.txt` files here, then combine relevant story text with shortmemory and longmemory as evidence.
 * `soul/art/` and `soul/emojis/` : Placeholder content folders. They are not automatically sent until a future skill or retrieval feature chooses them.
+* `planned_skill_settings.tts` : Placeholder settings for future normal expressive voice output. Fish Audio is the first planned provider. Yculth can use these settings for local TTS tests, but Discord/runtime voice hooks are not implemented yet.
 
 ## Memory Maintenance Flow
 

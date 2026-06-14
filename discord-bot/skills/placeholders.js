@@ -6,6 +6,7 @@ const placeholderSkillDescriptions = {
   summarization: "Future shortmemory to longmemory maintenance workflow.",
   art: "Future art prompt, reference, and visual memory workflow.",
   settings: "Future Discord-editable settings workflow.",
+  tts: "Future normal expressive voice output for adult-permitted AI character chat.",
 };
 
 export function plannedSkillNames() {

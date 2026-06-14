@@ -19,11 +19,9 @@
     // descrip: OpenRouter model string used for small utility decisions like intent checks, status inference, and whether sleep should create a dream.
     // default: "openai/gpt-oss-20b:free"
     "utility_model": "openai/gpt-oss-20b:free",
-    // descrip: Optional bot skills loaded for agents unless overridden.
-    // default: time, story, and discordstatusupdate
+    // descrip: Optional bot skills loaded for agents unless overridden. Time and story are core systems and are always loaded.
+    // default: discordstatusupdate
     "enabled_skills": [
-        "time",
-        "story",
         "discordstatusupdate"
     ],
     // descrip: Persona file to load from each agent folder.
@@ -51,7 +49,7 @@
     // descrip: Required Discord forum channel ID for each agent's memory forum. Agents must override this.
     // default: ""
     "memory_forum_channel_id": "",
-    // descrip: Core forum post names that startup and /setupmemoryforum create or confirm. Skill posts are added only when the skill is enabled and implemented.
+    // descrip: Core forum post names that startup and /setupmemoryforum create or confirm. Optional skill posts are added only when that skill is enabled and implemented.
     // default: standard memory posts
     "memory_forum_posts": [
         "help",
@@ -125,6 +123,37 @@
         },
         "settings": {
             "enabled": false
+        },
+        "tts": {
+            // descrip: Placeholder for future normal expressive voice output. The local Yculth Voice page can test Fish Audio, but Discord/runtime TTS is not implemented yet.
+            // default: false
+            "enabled": false,
+            // descrip: Voice output provider name.
+            // default: "fishaudio"
+            "provider": "fishaudio",
+            // descrip: Fish Audio model header.
+            // default: "s2-pro"
+            "model": "s2-pro",
+            // descrip: Fish Audio reference_id or cloned voice ID. Leave blank to use Fish Audio default behavior.
+            // default: ""
+            "voice_id": "",
+            // descrip: Agent-local secret file for the Fish Audio API key.
+            // default: "secrets/fish_audio_api_key.txt"
+            "api_key_file": "secrets/fish_audio_api_key.txt",
+            // descrip: Generated audio format.
+            // default: "mp3"
+            "format": "mp3",
+            // descrip: Fish Audio latency-quality mode.
+            // default: "normal"
+            "latency": "normal",
+            // descrip: Speech speed multiplier.
+            // range: 0.5 to 2.
+            // default: 1
+            "speed": 1,
+            // descrip: Fish Audio prosody volume adjustment.
+            // range: -20 to 20.
+            // default: 0
+            "volume": 0
         }
     },
     // descrip: Maximum number of recent chat messages remembered as hidden context. These messages are sent privately to OpenRouter with each request, which uses input tokens and increases API cost.
@@ -157,7 +186,7 @@
         // default: 2200
         "max_tokens": 4000
     },
-    // descrip: Dream settings control the dream part of the time skill. Dreams are creative artifacts and do not directly replace summaries.
+    // descrip: Dream settings control the dream part of the core time system. Dreams are creative artifacts and do not directly replace summaries.
     // default: manual dream generation, write drafts into soul/dreams
     "dream_settings": {
         "enabled": true,

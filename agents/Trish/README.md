@@ -33,7 +33,7 @@ OpenRouter does not have a special long memory slot for this bot. Anything the b
 * `settings.jsonc` : Trish-only overrides such as identity, enabled skills, memory forum IDs, thread IDs, reply channels, and music archive thread.
 * `identity.mention_role_ids` : Discord role IDs that count as targeting Trish inside pipe commands.
 * `persona_source_thread_id` : Trish override; when filled with a Discord forum post/thread ID, `/reloadpersona` grabs that post's message text into `soul/persona.md` and reloads it. In Discord's API, forum posts are threads.
-* `enabled_skills` : Trish overrides the global list to enable `time`, `music`, `story`, and `discordstatusupdate`.
+* `enabled_skills` : Trish overrides the global optional-skill list to enable `music` and `discordstatusupdate`. Time and story are core systems and always loaded.
 * `access_thread_id` : Trish override for extra agent-specific information later.
 * `shortmemory_thread_id` : Trish override where Discord shortmemory is mirrored and treated as authority.
 * `music_skill.music_thread_id` : Trish override required because `music` is enabled.
@@ -49,7 +49,7 @@ OpenRouter does not have a special long memory slot for this bot. Anything the b
 * `/syncshortmemory` : Syncs local `soul/shortmemory.jsonl` with the Discord shortmemory forum post. Use `both` to push missing local entries and then refresh local from Discord.
 * `/scrapeshortmemory` : Reads all available channel message pages, anchors at Trish's latest reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
 * `/scrapedmshortmemory` : Reads all available DM message pages with the command user, anchors at Trish's latest DM reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
-* `/uploadstory filename` : Story skill command that uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
+* `/uploadstory filename` : Story command that uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
 * automatic summarization : Runs in the background when enough new shortmemory has accumulated, using `conversation_history_limit` as the rough trigger size.
 * automatic Discord status update : When summarization succeeds, `discordstatusupdate` writes a natural-language status note into `soul/status.json` and mirrors it to the `status` Discord forum post.
 * `❌ delete reaction` : React with `:x:` to delete a Trish reply and remove the matching assistant shortmemory entry.
@@ -61,8 +61,8 @@ OpenRouter does not have a special long memory slot for this bot. Anything the b
 * `normal text ||@trish subtext: private text||` : Inline private subtext lets you communicate assumptions and quick persona adjustments. It is not spoken text to quote or answer directly, and it may be loosely stored later by summaries. In DMs, `@trish` is optional.
 * `||@trish adjust: adjustment instructions||` : Redoes the previous Trish reply with adjustment instructions. Trish deletes the old reply, removes that assistant shortmemory entry, and writes a replacement reply to the original user message.
 * `||@trish summarize||` : Summarizes recent shortmemory into `soul/longmemory.txt`, posts a longmemory preview, and cleans adjustment audit messages. In DMs, `@trish` is optional.
-* `||@trish story||` : Story skill command that writes an evidence-grounded short story from saved stories, recent shortmemory, and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@trish` is optional.
-* `||@trish story: story prompt||` : Story skill command that searches saved stories, shortmemory, and longmemory for the requested subject, then writes only what the evidence supports.
+* `||@trish story||` : Story command that writes an evidence-grounded short story from saved stories, recent shortmemory, and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@trish` is optional.
+* `||@trish story: story prompt||` : Story command that searches saved stories, shortmemory, and longmemory for the requested subject, then writes only what the evidence supports.
 * story recall : Normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and longmemory context, and let Trish answer with a focused summary or explanation without inventing unsupported details.
 * `||@trish music||` : Infers the latest music request from shortmemory, posts a formatted music link, and archives it to the configured music thread. In DMs, `@trish` is optional.
 * `||@trish music: description or link||` : Runs the music skill with direct input.

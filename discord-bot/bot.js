@@ -456,7 +456,10 @@ const bot = new Client({
   partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
 });
 
-const enabledSkills = requiredSetting("enabled_skills");
+const coreSkillNames = new Set(["story", "time"]);
+const enabledSkills = requiredSetting("enabled_skills")
+  .map((skillName) => String(skillName))
+  .filter((skillName) => !coreSkillNames.has(skillName));
 const allowedStatusModes = new Set(["awake", "sleepy", "sleeping", "dreaming", "away"]);
 
 async function readStatus() {
@@ -618,41 +621,47 @@ async function addTimePassage(minutes, sleepTimerAdjustment = null) {
   return nextStatus;
 }
 
+const coreSkillFactories = [
+  createStorySkill,
+  createTimeSkill,
+];
 const skillFactories = new Map([
   ["discordstatusupdate", createDiscordStatusUpdateSkill],
   ["music", createMusicSkill],
-  ["story", createStorySkill],
-  ["time", createTimeSkill],
 ]);
 const placeholderSkillNames = new Set(plannedSkillNames());
 let skills = [];
-skills = enabledSkills.map((skillName) => {
-  const factory = skillFactories.get(skillName);
-  if (!factory && placeholderSkillNames.has(skillName)) {
-    throw new Error(`Skill is planned but not implemented yet: ${skillName}`);
-  }
-  if (!factory) throw new Error(`Unknown enabled skill: ${skillName}`);
-  return factory({
-    addTimePassage,
-    agentName,
-    bot,
-    agentFolder,
-    conversationHistoryLimit,
-    findMemoryForumPostByName,
-    getSkills: () => skills,
-    longMemoryPath,
-    model,
-    openrouterApiKey,
-    replyTemporarily,
-    requiredSetting,
-    safeReply,
-    shortMemoryPath,
-    statusApi,
-    systemPrompt: () => systemPrompt,
-    utilityModel,
-    writeRawOpenRouterText,
-  });
-});
+const skillContext = {
+  addTimePassage,
+  agentName,
+  bot,
+  agentFolder,
+  conversationHistoryLimit,
+  findMemoryForumPostByName,
+  getSkills: () => skills,
+  longMemoryPath,
+  model,
+  openrouterApiKey,
+  replyTemporarily,
+  requiredSetting,
+  safeReply,
+  shortMemoryPath,
+  statusApi,
+  systemPrompt: () => systemPrompt,
+  utilityModel,
+  writeRawOpenRouterText,
+};
+skills = [
+  ...coreSkillFactories.map((factory) => factory(skillContext)),
+  ...enabledSkills.map((skillName) => {
+    const factory = skillFactories.get(skillName);
+    if (!factory && placeholderSkillNames.has(skillName)) {
+      throw new Error(`Skill is planned but not implemented yet: ${skillName}`);
+    }
+    if (!factory) throw new Error(`Unknown enabled skill: ${skillName}`);
+    return factory(skillContext);
+  }),
+];
 
 async function runSkillHook(hookName, hookContext) {
   for (const skill of skills) {

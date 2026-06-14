@@ -49,7 +49,7 @@ Settings are loaded from root `settings.jsonc` first, then merged with `agents/<
 
 * `identity` : The bot's name, unique ID, nicknames, and optional mention role IDs.
 * `identity.mention_role_ids` : Optional Discord role IDs that count as targeting this agent inside pipe commands.
-* `enabled_skills` : Optional implemented skills to load.
+* `enabled_skills` : Optional implemented skills to load. Story and time are core systems and always loaded.
 * `discord_status_update.source_skills` : Optional enabled skills allowed to provide hints for natural-language status notes after summarization. Unknown or unavailable skills are ignored.
 * `global_persona_file` : Repo-level persona addition appended to every agent persona at runtime.
 * `use_memory_forum_persona_source` : If true, the bot can load persona from the memory forum `persona` post when no explicit persona source thread is set. If false, the bot uses the local persona file.
@@ -105,7 +105,7 @@ Slash commands are control actions. Only users listed in `control_user_ids` can 
 * `/raw` : Shows the latest OpenRouter message text uploaded by the agent. Large raw prompts are sent as a private text file attachment.
 * `/scrapeshortmemory` : Reads all available channel message pages, anchors at the agent's latest reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
 * `/scrapedmshortmemory` : Reads all available DM message pages with the command user, anchors at the agent's latest DM reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
-* `/uploadstory filename` : Story skill command that uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
+* `/uploadstory filename` : Story command that uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
 * `❌ delete reaction` : React with `:x:` to delete a bot reply and remove the matching assistant shortmemory entry.
 * `🔁 redo reaction` : React with `:repeat:` to delete a bot reply from memory and generate a fresh answer to the previous user message.
 * `⏪ rewind reaction` : React with `:rewind:` to delete a bot reply, remove that one assistant shortmemory entry, and remove the previous user message from shortmemory only.
@@ -120,9 +120,9 @@ Slash commands are control actions. Only users listed in `control_user_ids` can 
 * `normal text ||@agent subtext: private text||` : Inline private subtext lets you communicate assumptions and quick persona adjustments. It is not spoken text to quote or answer directly, and it may be loosely stored later by summaries. In DMs, `@agent` is optional.
 * `||@agent adjust: adjustment instructions||` : Redoes the previous bot reply with adjustment instructions. The bot deletes the old reply, removes that assistant shortmemory entry, and writes a replacement reply to the original user message.
 * `||@agent summarize||` : Summarizes recent shortmemory into `soul/longmemory.txt`, posts a longmemory preview, and cleans adjustment audit messages. In DMs, `@agent` is optional.
-* `||@agent story||` : Story skill command that writes an evidence-grounded short story from saved stories, recent shortmemory, and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@agent` is optional.
-* `||@agent story: story prompt||` : Story skill command that searches saved stories, shortmemory, and longmemory for the requested subject, then writes only what the evidence supports.
-* story recall : When the story skill is enabled, normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and longmemory context, and let the agent answer with a focused summary or explanation without inventing unsupported details.
+* `||@agent story||` : Story command that writes an evidence-grounded short story from saved stories, recent shortmemory, and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@agent` is optional.
+* `||@agent story: story prompt||` : Story command that searches saved stories, shortmemory, and longmemory for the requested subject, then writes only what the evidence supports.
+* story recall : Normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and longmemory context, and let the agent answer with a focused summary or explanation without inventing unsupported details.
 * `||@agent music||` : Optional skill command, available only when the `music` skill is enabled. In DMs, `@agent` is optional.
 * `||@agent music: description or link||` : Optional music skill command with direct input.
 * `||@agent sleep||` : Sets `soul/status.json` mode to `sleeping`.
@@ -144,12 +144,13 @@ Slash commands are control actions. Only users listed in `control_user_ids` can 
 
 Implemented skills live in `discord-bot/skills/`.
 
-* Enable a skill by adding its name to `enabled_skills`.
+* Enable an optional skill by adding its name to `enabled_skills`.
 * Each implemented skill owns its own settings and slash commands.
 * Skills that want to influence natural-language status should expose `getStatusHints(summaryContext)` and let `discordstatusupdate` own the final status write.
 * Status-aware skills use `soul/status.json` and should clearly state which modes they require.
 * Planned placeholder skills should not be enabled until they are implemented.
-* Skill-specific memory forum posts are created only when the skill is enabled and implemented.
+* Optional skill-specific memory forum posts are created only when the skill is enabled and implemented. Core posts for time and story behavior are always available through the standard memory forum posts.
+* `planned_skill_settings.tts` : Placeholder settings for normal expressive voice output. Fish Audio is the first planned provider; this is local Yculth TTS only until a runtime skill is implemented.
 
 ## Current Architecture
 

@@ -32,7 +32,7 @@ OpenRouter does not have a special long memory slot for this bot. Anything the b
 * `../../settings.jsonc` : Global defaults used by Stardust unless `settings.jsonc` overrides them.
 * `settings.jsonc` : Stardust-only overrides such as identity, memory forum ID, reply channels, and Tupper compatibility.
 * `persona_source_thread_id` : Global default is blank; when filled with a Discord forum post/thread ID, `/reloadpersona` grabs that post's message text into `soul/persona.md` and reloads it. In Discord's API, forum posts are threads.
-* `enabled_skills` : Global default currently enables `time`, `story`, and `discordstatusupdate`; override this list only when Stardust needs a different skill set.
+* `enabled_skills` : Global default currently enables optional `discordstatusupdate`; override this list only when Stardust needs a different optional skill set. Time and story are core systems and always loaded.
 * `memory_forum_channel_id` : Required Stardust override for the Discord memory forum channel ID.
 * `music_skill.music_thread_id` : Required only when `enabled_skills` contains `music`.
 * `memory_forum_posts` : Global default list of core memory forum posts.
@@ -46,7 +46,7 @@ OpenRouter does not have a special long memory slot for this bot. Anything the b
 * `/syncshortmemory` : Syncs local `soul/shortmemory.jsonl` with the Discord shortmemory forum post. Use `both` to push missing local entries and then refresh local from Discord.
 * `/scrapeshortmemory` : Reads all available channel message pages, anchors at Stardust's latest reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
 * `/scrapedmshortmemory` : Reads all available DM message pages with the command user, anchors at Stardust's latest DM reply when one exists, appends new entries to shortmemory, dedupes, and rewrites local shortmemory in timestamp order.
-* `/uploadstory filename` : Story skill command that uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
+* `/uploadstory filename` : Story command that uploads a local Markdown file from `soul/stories/` to the Discord `stories` memory forum post. `.md` is assumed if omitted, and long stories are split across multiple replies.
 * automatic summarization : Runs in the background when enough new shortmemory has accumulated, using `conversation_history_limit` as the rough trigger size.
 * automatic Discord status update : When summarization succeeds, `discordstatusupdate` writes a natural-language status note into `soul/status.json` and mirrors it to the `status` Discord forum post.
 * `❌ delete reaction` : React with `:x:` to delete a Stardust reply and remove the matching assistant shortmemory entry.
@@ -58,8 +58,8 @@ OpenRouter does not have a special long memory slot for this bot. Anything the b
 * `normal text ||@stardust subtext: private text||` : Inline private subtext lets you communicate assumptions and quick persona adjustments. It is not spoken text to quote or answer directly, and it may be loosely stored later by summaries. In DMs, `@stardust` is optional.
 * `||@stardust adjust: adjustment instructions||` : Redoes the previous Stardust reply with adjustment instructions. Stardust deletes the old reply, removes that assistant shortmemory entry, and writes a replacement reply to the original user message.
 * `||@stardust summarize||` : Summarizes recent shortmemory into `soul/longmemory.txt`, posts a longmemory preview, and cleans adjustment audit messages. In DMs, `@stardust` is optional.
-* `||@stardust story||` : Story skill command that writes an evidence-grounded short story from saved stories, recent shortmemory, and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@stardust` is optional.
-* `||@stardust story: story prompt||` : Story skill command that searches saved stories, shortmemory, and longmemory for the requested subject, then writes only what the evidence supports.
+* `||@stardust story||` : Story command that writes an evidence-grounded short story from saved stories, recent shortmemory, and longmemory, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@stardust` is optional.
+* `||@stardust story: story prompt||` : Story command that searches saved stories, shortmemory, and longmemory for the requested subject, then writes only what the evidence supports.
 * story recall : Normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and longmemory context, and let Stardust answer with a focused summary or explanation without inventing unsupported details.
 * `||@stardust music||` : Infers the latest music request from shortmemory, posts a formatted music link, and archives it to the configured music thread. In DMs, `@stardust` is optional.
 * `||@stardust music: description or link||` : Runs the music skill with direct input.
