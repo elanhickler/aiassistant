@@ -16,6 +16,7 @@ agents/<Agent>/regenerated/visualexpression/
 regenerated/visualexpression/
     outputs.jsonl
     requests.jsonl
+    visual-memory.jsonl
     images/
     prompts/
 ```
@@ -81,9 +82,20 @@ optional negative prompt
 * dream_files :
 ```
 
+## Visual Memory
+
+If a generated output becomes meaningful, write a compact memory entry to:
+
+```text
+regenerated/visualexpression/visual-memory.jsonl
+```
+
+Use `docs/visual-memory.md` for the memory shape and recall rules.
+
 ## Rules
 
 * Generated outputs are not automatically longmemory.
+* Generated outputs are not automatically visual memory.
 * Save prompt and source IDs so useful images can be traced later.
 * Keep generated images under `regenerated/visualexpression/`, not `soul/art/`, until the user promotes them.
 * If a generated visual becomes durable character art, the user can move or copy it into `soul/art/`.

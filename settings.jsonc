@@ -214,6 +214,13 @@
             // descrip: JSONL file inside output_folder that future tooling can use to record requested/generated visual expressions.
             // default: "requests.jsonl"
             "request_log_file": "requests.jsonl",
+            // descrip: JSONL file inside output_folder that future tooling can use to record compact visual memory summaries for recall.
+            // default: "visual-memory.jsonl"
+            "visual_memory_file": "visual-memory.jsonl",
+            // descrip: Maximum visual memory summaries future context assembly may include in one model request.
+            // range: 0 or higher.
+            // default: 4
+            "max_visual_memories_per_context": 4,
             // descrip: Maximum recent visual request lifecycle events future UI should show by default.
             // range: 0 or higher.
             // default: 50

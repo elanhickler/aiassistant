@@ -30,6 +30,7 @@ Add a future `Visuals` page, separate from `Imagegen`.
 * request detail
 * selected references
 * prompt preview
+* visual memory note
 * generated output preview
 * promote buttons
 * Discord post controls
@@ -81,6 +82,7 @@ Useful controls:
 
 * open image
 * open prompt note
+* open visual memory note
 * copy prompt
 * promote to art
 * promote to emoji

@@ -28,6 +28,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `docs/visual-pipe-commands.md` : Planned manual pipe command shape for user-requested local visual expressions.
 * `docs/visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
+* `docs/visual-memory.md` : Compact memory notes for meaningful visuals that should be recallable later.
 * `docs/visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
 * `docs/visual-retention.md` : Cleanup and retention rules for generated visual experiments and references.
 * `docs/visual-discord-posting.md` : Rules for posting selected generated visuals back into Discord.
@@ -56,12 +57,14 @@ The first implementation should be local-first.
 5. The system follows `docs/visual-prompt-assembly.md` to assemble a focused image prompt from selected persona, current message, status, memory, and relevant visual references.
 6. Yculth imagegen generates the image locally.
 7. The generated image is cached under `regenerated/visualexpression/`.
-8. Discord posting remains opt-in and should be designed separately.
+8. If the visual matters, write a compact visual memory note.
+9. Discord posting remains opt-in and should be designed separately.
 
 Requests should follow `docs/visual-expression-request.md` so manual Yculth actions, future bot hooks, and generated output metadata all speak the same shape.
 Request states should follow `docs/visual-request-lifecycle.md`.
 Future manual Discord control should follow `docs/visual-pipe-commands.md`.
 Future Discord image posting should follow `docs/visual-discord-posting.md`.
+Visual memory should follow `docs/visual-memory.md`.
 
 ## Boundaries
 
@@ -70,6 +73,7 @@ Future Discord image posting should follow `docs/visual-discord-posting.md`.
 * The first useful behavior is likely manual/local: generate a visual from selected context in Yculth, then later let the bot request it automatically.
 * The local UI should follow `docs/visual-yculth-ui.md`.
 * Generated visuals should be attached to memory only when they become meaningful, not merely because they exist.
+* Visual memory should summarize meaning, not full prompt history.
 * Generated visuals become durable soul material only through the promotion rules in `docs/visual-promotion.md`.
 * Generated visual cleanup should follow `docs/visual-retention.md`.
 * Generated visual Discord posting should follow `docs/visual-discord-posting.md`.

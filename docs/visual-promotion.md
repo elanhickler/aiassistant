@@ -48,6 +48,10 @@ Why this matters:
 * concise reason this became durable soul material
 ```
 
+Promotion can also create or update a compact visual memory note.
+
+Use `docs/visual-memory.md` for that memory shape.
+
 ## Memory Rules
 
 Promotion does not automatically rewrite `longmemory.txt`.
