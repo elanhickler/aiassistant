@@ -25,6 +25,7 @@ Starter project for a multi-agent AI assistant system.
         * `time.js` : Core time, sleep, status, and dream system.
 * `docs/` : Planning and architecture notes.
     * `visual-expression-plan.md` : Future local-first generated visual expression pipeline for emojis, self-images, scenes, backgrounds, thoughts, and dreams.
+    * `visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
     * `visual-expression-request.md` : Request object format for future generated visual expressions.
     * `visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
     * `visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.

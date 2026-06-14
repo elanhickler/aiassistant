@@ -60,6 +60,8 @@ Default to `local` until posting behavior is deliberately designed.
 
 The utility model should answer a small structured question before a normal reply requests a visual.
 
+Use `docs/visual-expression-intent.md` for the decision rules.
+
 ```json
 {
   "should_generate_visual": false,

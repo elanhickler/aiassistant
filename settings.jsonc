@@ -175,6 +175,14 @@
             // descrip: If true, future implementation may use utility_model to decide when a reply benefits from a generated visual.
             // default: true
             "allow_ai_visual_intent": true,
+            // descrip: Minimum utility-model confidence needed before future tooling queues a visual request.
+            // range: 0 to 1.
+            // default: 0.75
+            "intent_confidence_threshold": 0.75,
+            // descrip: Minimum time between automatic visual requests for one agent, to prevent image spam during fast chat.
+            // range: 0 or higher.
+            // default: 10
+            "cooldown_minutes": 10,
             // descrip: Maximum generated visuals attached to one normal reply.
             // range: 0 or higher.
             // default: 1

@@ -20,6 +20,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `soul/visual-references/` : Downloaded or manually collected references from the internet. These are source materials, not generated outputs.
 * `regenerated/visualexpression/` : Generated images created by future tooling.
 * `docs/visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
+* `docs/visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
 * `docs/visual-expression-request.md` : Request object format for future generated visual expressions.
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
 
@@ -39,7 +40,7 @@ Internet downloads should stay deliberate and traceable.
 The first implementation should be local-first.
 
 1. A reply is drafted normally.
-2. A cheap utility model decides whether a visual is useful.
+2. A cheap utility model follows `docs/visual-expression-intent.md` to decide whether a visual is useful.
 3. The decision chooses one output type: emoji, self, scene, background, thought, or dream.
 4. The system assembles a focused image prompt from persona, current message, status, shortmemory, longmemory, and relevant visual references.
 5. Yculth imagegen generates the image locally.
