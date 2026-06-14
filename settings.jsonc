@@ -222,6 +222,16 @@
             // descrip: Manifest file inside output_folder that records completed generated visual expressions.
             // default: "outputs.jsonl"
             "output_manifest_file": "outputs.jsonl",
+            // descrip: JSONL file inside output_folder that records human or future AI review notes for generated visuals.
+            // default: "reviews.jsonl"
+            "visual_review_file": "reviews.jsonl",
+            // descrip: If true, future visual tooling should require preview or review before promotion into soul/art or soul/emojis.
+            // default: true
+            "require_review_before_promotion": true,
+            // descrip: Minimum review score future tooling should suggest for automatic promotion candidates. Human override still wins.
+            // range: 1 to 5.
+            // default: 4
+            "promotion_candidate_min_score": 4,
             // descrip: JSONL file inside output_folder that future tooling can use to record requested/generated visual expressions.
             // default: "requests.jsonl"
             "request_log_file": "requests.jsonl",

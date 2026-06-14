@@ -23,6 +23,8 @@ agents/<Agent>/soul/emojis/
 
 Promote a generated visual only when it becomes stable character material.
 
+Use `docs/visual-review.md` to record whether an output is a promotion candidate.
+
 * recurring emoji : move or copy to `soul/emojis/`.
 * character art : move or copy to `soul/art/`.
 * scene reference : usually keep in `regenerated/visualexpression/` unless the scene becomes important lore.

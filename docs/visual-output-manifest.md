@@ -17,6 +17,7 @@ agents/<Agent>/regenerated/visualexpression/
 regenerated/visualexpression/
     outputs.jsonl
     requests.jsonl
+    reviews.jsonl
     visual-memory.jsonl
     images/
     prompts/
@@ -93,10 +94,21 @@ regenerated/visualexpression/visual-memory.jsonl
 
 Use `docs/visual-memory.md` for the memory shape and recall rules.
 
+## Visual Review
+
+Generated outputs may receive review notes in:
+
+```text
+regenerated/visualexpression/reviews.jsonl
+```
+
+Use `docs/visual-review.md` for review states, scores, and promotion checks.
+
 ## Rules
 
 * Generated outputs are not automatically longmemory.
 * Generated outputs are not automatically visual memory.
+* Generated outputs are not automatically reviewed.
 * Save prompt and source IDs so useful images can be traced later.
 * Keep generated images under `regenerated/visualexpression/`, not `soul/art/`, until the user promotes them.
 * If a generated visual becomes durable character art, the user can move or copy it into `soul/art/`.
