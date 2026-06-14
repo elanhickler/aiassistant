@@ -91,3 +91,90 @@ export function runExternalCommand({
     child.stdin.end(`${JSON.stringify(payload)}\n`);
   });
 }
+
+export function createExternalCommandSkill({
+  context,
+  name,
+  settingName,
+  commandDescription,
+  emptyInputError,
+  missingCommandError,
+  timeoutDefault,
+  completedText,
+  runMethodName,
+}) {
+  const {
+    agentFolder,
+    agentName,
+    requiredSetting,
+    safeReply,
+  } = context;
+
+  const settings = requiredSetting(settingName);
+  const commandParts = splitCommand(settings.command);
+  const command = commandParts[0] || "";
+  const args = [
+    ...commandParts.slice(1),
+    ...(Array.isArray(settings.args) ? settings.args.map((arg) => String(arg)) : []),
+  ];
+  const timeoutMilliseconds = Number(settings.timeout_milliseconds || timeoutDefault);
+  const maxOutputCharacters = Number(settings.max_output_characters || 1600);
+
+  async function runRequest({ input = "", source = "unknown", metadata = {} } = {}) {
+    const request = String(input || "").trim();
+    if (!request) throw new Error(emptyInputError);
+    if (!command) throw new Error(missingCommandError);
+
+    const result = await runExternalCommand({
+      command,
+      args,
+      timeoutMilliseconds,
+      maxOutputCharacters,
+      label: `${name[0].toUpperCase()}${name.slice(1)} skill`,
+      payload: {
+        request,
+        source,
+        agent: agentName,
+        agent_folder: agentFolder,
+        metadata,
+      },
+    });
+
+    return normalizeExternalCommandResult(result, maxOutputCharacters, completedText);
+  }
+
+  async function handlePipeCommand(commandInput, message) {
+    if (commandInput?.kind !== name) return false;
+    const reply = await runRequest({
+      input: commandInput.content,
+      source: "discord_pipe",
+      metadata: {
+        channel_id: message.channelId,
+        message_id: message.id,
+        author_id: message.author?.id || "",
+      },
+    });
+    await safeReply(message, reply);
+    return true;
+  }
+
+  return {
+    name,
+    requiredSettings() {
+      return [settingName];
+    },
+    getPipeHelp({ agentCommandName, pipeRowsWithAliases }) {
+      return pipeRowsWithAliases(
+        agentCommandName,
+        name,
+        ": instructions",
+        commandDescription,
+      );
+    },
+    [runMethodName]: runRequest,
+    handlePipeCommand,
+    onReady() {
+      if (command) console.log(`${name} skill command: ${commandDisplay(command, args)}`);
+    },
+  };
+}
