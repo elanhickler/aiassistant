@@ -2,7 +2,7 @@
 
 Visual memory is how the agent remembers meaningful generated visuals without dragging every prompt, file, and image into normal chat context.
 
-This is partly wired into the Discord runtime through `visual remember`, which records remembered request guidance before image generation exists.
+This is partly wired into the Discord runtime through `image:`, which records conversational prompt/style guidance before image generation exists.
 
 ## Default Rule
 
@@ -56,6 +56,23 @@ Before an output image exists, `visual remember` may write a request-backed memo
 }
 ```
 
+`image:` writes a conversational prompt-guidance memory row:
+
+```json
+{
+  "id": "2026-06-13-example-image-style-guidance",
+  "request_id": "",
+  "agent": "AgentName",
+  "memory_type": "image_style_guidance",
+  "output_type": "image",
+  "summary": "sketches should be rougher and less polished",
+  "recall_tags": ["image", "style", "prompt"],
+  "prompt": "",
+  "style_preset": "conversational",
+  "created_at": "2026-06-13T00:00:00.000Z"
+}
+```
+
 ## Memory Types
 
 Suggested `memory_type` values:
@@ -72,6 +89,8 @@ Suggested `memory_type` values:
 Visual memory should be recalled by tags and summary, not by reading every prompt.
 
 The current local search is deterministic and weighted. Matches in `summary`, output type, memory type, recall tags, and style rank above incidental prompt text.
+
+Prompt critique should be the first learning target. A user saying `image: make faces larger in portraits` should become compact guidance for future prompt assembly before the system tries to tune settings such as CFG, sampler, steps, detector settings, or model choice.
 
 For a normal reply, the context assembler should only include visual memory when:
 
@@ -115,7 +134,7 @@ There is an image file named 2026-06-13-example.png.
 
 Promotion can create or update a visual memory entry.
 
-`visual remember` creates an append-only memory entry from an existing request. It does not move files, promote images into `soul/art/`, or post images to Discord.
+`image:` and `visual remember` create append-only memory entries. They do not move files, promote images into `soul/art/`, or post images to Discord.
 
 Use `visual remember: request-id | note text | tag, tag` when a memory needs explicit recall hooks.
 

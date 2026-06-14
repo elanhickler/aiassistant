@@ -1415,37 +1415,7 @@ function helpCommandLists() {
 
   if (enabledSkills.includes("visualexpression")) {
     pipeCommands.push(
-      [`||${agentCommandName} visual||`, "Queue a local visual request from current context."],
-      [`||${agentCommandName} visual: text||`, "Queue a local visual request from text."],
-      [`||${agentCommandName} visual dream: text||`, "Queue a local dream visual request from text."],
-      [`||${agentCommandName} visual emoji: text||`, "Queue a local emoji visual request from text."],
-      [`||${agentCommandName} visual requests||`, "Show recent local visual requests and statuses."],
-      [`||${agentCommandName} visual reviewed||`, "Show recent local visual requests with human reviews."],
-      [`||${agentCommandName} visual promoted||`, "Show recent local visual requests marked for promotion."],
-      [`||${agentCommandName} visual memories||`, "Show recent remembered visual guidance."],
-      [`||${agentCommandName} visual memories: text||`, "Search remembered visual guidance."],
-      [`||${agentCommandName} visual memory||`, "Show details for the latest visual memory."],
-      [`||${agentCommandName} visual memory: memory-id||`, "Show details for a specific visual memory."],
-      [`||${agentCommandName} visual tags||`, "Show recall tags used by visual memories."],
-      [`||${agentCommandName} visual stats||`, "Show counts for local visual requests, reviews, and memories."],
-      [`||${agentCommandName} visual files||`, "Show local files and folders used by visual expression."],
-      [`||${agentCommandName} visual context||`, "Show remembered visual guidance that can enter hidden context."],
-      [`||${agentCommandName} visual context: text||`, "Show matching remembered visual guidance that can enter hidden context."],
-      [`||${agentCommandName} visual show||`, "Show compact details for the latest local visual request."],
-      [`||${agentCommandName} visual show: request-id||`, "Show compact details for a specific local visual request."],
-      [`||${agentCommandName} visual note: text||`, "Attach a human note to the latest local visual request."],
-      [`||${agentCommandName} visual note: request-id | text||`, "Attach a human note to a specific local visual request."],
-      [`||${agentCommandName} visual review: state | text||`, "Review the latest local visual request."],
-      [`||${agentCommandName} visual review: request-id | state | text||`, "Review a specific local visual request."],
-      [`||${agentCommandName} visual promote||`, "Mark the latest local visual request as a promotion candidate."],
-      [`||${agentCommandName} visual promote: request-id | text||`, "Mark a specific local visual request as a promotion candidate."],
-      [`||${agentCommandName} visual remember||`, "Remember the latest local visual request as durable visual guidance."],
-      [`||${agentCommandName} visual remember: request-id | text||`, "Remember a specific local visual request as durable visual guidance."],
-      [`||${agentCommandName} visual cancel||`, "Cancel the latest queued local visual request without deleting files."],
-      [`||${agentCommandName} visual cancel: request-id||`, "Cancel a specific queued local visual request without deleting files."],
-      [`||${agentCommandName} visual retry||`, "Clone the latest retryable failed/cancelled visual request into a new queued request."],
-      [`||${agentCommandName} visual retry: request-id||`, "Clone a specific failed/cancelled visual request into a new queued request."],
-      [`||${agentCommandName} visual process||`, "Dry-run queued local visual requests to the current provider-unimplemented state."],
+      [`||${agentCommandName} image: text||`, "Describe how future image prompts/style should change, in natural language."],
     );
   }
 
@@ -1959,6 +1929,16 @@ function stripPipeCommandTarget(text, isDm) {
 function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
+
+  const imageMatch = targetedText.match(/^image(?:\s*:\s*([\s\S]*))?$/i);
+  if (imageMatch) {
+    const content = (imageMatch[1] || "").trimStart().trimEnd();
+    if (!content) return null;
+    return {
+      kind: "image",
+      content,
+    };
+  }
 
   const visualMatch = targetedText.match(/^visual(?:\s+(requests|reviewed|promoted|memories|memory|tags|stats|files|context|show|note|review|promote|remember|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
   if (visualMatch) {

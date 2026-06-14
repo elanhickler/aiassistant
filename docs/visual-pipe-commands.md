@@ -1,283 +1,88 @@
 # Visual Pipe Commands
 
-Visual pipe commands are the future manual control surface for visual expression.
+Visual pipe commands should feel conversational. The user should not need to think in request IDs, settings, samplers, CFG, or provider details.
 
-These commands are partially wired into the Discord runtime when the optional `visualexpression` skill is enabled.
-
-Current implementation queues local request JSON and request log entries. It does not generate images yet.
-
-## Command Shape
-
-In servers, use the agent name.
+The public command is:
 
 ```text
-||@agent visual||
-||@agent visual: prompt text||
-||@agent visual scene: prompt text||
-||@agent visual emoji: prompt text||
-||@agent visual self: prompt text||
-||@agent visual background: prompt text||
-||@agent visual thought: prompt text||
-||@agent visual dream: prompt text||
-||@agent visual requests||
-||@agent visual reviewed||
-||@agent visual promoted||
-||@agent visual memories||
-||@agent visual memories: search text||
-||@agent visual memory||
-||@agent visual memory: memory-id||
-||@agent visual tags||
-||@agent visual stats||
-||@agent visual files||
-||@agent visual context||
-||@agent visual context: search text||
-||@agent visual show||
-||@agent visual show: request-id||
-||@agent visual note: note text||
-||@agent visual note: request-id | note text||
-||@agent visual review: state | note text||
-||@agent visual review: request-id | state | note text||
-||@agent visual promote||
-||@agent visual promote: request-id | note text||
-||@agent visual remember||
-||@agent visual remember: request-id | note text||
-||@agent visual remember: request-id | note text | tag, tag||
-||@agent visual cancel||
-||@agent visual cancel: request-id||
-||@agent visual retry||
-||@agent visual retry: request-id||
-||@agent visual process||
+||@agent image: natural language guidance||
 ```
 
 In DMs, `@agent` may be optional when the runtime already knows which agent is being addressed.
 
-## Behavior
+## Meaning
 
-* `visual` : Ask the agent to choose the output type from current context.
-* `visual: text` : Ask the agent to choose the output type using the text as guidance.
-* `visual scene: text` : Request a scene image.
-* `visual emoji: text` : Request a small expression or symbol image.
-* `visual self: text` : Request an image of the agent.
-* `visual background: text` : Request an environment or location image.
-* `visual thought: text` : Request an internal or symbolic image.
-* `visual dream: text` : Request a dream image. This should usually require sleep or dream context.
-* `visual requests` : Show recent local visual requests and statuses.
-* `visual reviewed` : Show recent local visual requests with human review decisions.
-* `visual promoted` : Show recent local visual requests marked as promotion candidates.
-* `visual memories` : Show recent remembered visual guidance.
-* `visual memories: search text` : Search remembered visual guidance by simple local text match.
-* `visual memory` : Show details for the latest visual memory.
-* `visual memory: memory-id` : Show details for a specific visual memory.
-* `visual tags` : Show recall tags used by visual memories.
-* `visual stats` : Show counts for local visual requests, reviews, and memories.
-* `visual files` : Show local files and folders used by visual expression.
-* `visual context` : Show remembered visual guidance that can enter hidden context.
-* `visual context: search text` : Show matching remembered visual guidance that can enter hidden context.
-* `visual show` : Show compact details and recent notes for the latest local visual request.
-* `visual show: request-id` : Show compact details and recent notes for a specific local visual request.
-* `visual note: note text` : Attach a human note to the latest local visual request.
-* `visual note: request-id | note text` : Attach a human note to a specific local visual request.
-* `visual review: state | note text` : Review the latest local visual request.
-* `visual review: request-id | state | note text` : Review a specific local visual request.
-* `visual promote` : Mark the latest local visual request as a promotion candidate without moving files.
-* `visual promote: request-id | note text` : Mark a specific local visual request as a promotion candidate without moving files.
-* `visual remember` : Remember the latest local visual request as durable visual guidance without moving files.
-* `visual remember: request-id | note text` : Remember a specific local visual request as durable visual guidance without moving files.
-* `visual remember: request-id | note text | tag, tag` : Remember a visual request with explicit recall tags.
-* `visual cancel` : Cancel the latest queued local visual request without deleting files.
-* `visual cancel: request-id` : Cancel a specific queued local visual request without deleting files.
-* `visual retry` : Clone the latest retryable failed/cancelled request into a new queued request.
-* `visual retry: request-id` : Clone a specific failed/cancelled request into a new queued request.
-* `visual process` : Process queued local visual requests as far as the current implementation can. Right now this records a provider-unimplemented failure instead of generating an image.
+`image:` means:
 
-## Output
+```text
+Update your understanding of how future image prompts and visual styles should be shaped.
+```
 
-The current implementation creates a local visual request, not an image.
+It is mainly for prompt critique and style guidance.
+
+Examples:
+
+```text
+||@agent image: sketches should be rougher and less polished||
+||@agent image: make faces larger and easier to read in portrait generations||
+||@agent image: dream images should feel more symbolic and surreal||
+||@agent image: avoid clean manga lineart for sketch style, prefer loose construction lines||
+```
+
+The command currently records durable visual guidance in:
+
+```text
+agents/<Agent>/regenerated/visualexpression/visual-memory.jsonl
+```
+
+## Current Behavior
+
+The current implementation does not generate an image from Discord.
+
+It records the user guidance as visual memory with tags:
+
+```text
+image
+style
+prompt
+```
 
 Expected response:
 
 ```text
-visual request queued
-```
-
-For `visual process`, expected response:
-
-```text
-visual request processor checked 1 queued request
-```
-
-For `visual requests`, expected response:
-
-```text
-visual requests:
-* request-id : queued : dream : blue hallway dream
-```
-
-For `visual reviewed`, expected response:
-
-```text
-reviewed visual requests:
-* request-id : usable : Keep the sleepy expression.
-```
-
-For `visual promoted`, expected response:
-
-```text
-promoted visual requests:
-* request-id : promote_candidate : Good likeness direction.
-```
-
-For `visual memories`, expected response:
-
-```text
-visual memories:
-* memory-id : self : Good likeness direction.
-```
-
-For `visual memories: soft portrait`, expected response:
-
-```text
-visual memories for: soft portrait
-* memory-id : self : Good likeness direction.
-```
-
-For `visual memory`, expected response:
-
-```text
-visual memory:
-id: memory-id
-type: self
-tags: soft, portrait
-source_request: request-id
-summary:
-Good likeness direction.
-```
-
-For `visual tags`, expected response:
-
-```text
-visual memory tags:
-* portrait : 2
-* soft : 1
-```
-
-For `visual stats`, expected response:
-
-```text
-visual stats:
-provider: dry-run
-output_folder: regenerated/visualexpression
-requests: 3
-request_status: queued 2, failed 1
-reviews: 2
-memories: 1
-recall_tags: 2
-```
-
-For `visual files`, expected response:
-
-```text
-visual files:
-output_folder: regenerated/visualexpression
-requests_folder: regenerated/visualexpression/requests
-prompts_folder: regenerated/visualexpression/prompts
-request_log: regenerated/visualexpression/requests.jsonl
-review_log: regenerated/visualexpression/reviews.jsonl
-visual_memory: regenerated/visualexpression/visual-memory.jsonl
-```
-
-For `visual context`, expected response:
-
-```text
-Remembered visual guidance:
-* self / self-portrait : Good likeness direction.
-```
-
-For `visual context: soft portrait`, expected response:
-
-```text
-Remembered visual guidance for: soft portrait
-* self / self-portrait : Good likeness direction.
-```
-
-For `visual show`, expected response:
-
-```text
-visual request:
-id: request-id
-status: queued
-type: dream
-prompt_path: prompts/request-id.md
-reviews:
-* 2026-06-13T00:00:00.000Z : note : Keep the sleepy expression.
-```
-
-For `visual note`, expected response:
-
-```text
-visual request noted
-id: request-id
-```
-
-For `visual review`, expected response:
-
-```text
-visual request reviewed
-id: request-id
-state: usable
-```
-
-For `visual promote`, expected response:
-
-```text
-visual request marked for promotion
-id: request-id
-state: promote_candidate
-```
-
-For `visual remember`, expected response:
-
-```text
-visual request remembered
-id: request-id
+image style guidance remembered
 memory: memory-id
 ```
 
-Supported review states:
-
-* usable
-* promote_candidate
-* needs_edit
-* rejected
-* blocked
-
-For `visual cancel`, expected response:
+Future visual prompt assembly can then include compact remembered guidance, such as:
 
 ```text
-visual request cancelled
-id: request-id
+Remembered visual guidance:
+* image / conversational [image, style, prompt] : sketches should be rougher and less polished
 ```
 
-For `visual retry`, expected response:
+## Design Rule
+
+Do not expose command syntax for style creation, critique, and adjustment unless the user explicitly asks for technical/debug controls.
+
+Prefer:
 
 ```text
-visual request retry queued
-id: new-request-id
-retry_of: old-request-id
+||@agent image: make sketch prompts rougher||
 ```
 
-The request should then follow:
+Avoid making the human use:
 
-* `docs/visual-expression-request.md`
-* `docs/visual-request-lifecycle.md`
-* `docs/visual-reference-selection.md`
-* `docs/visual-prompt-assembly.md`
-* `docs/visual-output-manifest.md`
+```text
+||@agent visual style adjust sketch: make it rougher||
+```
 
-## Boundaries
+The system can infer whether the guidance is global, style-specific, prompt-specific, character-specific, or critique of the latest output later.
 
-* Do not add slash commands for this first.
-* Do not post generated images to Discord by default.
-* Do not add command aliases.
-* Do not add the command text itself to shortmemory.
-* Do not let visual commands bypass local safety, storage, or attribution rules.
+## Legacy Internal Commands
+
+Older `visual ...` commands still exist in code as compatibility/debug scaffolding for request queues, reviews, memories, and dry-run processing.
+
+They are intentionally hidden from help because they are too syntax-heavy for normal use.
+
+Keep them as internal tools until Yculth or a proper local image-generation bridge replaces them with a visual interface.

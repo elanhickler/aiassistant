@@ -769,6 +769,36 @@ export function createVisualExpressionSkill(context) {
     return { request, memory };
   }
 
+  async function rememberImageStyleGuidance(content = "", message) {
+    const guidance = String(content || "").trim();
+    if (!guidance) throw new Error("image needs natural-language prompt/style guidance after the colon.");
+
+    const memory = {
+      id: `${timestampId()}-image-style-guidance`,
+      request_id: "",
+      agent: agentName,
+      memory_type: "image_style_guidance",
+      output_type: "image",
+      summary: guidance,
+      recall_tags: ["image", "style", "prompt"],
+      prompt: "",
+      style_preset: "conversational",
+      source_review_state: "",
+      source_review_id: "",
+      source_prompt_path: "",
+      source_context: {
+        message_id: String(message?.id || ""),
+        channel_id: String(message?.channelId || ""),
+        server_id: String(message?.guildId || ""),
+      },
+      created_at: new Date().toISOString(),
+    };
+
+    await mkdir(outputFolder, { recursive: true });
+    await appendFile(visualMemoryPath, `${JSON.stringify(memory)}\n`);
+    return memory;
+  }
+
   async function findRequestByIdOrLatestQueued(requestId) {
     const targetId = String(requestId || "").trim();
     if (targetId) {
@@ -938,6 +968,14 @@ export function createVisualExpressionSkill(context) {
       ];
     },
     async handlePipeCommand(command, message) {
+      if (command?.kind === "image") {
+        const memory = await rememberImageStyleGuidance(command.content, message);
+        await safeReply(message, [
+          "image style guidance remembered",
+          `memory: ${memory.id}`,
+        ].join("\n"));
+        return true;
+      }
       if (command?.kind !== "visual") return false;
       if (command.action === "process") {
         const processed = await processQueuedRequests();
