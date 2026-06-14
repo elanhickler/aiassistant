@@ -234,6 +234,19 @@
             // descrip: If true, future cleanup must preserve any generated output that was promoted into soul/art or soul/emojis.
             // default: true
             "preserve_promoted_outputs": true,
+            // descrip: If true, future visual tooling may post selected generated outputs to Discord. Keep false until local preview workflow is reliable.
+            // default: false
+            "allow_discord_posting": false,
+            // descrip: If true, future Discord posting requires the generated visual to be previewed locally before posting.
+            // default: true
+            "discord_posting_requires_preview": true,
+            // descrip: Maximum generated visual attachments future tooling may include in one Discord message.
+            // range: 1 or higher.
+            // default: 1
+            "discord_posting_max_images_per_message": 1,
+            // descrip: Optional Discord channel or thread id for future visual posts. Leave blank to post beside the triggering conversation when posting is allowed.
+            // default: ""
+            "discord_posting_target_channel_id": "",
             // descrip: Agent-local folder for human-downloaded or tool-downloaded visual references. This is source material, not generated output.
             // default: "soul/visual-references"
             "reference_folder": "soul/visual-references",

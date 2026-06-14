@@ -30,6 +30,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
 * `docs/visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
 * `docs/visual-retention.md` : Cleanup and retention rules for generated visual experiments and references.
+* `docs/visual-discord-posting.md` : Rules for posting selected generated visuals back into Discord.
 * `docs/visual-yculth-ui.md` : Future Yculth UI shape for requests, references, outputs, and promotion.
 
 ## Internet References
@@ -60,6 +61,7 @@ The first implementation should be local-first.
 Requests should follow `docs/visual-expression-request.md` so manual Yculth actions, future bot hooks, and generated output metadata all speak the same shape.
 Request states should follow `docs/visual-request-lifecycle.md`.
 Future manual Discord control should follow `docs/visual-pipe-commands.md`.
+Future Discord image posting should follow `docs/visual-discord-posting.md`.
 
 ## Boundaries
 
@@ -70,3 +72,4 @@ Future manual Discord control should follow `docs/visual-pipe-commands.md`.
 * Generated visuals should be attached to memory only when they become meaningful, not merely because they exist.
 * Generated visuals become durable soul material only through the promotion rules in `docs/visual-promotion.md`.
 * Generated visual cleanup should follow `docs/visual-retention.md`.
+* Generated visual Discord posting should follow `docs/visual-discord-posting.md`.

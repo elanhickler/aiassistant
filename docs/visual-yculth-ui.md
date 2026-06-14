@@ -32,6 +32,7 @@ Add a future `Visuals` page, separate from `Imagegen`.
 * prompt preview
 * generated output preview
 * promote buttons
+* Discord post controls
 * failure/retry controls
 * cleanup preview
 
@@ -83,6 +84,7 @@ Useful controls:
 * copy prompt
 * promote to art
 * promote to emoji
+* post to Discord if enabled
 
 ## Promotion UI
 
@@ -96,6 +98,7 @@ Promotion destinations:
 Promotion should write a short note beside the promoted image.
 
 Use `docs/visual-promotion.md` for details.
+Use `docs/visual-discord-posting.md` for posting selected outputs back into Discord.
 
 ## Boundaries
 
@@ -104,3 +107,4 @@ Use `docs/visual-promotion.md` for details.
 * Do not make visual generation automatic until manual/local workflow is reliable.
 * Do not merge reference downloads and generated outputs into one folder.
 * Cleanup should follow `docs/visual-retention.md`.
+* Discord posting should follow `docs/visual-discord-posting.md`.
