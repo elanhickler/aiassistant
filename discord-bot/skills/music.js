@@ -411,6 +411,22 @@ export function createMusicSkill(context) {
         enabled: true,
       };
     },
+    getPipeHelp({ agentCommandName, pipeRowsWithAliases }) {
+      return [
+        ...pipeRowsWithAliases(
+          agentCommandName,
+          "music",
+          "",
+          "Search the internet for music based on shortmemory.",
+        ),
+        ...pipeRowsWithAliases(
+          agentCommandName,
+          "music",
+          ": link or text",
+          "Search the internet for music based on description, or give a direct link.",
+        ),
+      ];
+    },
     handlePipeCommand,
     findMusic,
     findMusicFromConversation,

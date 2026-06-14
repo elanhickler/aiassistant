@@ -135,6 +135,14 @@ export function createVisionSkill(context) {
     requiredSettings() {
       return ["vision_skill"];
     },
+    getPipeHelp({ agentCommandName, pipeRowsWithAliases }) {
+      return pipeRowsWithAliases(
+        agentCommandName,
+        "vision",
+        ": text",
+        "Describe an attached image or the image in the replied-to message.",
+      );
+    },
     async handlePipeCommand(command, message) {
       if (command?.kind !== "vision") return false;
       const description = await describeImage(command, message);

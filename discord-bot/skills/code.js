@@ -68,6 +68,14 @@ export function createCodeSkill(context) {
     requiredSettings() {
       return ["code_skill"];
     },
+    getPipeHelp({ agentCommandName, pipeRowsWithAliases }) {
+      return pipeRowsWithAliases(
+        agentCommandName,
+        "code",
+        ": instructions",
+        "Send coding instructions to the configured external code skill command.",
+      );
+    },
     runCodeRequest,
     handlePipeCommand,
     onReady() {

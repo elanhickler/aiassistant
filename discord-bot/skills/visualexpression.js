@@ -952,6 +952,14 @@ export function createVisualExpressionSkill(context) {
     requiredSettings() {
       return ["planned_skill_settings.visualexpression"];
     },
+    getPipeHelp({ agentCommandName, pipeRowsWithAliases }) {
+      return pipeRowsWithAliases(
+        agentCommandName,
+        "image",
+        ": text",
+        "Describe how future image prompts/style should change, in natural language.",
+      );
+    },
     async getContextBlocks() {
       const memoryContext = await formatVisualMemoryContext();
       return {

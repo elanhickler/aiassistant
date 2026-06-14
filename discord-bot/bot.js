@@ -1415,53 +1415,9 @@ function helpCommandLists() {
     [`||${agentCommandName} dream: text||`, "Dream from seed text; requires sleeping."],
   ];
 
-  if (enabledSkills.includes("music")) {
-    pipeCommands.push(
-      [`||${agentCommandName} music||`, "Search the internet for music based on shortmemory."],
-      [`||${agentCommandName} music: link or text||`, "Search the internet for music based on description, or give a direct link."],
-    );
-  }
-
-  if (enabledSkills.includes("code")) {
-    pipeCommands.push(...pipeRowsWithAliases(
-      agentCommandName,
-      "code",
-      ": instructions",
-      "Send coding instructions to the configured external code skill command.",
-    ));
-  }
-
-  if (enabledSkills.includes("file")) {
-    pipeCommands.push(...pipeRowsWithAliases(
-      agentCommandName,
-      "file",
-      ": instructions",
-      "Send file-management instructions to the configured external file skill command.",
-    ));
-  }
-
-  if (enabledSkills.includes("speak")) {
-    pipeCommands.push(...pipeRowsWithAliases(
-      agentCommandName,
-      "speak",
-      ": text",
-      "Generate spoken audio from text, or train a voice with speak: train voice title | transcript plus an audio attachment.",
-    ));
-  }
-
-  if (enabledSkills.includes("visualexpression")) {
-    pipeCommands.push(...pipeRowsWithAliases(
-      agentCommandName,
-      "image",
-      ": text",
-      "Describe how future image prompts/style should change, in natural language.",
-    ));
-  }
-
-  if (enabledSkills.includes("vision")) {
-    pipeCommands.push(
-      [`||${agentCommandName} vision: text||`, "Describe an attached image or the image in the replied-to message."],
-    );
+  for (const skill of skills) {
+    const rows = skill.getPipeHelp?.({ agentCommandName, pipeRowsWithAliases }) || [];
+    pipeCommands.push(...rows);
   }
 
   return { slashCommands, pipeCommands };

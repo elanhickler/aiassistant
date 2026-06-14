@@ -68,6 +68,14 @@ export function createFileSkill(context) {
     requiredSettings() {
       return ["file_skill"];
     },
+    getPipeHelp({ agentCommandName, pipeRowsWithAliases }) {
+      return pipeRowsWithAliases(
+        agentCommandName,
+        "file",
+        ": instructions",
+        "Send file-management instructions to the configured external file skill command.",
+      );
+    },
     runFileRequest,
     handlePipeCommand,
     onReady() {

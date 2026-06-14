@@ -26,6 +26,7 @@ Implemented skills can expose these fields:
 * `command` : Optional Discord slash command definition, or an array of definitions.
 * `handleInteraction(interaction)` : Optional slash command handler.
 * `handlePipeCommand(command, message)` : Optional whole-message pipe command handler.
+* `getPipeHelp({ agentCommandName, pipeRowsWithAliases })` : Optional help rows for pipe commands owned by this skill.
 * `onReady()` : Optional startup hook.
 * `afterSummary(summaryContext)` : Optional hook called after successful summarization.
 * `getContextBlocks(message)` : Optional hidden context provider for normal replies.

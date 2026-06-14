@@ -255,6 +255,14 @@ export function createSpeakSkill(context) {
     requiredSettings() {
       return ["speak_skill"];
     },
+    getPipeHelp({ agentCommandName, pipeRowsWithAliases }) {
+      return pipeRowsWithAliases(
+        agentCommandName,
+        "speak",
+        ": text",
+        "Generate spoken audio from text, or train a voice with speak: train voice title | transcript plus an audio attachment.",
+      );
+    },
     generateSpeech,
     handlePipeCommand,
     trainVoiceModel,
