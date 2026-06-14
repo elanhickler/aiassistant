@@ -24,6 +24,8 @@ In servers, use the agent name.
 ||@agent visual show: request-id||
 ||@agent visual note: note text||
 ||@agent visual note: request-id | note text||
+||@agent visual review: state | note text||
+||@agent visual review: request-id | state | note text||
 ||@agent visual cancel||
 ||@agent visual cancel: request-id||
 ||@agent visual retry||
@@ -48,6 +50,8 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual show: request-id` : Show compact details and recent notes for a specific local visual request.
 * `visual note: note text` : Attach a human note to the latest local visual request.
 * `visual note: request-id | note text` : Attach a human note to a specific local visual request.
+* `visual review: state | note text` : Review the latest local visual request.
+* `visual review: request-id | state | note text` : Review a specific local visual request.
 * `visual cancel` : Cancel the latest queued local visual request without deleting files.
 * `visual cancel: request-id` : Cancel a specific queued local visual request without deleting files.
 * `visual retry` : Clone the latest retryable failed/cancelled request into a new queued request.
@@ -85,8 +89,8 @@ id: request-id
 status: queued
 type: dream
 prompt_path: prompts/request-id.md
-notes:
-* 2026-06-13T00:00:00.000Z : Keep the sleepy expression.
+reviews:
+* 2026-06-13T00:00:00.000Z : note : Keep the sleepy expression.
 ```
 
 For `visual note`, expected response:
@@ -95,6 +99,22 @@ For `visual note`, expected response:
 visual request noted
 id: request-id
 ```
+
+For `visual review`, expected response:
+
+```text
+visual request reviewed
+id: request-id
+state: usable
+```
+
+Supported review states:
+
+* usable
+* promote_candidate
+* needs_edit
+* rejected
+* blocked
 
 For `visual cancel`, expected response:
 

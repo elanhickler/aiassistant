@@ -2,6 +2,7 @@ import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promise
 import path from "node:path";
 
 const knownOutputTypes = ["emoji", "self", "scene", "background", "thought", "dream"];
+const reviewStates = ["usable", "promote_candidate", "needs_edit", "rejected", "blocked"];
 
 function asList(value) {
   if (!Array.isArray(value)) return [];
@@ -301,7 +302,7 @@ export function createVisualExpressionSkill(context) {
     return latestRequest;
   }
 
-  async function readReviewNotesForRequest(requestId, { limit = 3 } = {}) {
+  async function readReviewsForRequest(requestId, { limit = 3 } = {}) {
     const text = await readFile(reviewLogPath, "utf8").catch((error) => {
       if (error.code === "ENOENT") return "";
       throw error;
@@ -312,7 +313,7 @@ export function createVisualExpressionSkill(context) {
     for (const line of text.split(/\r?\n/)) {
       if (!line.trim()) continue;
       const review = JSON.parse(line);
-      if (review?.request_id !== requestId || review?.review_state !== "note") continue;
+      if (review?.request_id !== requestId) continue;
       notes.push(review);
     }
 
@@ -342,13 +343,13 @@ export function createVisualExpressionSkill(context) {
     if (result.error_kind) lines.push(`error_kind: ${result.error_kind}`);
     if (result.message) lines.push(`message: ${result.message}`);
     lines.push("prompt:", prompt || "(empty)");
-    const notes = await readReviewNotesForRequest(request.id);
-    if (notes.length > 0) {
+    const reviews = await readReviewsForRequest(request.id);
+    if (reviews.length > 0) {
       lines.push(
-        "notes:",
-        ...notes.map((note) => {
-          const noteText = String(note.notes || "").replace(/\s+/g, " ").slice(0, 180);
-          return `* ${note.created_at || ""} : ${noteText}`;
+        "reviews:",
+        ...reviews.map((review) => {
+          const noteText = String(review.notes || "").replace(/\s+/g, " ").slice(0, 180);
+          return `* ${review.created_at || ""} : ${review.review_state || "note"} : ${noteText}`;
         }),
       );
     }
@@ -382,6 +383,55 @@ export function createVisualExpressionSkill(context) {
       agent: agentName,
       reviewer: "human",
       review_state: "note",
+      score: null,
+      tags: [],
+      notes: note,
+      created_at: createdAt,
+    };
+
+    await mkdir(outputFolder, { recursive: true });
+    await appendFile(reviewLogPath, `${JSON.stringify(review)}\n`);
+    return { request, review };
+  }
+
+  function parseReviewInput(content = "") {
+    const text = String(content || "").trim();
+    if (!text) throw new Error(`visual review needs a state: ${reviewStates.join(", ")}.`);
+
+    const parts = text.split("|").map((part) => part.trim()).filter(Boolean);
+    let requestId = "";
+    let state = "";
+    let note = "";
+
+    if (parts.length === 1) {
+      state = parts[0];
+    } else if (reviewStates.includes(parts[0].toLowerCase())) {
+      state = parts[0];
+      note = parts.slice(1).join(" | ");
+    } else {
+      requestId = parts[0];
+      state = parts[1] || "";
+      note = parts.slice(2).join(" | ");
+    }
+
+    state = state.toLowerCase();
+    if (!reviewStates.includes(state)) {
+      throw new Error(`Unknown visual review state: ${state || "(blank)"}. Use ${reviewStates.join(", ")}.`);
+    }
+    return { requestId, state, note };
+  }
+
+  async function reviewRequest(content = "") {
+    const { requestId, state, note } = parseReviewInput(content);
+    const request = await findRequestByIdOrLatest(requestId);
+    const createdAt = new Date().toISOString();
+    const review = {
+      id: `${timestampId()}-${state}`,
+      output_id: "",
+      request_id: request.id,
+      agent: agentName,
+      reviewer: "human",
+      review_state: state,
       score: null,
       tags: [],
       notes: note,
@@ -581,6 +631,15 @@ export function createVisualExpressionSkill(context) {
         ].join("\n"));
         return true;
       }
+      if (command.action === "review") {
+        const { request, review } = await reviewRequest(command.content);
+        await safeReply(message, [
+          "visual request reviewed",
+          `id: ${request.id}`,
+          `state: ${review.review_state}`,
+        ].join("\n"));
+        return true;
+      }
       if (command.action === "cancel") {
         const cancelled = await cancelRequest(command.content);
         await safeReply(message, `visual request cancelled\nid: ${cancelled.id}`);
@@ -609,6 +668,7 @@ export function createVisualExpressionSkill(context) {
     formatRequestDetails,
     noteRequest,
     processQueuedRequests,
+    reviewRequest,
     retryRequest,
     onReady() {
       console.log(`Visual expression skill loaded with provider ${settings.provider}. Generation remains planning-only.`);

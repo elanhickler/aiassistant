@@ -2,7 +2,7 @@
 
 Visual review is how generated outputs and pending requests are judged before they are promoted, posted, or remembered.
 
-This is partly wired into the Discord runtime through `visual note`, which records human notes before image generation exists.
+This is partly wired into the Discord runtime through `visual note` and `visual review`, which record human guidance before image generation exists.
 
 Use `docs/visual-variants.md` when reviewing multiple variants of the same request.
 
@@ -36,7 +36,7 @@ Use one JSON object per review or request note.
 }
 ```
 
-Before an output exists, `visual note` may write a row with `output_id` blank and `request_id` filled in:
+Before an output exists, `visual note` or `visual review` may write a row with `output_id` blank and `request_id` filled in:
 
 ```json
 {
