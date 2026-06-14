@@ -22,6 +22,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `docs/visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
 * `docs/visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
 * `docs/visual-expression-request.md` : Request object format for future generated visual expressions.
+* `docs/visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
 * `docs/visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
 
@@ -43,7 +44,7 @@ The first implementation should be local-first.
 1. A reply is drafted normally.
 2. A cheap utility model follows `docs/visual-expression-intent.md` to decide whether a visual is useful.
 3. The decision chooses one output type: emoji, self, scene, background, thought, or dream.
-4. The system assembles a focused image prompt from persona, current message, status, shortmemory, longmemory, and relevant visual references.
+4. The system follows `docs/visual-prompt-assembly.md` to assemble a focused image prompt from selected persona, current message, status, memory, and relevant visual references.
 5. Yculth imagegen generates the image locally.
 6. The generated image is cached under `regenerated/visualexpression/`.
 7. Discord posting remains opt-in and should be designed separately.

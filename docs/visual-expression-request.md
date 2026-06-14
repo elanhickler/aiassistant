@@ -77,6 +77,8 @@ Generate only when the visual adds meaning. Do not generate just because the mod
 
 Visual prompts should be assembled from only the useful pieces:
 
+Use `docs/visual-prompt-assembly.md` for the full prompt assembly rules.
+
 * agent persona and appearance
 * current message and reply intent
 * status, including sleep or dream state

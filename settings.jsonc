@@ -187,6 +187,14 @@
             // range: 0 or higher.
             // default: 1
             "max_visuals_per_reply": 1,
+            // descrip: Maximum characters of selected memory/reference context to use while assembling a future visual prompt.
+            // range: 0 or higher.
+            // default: 4000
+            "prompt_context_character_limit": 4000,
+            // descrip: Maximum visual reference IDs to include in one future visual prompt.
+            // range: 0 or higher.
+            // default: 3
+            "max_reference_ids_per_prompt": 3,
             // descrip: Agent-local folder for generated visual expression outputs.
             // default: "regenerated/visualexpression"
             "output_folder": "regenerated/visualexpression",

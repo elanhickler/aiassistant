@@ -27,6 +27,7 @@ Starter project for a multi-agent AI assistant system.
     * `visual-expression-plan.md` : Future local-first generated visual expression pipeline for emojis, self-images, scenes, backgrounds, thoughts, and dreams.
     * `visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
     * `visual-expression-request.md` : Request object format for future generated visual expressions.
+    * `visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
     * `visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
     * `visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
     * `visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
