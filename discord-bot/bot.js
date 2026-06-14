@@ -1420,6 +1420,8 @@ function helpCommandLists() {
       [`||${agentCommandName} visual dream: text||`, "Queue a local dream visual request from text."],
       [`||${agentCommandName} visual emoji: text||`, "Queue a local emoji visual request from text."],
       [`||${agentCommandName} visual requests||`, "Show recent local visual requests and statuses."],
+      [`||${agentCommandName} visual show||`, "Show compact details for the latest local visual request."],
+      [`||${agentCommandName} visual show: request-id||`, "Show compact details for a specific local visual request."],
       [`||${agentCommandName} visual cancel||`, "Cancel the latest queued local visual request without deleting files."],
       [`||${agentCommandName} visual cancel: request-id||`, "Cancel a specific queued local visual request without deleting files."],
       [`||${agentCommandName} visual retry||`, "Clone the latest retryable failed/cancelled visual request into a new queued request."],
@@ -1939,13 +1941,13 @@ function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
 
-  const visualMatch = targetedText.match(/^visual(?:\s+(requests|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
+  const visualMatch = targetedText.match(/^visual(?:\s+(requests|show|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
   if (visualMatch) {
     const visualKeyword = (visualMatch[1] || "").toLowerCase();
     return {
       kind: "visual",
-      action: ["cancel", "process", "requests", "retry"].includes(visualKeyword) ? visualKeyword : "",
-      outputType: ["cancel", "process", "requests", "retry"].includes(visualKeyword) ? "" : visualKeyword,
+      action: ["cancel", "process", "requests", "retry", "show"].includes(visualKeyword) ? visualKeyword : "",
+      outputType: ["cancel", "process", "requests", "retry", "show"].includes(visualKeyword) ? "" : visualKeyword,
       content: (visualMatch[2] || "").trimStart().trimEnd(),
     };
   }

@@ -286,6 +286,44 @@ export function createVisualExpressionSkill(context) {
     ].join("\n");
   }
 
+  async function findRequestByIdOrLatest(requestId = "") {
+    const targetId = String(requestId || "").trim();
+    const requests = await readAllRequests();
+    if (targetId) {
+      const request = requests.find((candidate) => candidate.id === targetId);
+      if (!request) throw new Error(`Visual request not found: ${targetId}`);
+      return request;
+    }
+
+    const latestRequest = requests[0];
+    if (!latestRequest) throw new Error("No visual request found.");
+    return latestRequest;
+  }
+
+  async function formatRequestDetails(requestId = "") {
+    const request = await findRequestByIdOrLatest(requestId);
+    const result = request.result || {};
+    const generation = request.generation || {};
+    const variants = request.variants || {};
+    const prompt = String(request.prompt || "").replace(/\s+/g, " ").slice(0, 240);
+    const lines = [
+      "visual request:",
+      `id: ${request.id}`,
+      `status: ${result.status || "unknown"}`,
+      `type: ${request.output_type || "auto"}`,
+      `prompt_path: ${request.prompt_path || ""}`,
+      `style_preset: ${request.style_preset || ""}`,
+      `size: ${generation.width || ""} x ${generation.height || ""}`,
+      `variant_group_id: ${variants.variant_group_id || ""}`,
+      `variant_count: ${variants.variant_count || 1}`,
+    ];
+    if (result.retry_of) lines.push(`retry_of: ${result.retry_of}`);
+    if (result.error_kind) lines.push(`error_kind: ${result.error_kind}`);
+    if (result.message) lines.push(`message: ${result.message}`);
+    lines.push("prompt:", prompt || "(empty)");
+    return lines.join("\n");
+  }
+
   async function findRequestByIdOrLatestQueued(requestId) {
     const targetId = String(requestId || "").trim();
     if (targetId) {
@@ -462,6 +500,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatRequestList());
         return true;
       }
+      if (command.action === "show") {
+        await safeReply(message, await formatRequestDetails(command.content));
+        return true;
+      }
       if (command.action === "cancel") {
         const cancelled = await cancelRequest(command.content);
         await safeReply(message, `visual request cancelled\nid: ${cancelled.id}`);
@@ -487,6 +529,7 @@ export function createVisualExpressionSkill(context) {
     },
     cancelRequest,
     formatRequestList,
+    formatRequestDetails,
     processQueuedRequests,
     retryRequest,
     onReady() {
