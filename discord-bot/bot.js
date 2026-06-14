@@ -225,6 +225,28 @@ function shouldRetryForUnexpectedReplyLanguage(reply) {
   return cjkCharacters >= 4 && cjkCharacters / compactReply.length >= 0.15;
 }
 
+function shouldRetryForVisibleErrorReply(reply) {
+  const normalizedReply = String(reply || "").trim().toLowerCase();
+  if (!normalizedReply) return false;
+  return [
+    /^error[:\s]/,
+    /^openrouter\s/,
+    /^provider\s/,
+    /^upstream\s/,
+    /^generation\s+error/,
+    /^the application did not respond/,
+    /missing authentication header/,
+    /returned an empty reply/,
+    /fetch failed/,
+    /connect timeout/,
+    /rate limit/,
+    /too many requests/,
+    /i (?:can'?t|cannot|won't|will not) (?:comply|assist|provide|continue|respond)/,
+    /i'?m sorry,?\s+(?:but\s+)?i (?:can'?t|cannot|won't|will not)/,
+    /unable to (?:comply|assist|provide|continue|respond)/,
+  ].some((pattern) => pattern.test(normalizedReply));
+}
+
 async function deleteDiscordMessageIfExists(message, label) {
   try {
     await message.delete();
@@ -2521,8 +2543,10 @@ async function askOpenRouter(message) {
     timePassages: pendingTimePassages,
   });
 
+  let retrySource = "normal reply retry";
+
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    await writeRawOpenRouterText(messages, attempt === 0 ? "normal reply" : "normal reply language retry");
+    await writeRawOpenRouterText(messages, attempt === 0 ? "normal reply" : retrySource);
 
     let response;
     try {
@@ -2553,6 +2577,23 @@ async function askOpenRouter(message) {
     const choice = payload.choices?.[0];
     const reply = choice?.message?.content?.trim();
     if (!reply) {
+      if (attempt === 0) {
+        const finishReason = choice?.finish_reason || choice?.native_finish_reason || "unknown";
+        retrySource = "normal reply empty retry";
+        console.warn(`Retrying ${agentName} reply because OpenRouter returned empty content. finish_reason=${finishReason}.`);
+        messages = [
+          ...messages,
+          {
+            role: "user",
+            content: [
+              "The previous generation returned no visible assistant reply.",
+              "Try again and write the actual in-character reply now.",
+              "Do not mention provider errors, empty replies, retries, policy, or this correction.",
+            ].join(" "),
+          },
+        ];
+        continue;
+      }
       if (choice?.error?.message) {
         throw new Error(`OpenRouter generation error ${choice.error.code || "unknown"}: ${choice.error.message}`);
       }
@@ -2564,6 +2605,7 @@ async function askOpenRouter(message) {
     }
 
     if (attempt === 0 && shouldRetryForUnexpectedReplyLanguage(reply)) {
+      retrySource = "normal reply language retry";
       console.warn(`Retrying ${agentName} reply because the first OpenRouter reply appeared to use the wrong visible language.`);
       messages = [
         ...messages,
@@ -2580,10 +2622,28 @@ async function askOpenRouter(message) {
       continue;
     }
 
+    if (attempt === 0 && shouldRetryForVisibleErrorReply(reply)) {
+      retrySource = "normal reply visible error retry";
+      console.warn(`Retrying ${agentName} reply because the first OpenRouter reply looked like visible error or refusal text.`);
+      messages = [
+        ...messages,
+        { role: "assistant", content: reply },
+        {
+          role: "user",
+          content: [
+            "Redo your previous response as the actual in-character reply.",
+            "Do not display provider errors, refusal boilerplate, moderation text, retry notes, or technical failure text.",
+            "Stay in character, preserve the roleplay continuity, and answer normally in English.",
+          ].join(" "),
+        },
+      ];
+      continue;
+    }
+
     return reply;
   }
 
-  throw new Error("OpenRouter reply failed the visible language check after retry.");
+  throw new Error("OpenRouter reply failed the visible safety retry.");
 }
 
 bot.on("messageCreate", async (message) => {
