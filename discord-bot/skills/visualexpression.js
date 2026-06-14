@@ -301,6 +301,26 @@ export function createVisualExpressionSkill(context) {
     return latestRequest;
   }
 
+  async function readReviewNotesForRequest(requestId, { limit = 3 } = {}) {
+    const text = await readFile(reviewLogPath, "utf8").catch((error) => {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    });
+    if (!text.trim()) return [];
+
+    const notes = [];
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      const review = JSON.parse(line);
+      if (review?.request_id !== requestId || review?.review_state !== "note") continue;
+      notes.push(review);
+    }
+
+    return notes
+      .sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""))
+      .slice(0, limit);
+  }
+
   async function formatRequestDetails(requestId = "") {
     const request = await findRequestByIdOrLatest(requestId);
     const result = request.result || {};
@@ -322,6 +342,16 @@ export function createVisualExpressionSkill(context) {
     if (result.error_kind) lines.push(`error_kind: ${result.error_kind}`);
     if (result.message) lines.push(`message: ${result.message}`);
     lines.push("prompt:", prompt || "(empty)");
+    const notes = await readReviewNotesForRequest(request.id);
+    if (notes.length > 0) {
+      lines.push(
+        "notes:",
+        ...notes.map((note) => {
+          const noteText = String(note.notes || "").replace(/\s+/g, " ").slice(0, 180);
+          return `* ${note.created_at || ""} : ${noteText}`;
+        }),
+      );
+    }
     return lines.join("\n");
   }
 

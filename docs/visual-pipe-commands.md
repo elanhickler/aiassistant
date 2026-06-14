@@ -44,8 +44,8 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual thought: text` : Request an internal or symbolic image.
 * `visual dream: text` : Request a dream image. This should usually require sleep or dream context.
 * `visual requests` : Show recent local visual requests and statuses.
-* `visual show` : Show compact details for the latest local visual request.
-* `visual show: request-id` : Show compact details for a specific local visual request.
+* `visual show` : Show compact details and recent notes for the latest local visual request.
+* `visual show: request-id` : Show compact details and recent notes for a specific local visual request.
 * `visual note: note text` : Attach a human note to the latest local visual request.
 * `visual note: request-id | note text` : Attach a human note to a specific local visual request.
 * `visual cancel` : Cancel the latest queued local visual request without deleting files.
@@ -85,6 +85,8 @@ id: request-id
 status: queued
 type: dream
 prompt_path: prompts/request-id.md
+notes:
+* 2026-06-13T00:00:00.000Z : Keep the sleepy expression.
 ```
 
 For `visual note`, expected response:
