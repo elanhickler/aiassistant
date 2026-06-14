@@ -108,6 +108,44 @@
         // default: 1600
         "max_output_characters": 1600
     },
+    // descrip: Runprogram skill settings. The runprogram skill is a conversational adapter to an external program runner command you provide.
+    // default: disabled until runprogram is listed in enabled_skills and command is configured
+    "runprogram_skill": {
+        // descrip: Executable path for your external program runner command. The bot sends one JSON request on stdin and reads stdout as text or JSON.
+        // default: ""
+        "command": "",
+        // descrip: Extra command arguments passed after command. Keep command and args separate; this skill does not run through a shell.
+        // default: []
+        "args": [],
+        // descrip: Names and aliases for apps the runner may launch or control. The external runner decides how to interpret these entries.
+        // default: empty app registry
+        "apps": {
+            // descrip: Example app entry. Rename the key and fill command details when you are ready to use it.
+            // default: disabled example
+            "example": {
+                // descrip: Names the agent may use to identify this app.
+                // default: []
+                "aliases": [],
+                // descrip: Executable path or command for this app.
+                // default: ""
+                "command": "",
+                // descrip: Extra arguments for this app.
+                // default: []
+                "args": [],
+                // descrip: Optional working directory for this app.
+                // default: ""
+                "working_directory": ""
+            }
+        },
+        // descrip: Maximum time to wait for the external runprogram command.
+        // range: 1 or higher.
+        // default: 30000
+        "timeout_milliseconds": 30000,
+        // descrip: Maximum characters returned to the user from the external runprogram command.
+        // range: 1 to 1900 recommended for Discord.
+        // default: 1600
+        "max_output_characters": 1600
+    },
     // descrip: Music skill site switches. music_thread_id must be overridden when the music skill is enabled.
     // default: only YouTube discovery enabled, no archive thread
     "music_skill": {

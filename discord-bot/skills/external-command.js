@@ -102,6 +102,7 @@ export function createExternalCommandSkill({
   timeoutDefault,
   completedText,
   runMethodName,
+  extraPayload,
 }) {
   const {
     agentFolder,
@@ -137,6 +138,7 @@ export function createExternalCommandSkill({
         agent: agentName,
         agent_folder: agentFolder,
         metadata,
+        ...(typeof extraPayload === "function" ? extraPayload(settings) : {}),
       },
     });
 

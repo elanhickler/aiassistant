@@ -25,6 +25,7 @@ Starter project for a multi-agent AI assistant system.
         * `music.js` : Optional pipe-command music skill.
         * `placeholders.js` : Registry of planned skills that are documented but not implemented yet.
         * `registry.js` : Central registry for core, optional, and planned skill loading.
+        * `runprogram.js` : Optional conversational adapter to an external program runner command with configured app names and aliases.
         * `speak.js` : Optional text-to-speech and voice-training hook skill.
         * `story.js` : Core story generation, recall, and story upload system.
         * `time.js` : Core time, sleep, status, and dream system.
@@ -33,6 +34,7 @@ Starter project for a multi-agent AI assistant system.
 * `docs/` : Planning and architecture notes.
     * `code-skill.md` : Interface-neutral coding adapter notes.
     * `file-skill.md` : Interface-neutral file-management adapter notes.
+    * `runprogram-skill.md` : Interface-neutral program runner adapter notes.
     * `speak-skill.md` : Interface-neutral text-to-speech and voice-training skill notes.
     * `music-skill.md` : Interface-neutral music search and link-formatting skill notes.
     * `vision-skill.md` : Boundary and usage notes for the standalone image-description skill.
@@ -190,6 +192,7 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `enabled_skills` : Optional implemented skills may contribute small context blocks. Story and time are core systems and always loaded.
 * `code_skill` : Settings for the optional coding adapter skill. Discord can call it through `code:`, but the external command hook is meant to be reusable from local or website interfaces too.
 * `file_skill` : Settings for the optional file-management adapter skill. Discord can call it through `file:`, but the external command hook is meant to be reusable from local or website interfaces too.
+* `runprogram_skill` : Settings for the optional program runner adapter skill. Discord can call it through `runprogram:`, but the hook is meant to be reusable from Yculth, local apps, or website interfaces too. `runprogram_skill.apps` maps app names and aliases to launch/control command details for the external runner.
 * `speak_skill` : Settings for the optional TTS and voice-training skill. Discord can call it through `speak:`, but the skill is meant to be reusable from local or website interfaces too.
 * `music_skill` : Settings for the optional music search skill. Discord can call it through `music:`, but the skill exposes hooks for local or website interfaces too.
 * `vision_skill` : Settings for the optional standalone image-description skill. Vision descriptions are uncertain observations and do not train image generation by themselves.

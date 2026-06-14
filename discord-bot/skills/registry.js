@@ -3,6 +3,7 @@ import { createDiscordStatusUpdateSkill } from "./discordstatusupdate.js";
 import { createFileSkill } from "./file.js";
 import { createMusicSkill } from "./music.js";
 import { plannedSkillNames } from "./placeholders.js";
+import { createRunProgramSkill } from "./runprogram.js";
 import { createSpeakSkill } from "./speak.js";
 import { createStorySkill } from "./story.js";
 import { createTimeSkill } from "./time.js";
@@ -21,6 +22,7 @@ const optionalSkillDefinitions = [
   { name: "discordstatusupdate", factory: createDiscordStatusUpdateSkill },
   { name: "file", factory: createFileSkill, pipeCommands: ["file"] },
   { name: "music", factory: createMusicSkill, pipeCommands: ["music"], allowEmptyPipeCommands: ["music"] },
+  { name: "runprogram", factory: createRunProgramSkill, pipeCommands: ["runprogram"] },
   { name: "speak", factory: createSpeakSkill, pipeCommands: ["speak"], allowEmptyPipeCommands: ["speak"] },
   { name: "vision", factory: createVisionSkill, pipeCommands: ["vision"], allowEmptyPipeCommands: ["vision"] },
   { name: "visualexpression", factory: createVisualExpressionSkill, pipeCommands: ["image", "visual"] },

@@ -6,6 +6,6 @@
   "scripts": {
     "install:deps": "cd regenerated && npm install",
     "start": "node bot.js",
-    "check": "node --check bot.js && node --check context.js && node --check memory.js && node --check skills/code.js && node --check skills/discordstatusupdate.js && node --check skills/external-command.js && node --check skills/file.js && node --check skills/music.js && node --check skills/placeholders.js && node --check skills/print-registry.js && node --check skills/registry.js && node --check skills/speak.js && node --check skills/story.js && node --check skills/time.js && node --check skills/vision.js && node --check skills/visualexpression.js"
+    "check": "node --check bot.js && node --check context.js && node --check memory.js && node --check skills/code.js && node --check skills/discordstatusupdate.js && node --check skills/external-command.js && node --check skills/file.js && node --check skills/music.js && node --check skills/placeholders.js && node --check skills/print-registry.js && node --check skills/registry.js && node --check skills/runprogram.js && node --check skills/speak.js && node --check skills/story.js && node --check skills/time.js && node --check skills/vision.js && node --check skills/visualexpression.js"
   }
 }
