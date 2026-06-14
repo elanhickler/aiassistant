@@ -411,6 +411,7 @@ export function createVisualExpressionSkill(context) {
       { value: memory.summary, weight: 6 },
       { value: memory.output_type, weight: 5 },
       { value: memory.memory_type, weight: 5 },
+      { value: Array.isArray(memory.recall_tags) ? memory.recall_tags.join(" ") : "", weight: 5 },
       { value: memory.style_preset, weight: 4 },
       { value: memory.source_review_state, weight: 3 },
       { value: memory.id, weight: 2 },
@@ -444,7 +445,10 @@ export function createVisualExpressionSkill(context) {
       searchText ? `visual memories for: ${query}` : "visual memories:",
       ...memories.map((memory) => {
         const summary = String(memory.summary || "").replace(/\s+/g, " ").slice(0, 90);
-        return `* ${memory.id} : ${memory.output_type || "auto"} : ${summary}`;
+        const tags = Array.isArray(memory.recall_tags) && memory.recall_tags.length > 0
+          ? ` [${memory.recall_tags.join(", ")}]`
+          : "";
+        return `* ${memory.id} : ${memory.output_type || "auto"}${tags} : ${summary}`;
       }),
     ].join("\n");
   }
@@ -464,7 +468,10 @@ export function createVisualExpressionSkill(context) {
         const type = memory.output_type || memory.memory_type || "visual";
         const summary = String(memory.summary || "").replace(/\s+/g, " ").trim();
         const style = String(memory.style_preset || "").trim();
-        return `* ${type}${style ? ` / ${style}` : ""} : ${summary}`;
+        const tags = Array.isArray(memory.recall_tags) && memory.recall_tags.length > 0
+          ? ` [${memory.recall_tags.join(", ")}]`
+          : "";
+        return `* ${type}${style ? ` / ${style}` : ""}${tags} : ${summary}`;
       }),
     ].join("\n");
   }
@@ -598,22 +605,26 @@ export function createVisualExpressionSkill(context) {
   function parseRememberInput(content = "") {
     const text = String(content || "").trim();
     if (!text) {
-      return { requestId: "", note: "" };
+      return { requestId: "", note: "", tags: [] };
     }
 
-    const delimiterIndex = text.indexOf("|");
-    if (delimiterIndex === -1) {
-      return { requestId: text, note: "" };
+    const parts = text.split("|").map((part) => part.trim());
+    if (parts.length === 1) {
+      return { requestId: parts[0], note: "", tags: [] };
     }
 
-    const requestId = text.slice(0, delimiterIndex).trim();
-    const note = text.slice(delimiterIndex + 1).trim();
+    const requestId = parts[0];
+    const note = parts[1] || "";
+    const tags = (parts[2] || "")
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
     if (!requestId) throw new Error("visual remember request id is blank before |.");
-    return { requestId, note };
+    return { requestId, note, tags };
   }
 
   async function rememberRequest(content = "") {
-    const { requestId, note } = parseRememberInput(content);
+    const { requestId, note, tags } = parseRememberInput(content);
     const request = await findRequestByIdOrLatest(requestId);
     const reviews = await readReviewsForRequest(request.id, { limit: 5 });
     const latestReview = reviews.find((review) => reviewStates.includes(review?.review_state || ""));
@@ -630,6 +641,7 @@ export function createVisualExpressionSkill(context) {
       agent: agentName,
       output_type: request.output_type || "",
       summary: summaryParts[0] || "Remember this visual direction.",
+      recall_tags: tags,
       prompt: request.prompt || "",
       style_preset: request.style_preset || "",
       source_review_state: latestReview?.review_state || "",

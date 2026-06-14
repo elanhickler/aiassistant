@@ -36,6 +36,7 @@ In servers, use the agent name.
 ||@agent visual promote: request-id | note text||
 ||@agent visual remember||
 ||@agent visual remember: request-id | note text||
+||@agent visual remember: request-id | note text | tag, tag||
 ||@agent visual cancel||
 ||@agent visual cancel: request-id||
 ||@agent visual retry||
@@ -72,6 +73,7 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual promote: request-id | note text` : Mark a specific local visual request as a promotion candidate without moving files.
 * `visual remember` : Remember the latest local visual request as durable visual guidance without moving files.
 * `visual remember: request-id | note text` : Remember a specific local visual request as durable visual guidance without moving files.
+* `visual remember: request-id | note text | tag, tag` : Remember a visual request with explicit recall tags.
 * `visual cancel` : Cancel the latest queued local visual request without deleting files.
 * `visual cancel: request-id` : Cancel a specific queued local visual request without deleting files.
 * `visual retry` : Clone the latest retryable failed/cancelled request into a new queued request.

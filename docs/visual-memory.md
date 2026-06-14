@@ -46,6 +46,7 @@ Before an output image exists, `visual remember` may write a request-backed memo
   "agent": "AgentName",
   "output_type": "self",
   "summary": "Good likeness direction.",
+  "recall_tags": ["soft", "portrait", "likeness"],
   "prompt": "soft portrait",
   "style_preset": "self-portrait",
   "source_review_state": "promote_candidate",
@@ -70,7 +71,7 @@ Suggested `memory_type` values:
 
 Visual memory should be recalled by tags and summary, not by reading every prompt.
 
-The current local search is deterministic and weighted. Matches in `summary`, output type, memory type, and style rank above incidental prompt text.
+The current local search is deterministic and weighted. Matches in `summary`, output type, memory type, recall tags, and style rank above incidental prompt text.
 
 For a normal reply, the context assembler should only include visual memory when:
 
@@ -115,6 +116,8 @@ There is an image file named 2026-06-13-example.png.
 Promotion can create or update a visual memory entry.
 
 `visual remember` creates an append-only memory entry from an existing request. It does not move files, promote images into `soul/art/`, or post images to Discord.
+
+Use `visual remember: request-id | note text | tag, tag` when a memory needs explicit recall hooks.
 
 Promoted `soul/art/` and `soul/emojis/` files should have stronger recall weight than unpromoted generated experiments.
 
