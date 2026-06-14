@@ -19,6 +19,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `soul/emojis/` : Custom emoji assets and emoji notes.
 * `soul/visual-references/` : Downloaded or manually collected references from the internet. These are source materials, not generated outputs.
 * `regenerated/visualexpression/` : Generated images created by future tooling.
+* `docs/visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
 
 ## Internet References
 
@@ -27,6 +28,7 @@ Internet downloads should stay deliberate and traceable.
 * Download only into `soul/visual-references/`.
 * Keep a sidecar note beside each downloaded reference when possible.
 * The sidecar note should include source URL, creator/license when known, download time, and why the reference was useful.
+* Track downloaded references in `soul/visual-references/manifest.jsonl`.
 * Do not treat downloaded references as agent-owned generated output.
 * Prefer references that are clearly reusable, user-provided, public-domain, Creative Commons, or otherwise suitable for private local reference use.
 

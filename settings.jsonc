@@ -185,6 +185,9 @@
             // descrip: Agent-local folder for human-downloaded or tool-downloaded visual references. This is source material, not generated output.
             // default: "soul/visual-references"
             "reference_folder": "soul/visual-references",
+            // descrip: Manifest file inside reference_folder that records downloaded or manually collected visual references.
+            // default: "manifest.jsonl"
+            "reference_manifest_file": "manifest.jsonl",
             // descrip: Optional websites or search pages to use as visual reference starting points. Keep blank until a source is intentionally chosen.
             // default: []
             "reference_sources": [],
