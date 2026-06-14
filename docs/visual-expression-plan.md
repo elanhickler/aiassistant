@@ -21,6 +21,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `regenerated/visualexpression/` : Generated images created by future tooling.
 * `docs/visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
 * `docs/visual-expression-request.md` : Request object format for future generated visual expressions.
+* `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
 
 ## Internet References
 
