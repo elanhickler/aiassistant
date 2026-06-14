@@ -24,6 +24,7 @@ Starter project for a multi-agent AI assistant system.
         * `file.js` : Optional conversational adapter to an external file-management command.
         * `music.js` : Optional pipe-command music skill.
         * `placeholders.js` : Registry of planned skills that are documented but not implemented yet.
+        * `registry.js` : Central registry for core, optional, and planned skill loading.
         * `speak.js` : Optional text-to-speech and voice-training hook skill.
         * `story.js` : Core story generation, recall, and story upload system.
         * `time.js` : Core time, sleep, status, and dream system.

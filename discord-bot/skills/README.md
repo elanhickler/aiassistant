@@ -11,6 +11,7 @@ Optional skills and core behavior modules live here. Agents choose optional skil
 * `file.js` : Implemented optional conversational file-management adapter skill. It calls a configured external command over stdin/stdout instead of doing file operations itself.
 * `music.js` : Implemented optional music search and link-formatting hook skill. Discord pipe commands and reactions are one interface; future local or website interfaces can call the same hooks.
 * `placeholders.js` : Registry of planned skills that are allowed to be documented without being implemented.
+* `registry.js` : Central skill registry. It owns core skill factories, optional skill factories, and planned-skill error handling.
 * `speak.js` : Implemented optional text-to-speech and voice-training hook skill. Discord pipe commands are one interface; future local or website interfaces can call the same hooks.
 * `story.js` : Core story system. It owns `||@agent story||`, `||@agent story: text||`, `/uploadstory`, local story files, story recall context, and the Discord `stories` memory post.
 * `time.js` : Core time system. It owns sleep, wake, status, time passage, and dream behavior.
@@ -32,6 +33,8 @@ Implemented skills can expose these fields:
 * `requiredSettings()` : Optional list of settings the skill expects.
 * `requiresStatus` : Optional boolean marker for skills that use the shared status API.
 * `requiredStatusModes` : Optional list of status modes the skill can run in.
+
+New implemented skills should be registered in `registry.js`. Planned-but-unimplemented ideas should be listed in `placeholders.js` until they have real behavior.
 
 ## Core Systems
 

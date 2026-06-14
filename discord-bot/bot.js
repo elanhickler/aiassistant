@@ -4,16 +4,7 @@ import { appendFile, mkdir, open, readFile, unlink, writeFile } from "node:fs/pr
 import path from "node:path";
 import { buildOpenRouterMessages } from "./context.js";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
-import { createCodeSkill } from "./skills/code.js";
-import { createFileSkill } from "./skills/file.js";
-import { createMusicSkill } from "./skills/music.js";
-import { plannedSkillNames } from "./skills/placeholders.js";
-import { createDiscordStatusUpdateSkill } from "./skills/discordstatusupdate.js";
-import { createSpeakSkill } from "./skills/speak.js";
-import { createStorySkill } from "./skills/story.js";
-import { createTimeSkill } from "./skills/time.js";
-import { createVisionSkill } from "./skills/vision.js";
-import { createVisualExpressionSkill } from "./skills/visualexpression.js";
+import { coreSkillNames, createRuntimeSkills } from "./skills/registry.js";
 
 const require = createRequire(import.meta.url);
 const { AttachmentBuilder, Client, GatewayIntentBits, Partials } = require("./regenerated/node_modules/discord.js");
@@ -496,7 +487,6 @@ const bot = new Client({
   partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
 });
 
-const coreSkillNames = new Set(["story", "time"]);
 const enabledSkills = requiredSetting("enabled_skills")
   .map((skillName) => String(skillName))
   .filter((skillName) => !coreSkillNames.has(skillName));
@@ -661,20 +651,6 @@ async function addTimePassage(minutes, sleepTimerAdjustment = null) {
   return nextStatus;
 }
 
-const coreSkillFactories = [
-  createStorySkill,
-  createTimeSkill,
-];
-const skillFactories = new Map([
-  ["code", createCodeSkill],
-  ["discordstatusupdate", createDiscordStatusUpdateSkill],
-  ["file", createFileSkill],
-  ["music", createMusicSkill],
-  ["speak", createSpeakSkill],
-  ["vision", createVisionSkill],
-  ["visualexpression", createVisualExpressionSkill],
-]);
-const placeholderSkillNames = new Set(plannedSkillNames());
 let skills = [];
 const skillContext = {
   addTimePassage,
@@ -696,17 +672,7 @@ const skillContext = {
   utilityModel,
   writeRawOpenRouterText,
 };
-skills = [
-  ...coreSkillFactories.map((factory) => factory(skillContext)),
-  ...enabledSkills.map((skillName) => {
-    const factory = skillFactories.get(skillName);
-    if (!factory && placeholderSkillNames.has(skillName)) {
-      throw new Error(`Skill is planned but not implemented yet: ${skillName}`);
-    }
-    if (!factory) throw new Error(`Unknown enabled skill: ${skillName}`);
-    return factory(skillContext);
-  }),
-];
+skills = createRuntimeSkills(enabledSkills, skillContext);
 
 async function runSkillHook(hookName, hookContext) {
   for (const skill of skills) {
