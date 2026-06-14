@@ -72,6 +72,24 @@
         "art",
         "stories"
     ],
+    // descrip: Code skill settings. The code skill is a conversational adapter to an external coding command you provide.
+    // default: disabled until code is listed in enabled_skills and command is configured
+    "code_skill": {
+        // descrip: Executable path for your external coding command. The bot sends one JSON request on stdin and reads stdout as text or JSON.
+        // default: ""
+        "command": "",
+        // descrip: Extra command arguments passed after command. Keep command and args separate; this skill does not run through a shell.
+        // default: []
+        "args": [],
+        // descrip: Maximum time to wait for the external code command.
+        // range: 1 or higher.
+        // default: 60000
+        "timeout_milliseconds": 60000,
+        // descrip: Maximum characters returned to the user from the external code command.
+        // range: 1 to 1900 recommended for Discord.
+        // default: 1600
+        "max_output_characters": 1600
+    },
     // descrip: File skill settings. The file skill is a conversational adapter to an external file-management command you provide.
     // default: disabled until file is listed in enabled_skills and command is configured
     "file_skill": {
@@ -201,6 +219,11 @@
         "gamemaster": {
             "enabled": false
         },
+        "musiccomposition": {
+            // descrip: Placeholder for future music composition from natural-language intent, references, memories, or style settings.
+            // default: false
+            "enabled": false
+        },
         "profilepic": {
             "enabled": false
         },
@@ -211,7 +234,7 @@
             "enabled": false
         },
         "tts": {
-            // descrip: Placeholder for future normal expressive voice output. The local Yculth Voice page can test Fish Audio, but Discord/runtime TTS is not implemented yet.
+            // descrip: Older placeholder for normal expressive voice output. Prefer implemented speak_skill for runtime TTS and voice-training hooks.
             // default: false
             "enabled": false,
             // descrip: Voice output provider name.
@@ -240,6 +263,11 @@
             // range: -20 to 20.
             // default: 0
             "volume": 0
+        },
+        "videogeneration": {
+            // descrip: Placeholder for future video generation from natural-language intent, references, memories, or style settings.
+            // default: false
+            "enabled": false
         },
         "visualexpression": {
             // descrip: Placeholder for future AI-chosen generated visuals that can accompany speech, thoughts, scenes, dreams, backgrounds, self-images, and custom emojis. Yculth imagegen is the first local generation surface.

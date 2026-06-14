@@ -4,6 +4,7 @@ import { appendFile, mkdir, open, readFile, unlink, writeFile } from "node:fs/pr
 import path from "node:path";
 import { buildOpenRouterMessages } from "./context.js";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
+import { createCodeSkill } from "./skills/code.js";
 import { createFileSkill } from "./skills/file.js";
 import { createMusicSkill } from "./skills/music.js";
 import { plannedSkillNames } from "./skills/placeholders.js";
@@ -665,6 +666,7 @@ const coreSkillFactories = [
   createTimeSkill,
 ];
 const skillFactories = new Map([
+  ["code", createCodeSkill],
   ["discordstatusupdate", createDiscordStatusUpdateSkill],
   ["file", createFileSkill],
   ["music", createMusicSkill],
@@ -1454,6 +1456,15 @@ function helpCommandLists() {
     );
   }
 
+  if (enabledSkills.includes("code")) {
+    pipeCommands.push(...pipeRowsWithAliases(
+      agentCommandName,
+      "code",
+      ": instructions",
+      "Send coding instructions to the configured external code skill command.",
+    ));
+  }
+
   if (enabledSkills.includes("file")) {
     pipeCommands.push(...pipeRowsWithAliases(
       agentCommandName,
@@ -2026,7 +2037,7 @@ function parsePipeCommandText(text, isDm) {
     };
   }
 
-  const commandMatch = canonicalTargetedText.match(/^(reply|continue|adjust|subtext|summarize|story|file|music|speak|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
+  const commandMatch = canonicalTargetedText.match(/^(reply|continue|adjust|subtext|summarize|story|code|file|music|speak|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
   if (!commandMatch) return null;
 
   const kind = commandMatch[1].toLowerCase();

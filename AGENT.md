@@ -51,6 +51,7 @@ Settings are loaded from root `settings.jsonc` first, then merged with `agents/<
 * `identity.mention_role_ids` : Optional Discord role IDs that count as targeting this agent inside pipe commands.
 * `enabled_skills` : Optional implemented skills to load. Story and time are core systems and always loaded.
 * `skill_aliases` : Pipe command aliases for canonical skills or commands. This can be overridden per agent, for example to let `image:` also be called `paint:`.
+* `code_skill` : Settings for the optional coding adapter skill. The configured command owns real code operations.
 * `file_skill` : Settings for the optional file-management adapter skill. The configured command owns real file operations.
 * `music_skill` : Settings for the optional music search and link-formatting skill. Provider/search hooks should stay reusable outside Discord.
 * `speak_skill` : Settings for the optional text-to-speech and voice-training skill. Provider hooks should stay reusable outside Discord.
@@ -156,6 +157,7 @@ Implemented skills live in `discord-bot/skills/`.
 * Status-aware skills use `soul/status.json` and should clearly state which modes they require.
 * Planned placeholder skills should not be enabled until they are implemented.
 * Optional skill-specific memory forum posts are created only when the skill is enabled and implemented. Core posts for time and story behavior are always available through the standard memory forum posts.
+* `code_skill` : Implemented optional runtime skill for conversational coding. Discord is only one possible interface; real code operations happen in the configured external command.
 * `file_skill` : Implemented optional runtime skill for conversational file management. Discord is only one possible interface; real file operations happen in the configured external command.
 * `music_skill` : Implemented optional runtime skill for music search and formatted music links. Discord is only one possible interface for this skill.
 * `speak_skill` : Implemented optional runtime skill for normal expressive voice output and Fish Audio voice-training hooks. Discord is only one possible interface for this skill.

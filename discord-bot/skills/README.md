@@ -5,6 +5,7 @@ Optional skills and core behavior modules live here. Agents choose optional skil
 ## File Map
 
 * `README.md` : This skills overview.
+* `code.js` : Implemented optional conversational coding adapter skill. It calls a configured external command over stdin/stdout instead of doing code operations itself.
 * `discordstatusupdate.js` : Implemented optional status-note skill. It runs after summarization, asks `utility_model` for a concise natural-language status, writes status fields into `soul/status.json`, and mirrors the result through the status memory post.
 * `file.js` : Implemented optional conversational file-management adapter skill. It calls a configured external command over stdin/stdout instead of doing file operations itself.
 * `music.js` : Implemented optional music search and link-formatting hook skill. Discord pipe commands and reactions are one interface; future local or website interfaces can call the same hooks.
@@ -42,6 +43,7 @@ These are always loaded and should not be listed in `enabled_skills`.
 
 * `music` : Finds and formats music links through natural language intent, `||@agent music||`, `||@agent music: description||`, or `:musical_note:` reactions. The skill exposes `findMusic`, `findMusicFromConversation`, and `formatMusicLink` so non-Discord interfaces can reuse the same behavior. Natural language intent is gated by `intent_triggers.music` before it spends tokens on an AI intent check.
 * `discordstatusupdate` : Runs after successful summaries and handles `||@agent status||` and `||@agent status: text||`. It writes a human-readable status note into `soul/status.json`; other skills may only provide optional hints when listed in `discord_status_update.source_skills`.
+* `code` : Sends `||@agent code: instructions||` to the configured external coding command. The skill exposes `runCodeRequest` so non-Discord interfaces can reuse the same adapter.
 * `file` : Sends `||@agent file: instructions||` to the configured external file-management command. The skill exposes `runFileRequest` so non-Discord interfaces can reuse the same adapter.
 * `speak` : Generates speech with `||@agent speak: text||` and can upload an attached audio sample for provider voice training with `||@agent speak: train voice title | transcript||`. The skill stores generated audio and voice model logs locally and keeps provider hooks reusable outside Discord.
 * `vision` : Describes attached images through `||@agent vision: text||`. The description is an uncertain observation aid, not durable truth, and not automatic image-skill training.
@@ -54,8 +56,10 @@ These are placeholders only. Enabling them should error until they are implement
 * `emoji` : Future emoji preference and emoji context provider.
 * `characterproxy` : Future webhook-based character proxy for roleplaying as saved character profiles. Intended for a separate bot with only this skill enabled.
 * `gamemaster` : Future game master workflow for scenes, rules, pacing, world state, and roleplay coordination.
+* `musiccomposition` : Future music composition workflow.
 * `profilepic` : Future avatar/profile image workflow.
 * `summarization` : Future shortmemory to longmemory maintenance workflow.
 * `art` : Future art prompt, reference, and visual memory workflow.
 * `settings` : Future Discord-editable settings workflow.
 * `tts` : Older placeholder name for local voice-output experiments. Prefer the implemented `speak` skill for runtime TTS and provider voice-training hooks.
+* `videogeneration` : Future video generation workflow.

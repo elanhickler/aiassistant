@@ -18,6 +18,7 @@ Starter project for a multi-agent AI assistant system.
     * `package.json` : Runtime scripts for installing dependencies, checking syntax, and starting the bot.
     * `skills/` : Core behavior modules plus optional skills loaded through each agent's `enabled_skills` setting.
         * `README.md` : Skills overview.
+        * `code.js` : Optional conversational adapter to an external coding command.
         * `discordstatusupdate.js` : Optional status-note skill that updates natural-language status after summarization.
         * `file.js` : Optional conversational adapter to an external file-management command.
         * `music.js` : Optional pipe-command music skill.
@@ -28,6 +29,7 @@ Starter project for a multi-agent AI assistant system.
         * `vision.js` : Optional image-description skill for attached images.
         * `visualexpression.js` : Optional visual prompt/style guidance and future image planning skill.
 * `docs/` : Planning and architecture notes.
+    * `code-skill.md` : Interface-neutral coding adapter notes.
     * `file-skill.md` : Interface-neutral file-management adapter notes.
     * `speak-skill.md` : Interface-neutral text-to-speech and voice-training skill notes.
     * `music-skill.md` : Interface-neutral music search and link-formatting skill notes.
@@ -184,6 +186,7 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `||@agent passtimehours: 8||` : Adds a longer one-shot hidden time passage block to the next normal reply.
 * sleep timer : When status changes to `sleeping`, `utility_model` estimates `sleep_planned_minutes` and stores `sleep_remaining_minutes` in `soul/status.json`. Passing time counts that value down. Extra pass-time context can adjust the timer; interruptions reduce it faster, restful protection can extend it. If it reaches zero or below, status becomes `awake` and `woke_minutes_ago` records how long ago the agent woke.
 * `enabled_skills` : Optional implemented skills may contribute small context blocks. Story and time are core systems and always loaded.
+* `code_skill` : Settings for the optional coding adapter skill. Discord can call it through `code:`, but the external command hook is meant to be reusable from local or website interfaces too.
 * `file_skill` : Settings for the optional file-management adapter skill. Discord can call it through `file:`, but the external command hook is meant to be reusable from local or website interfaces too.
 * `speak_skill` : Settings for the optional TTS and voice-training skill. Discord can call it through `speak:`, but the skill is meant to be reusable from local or website interfaces too.
 * `music_skill` : Settings for the optional music search skill. Discord can call it through `music:`, but the skill exposes hooks for local or website interfaces too.
@@ -192,7 +195,9 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `soul/dreams/` : Dream output folder used by the pipe dream command.
 * `soul/stories/` : Story output folder used by `||@agent story||`. Story generation and recall search `.md` and `.txt` files here, then combine relevant story text with shortmemory and longmemory as evidence.
 * `soul/art/` and `soul/emojis/` : Placeholder content folders. They are not automatically sent until a future skill or retrieval feature chooses them.
-* `planned_skill_settings.tts` : Placeholder settings for future normal expressive voice output. Fish Audio is the first planned provider. Yculth can use these settings for local TTS tests, but Discord/runtime voice hooks are not implemented yet.
+* `planned_skill_settings.tts` : Older placeholder for normal expressive voice output. Use `speak_skill` for implemented runtime TTS and voice-training hooks.
+* `planned_skill_settings.musiccomposition` : Placeholder for future music composition.
+* `planned_skill_settings.videogeneration` : Placeholder for future video generation.
 * `planned_skill_settings.visualexpression` : Placeholder settings for future AI-chosen generated visuals. The public Discord-facing workflow is `||@agent image: text||`, which records natural-language prompt/style critique for future image prompts. The intended outputs are emojis, self-images, scenes, backgrounds, thoughts, and dreams. Yculth imagegen is the intended local-first generation surface; Discord posting behavior is not implemented yet.
 * `soul/visual-references/` : Future folder for downloaded or manually collected visual references. Keep source and attribution notes beside internet downloads; generated outputs belong in `regenerated/visualexpression/`.
 * visual promotion : Generated visuals stay in `regenerated/visualexpression/` until the user promotes them into `soul/art/` or `soul/emojis/`.

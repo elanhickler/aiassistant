@@ -1,0 +1,152 @@
+import { spawn } from "node:child_process";
+
+function truncateText(text, maxLength) {
+  const value = String(text || "").trim();
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function splitCommand(command) {
+  if (Array.isArray(command)) return command.map((part) => String(part)).filter(Boolean);
+  const text = String(command || "").trim();
+  if (!text) return [];
+  return [text];
+}
+
+function runExternalCodeTool({ command, args, payload, timeoutMilliseconds, maxOutputCharacters }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      shell: false,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      reject(new Error(`Code skill command timed out after ${timeoutMilliseconds} ms.`));
+    }, timeoutMilliseconds);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+      if (stdout.length > maxOutputCharacters * 2) stdout = stdout.slice(-maxOutputCharacters * 2);
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+      if (stderr.length > maxOutputCharacters * 2) stderr = stderr.slice(-maxOutputCharacters * 2);
+    });
+
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(error);
+    });
+
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code !== 0) {
+        reject(new Error(`Code skill command exited ${code}: ${truncateText(stderr || stdout, maxOutputCharacters)}`));
+        return;
+      }
+      resolve({
+        stdout: truncateText(stdout, maxOutputCharacters),
+        stderr: truncateText(stderr, maxOutputCharacters),
+      });
+    });
+
+    child.stdin.end(`${JSON.stringify(payload)}\n`);
+  });
+}
+
+function normalizeCodeToolResult(result, maxOutputCharacters) {
+  const stdout = String(result.stdout || "").trim();
+  if (!stdout) return "code command completed";
+
+  try {
+    const parsed = JSON.parse(stdout);
+    if (typeof parsed.reply === "string") return truncateText(parsed.reply, maxOutputCharacters);
+    if (typeof parsed.message === "string") return truncateText(parsed.message, maxOutputCharacters);
+    if (typeof parsed.text === "string") return truncateText(parsed.text, maxOutputCharacters);
+    return truncateText(JSON.stringify(parsed, null, 2), maxOutputCharacters);
+  } catch {
+    return truncateText(stdout, maxOutputCharacters);
+  }
+}
+
+export function createCodeSkill(context) {
+  const {
+    agentFolder,
+    agentName,
+    requiredSetting,
+    safeReply,
+  } = context;
+
+  const settings = requiredSetting("code_skill");
+  const commandParts = splitCommand(settings.command);
+  const command = commandParts[0] || "";
+  const args = [
+    ...commandParts.slice(1),
+    ...(Array.isArray(settings.args) ? settings.args.map((arg) => String(arg)) : []),
+  ];
+  const timeoutMilliseconds = Number(settings.timeout_milliseconds || 60000);
+  const maxOutputCharacters = Number(settings.max_output_characters || 1600);
+
+  async function runCodeRequest({ input = "", source = "unknown", metadata = {} } = {}) {
+    const request = String(input || "").trim();
+    if (!request) throw new Error("code needs instructions.");
+    if (!command) {
+      throw new Error("code_skill.command is blank. Configure it to point at your code tool command.");
+    }
+
+    const result = await runExternalCodeTool({
+      command,
+      args,
+      timeoutMilliseconds,
+      maxOutputCharacters,
+      payload: {
+        request,
+        source,
+        agent: agentName,
+        agent_folder: agentFolder,
+        metadata,
+      },
+    });
+
+    return normalizeCodeToolResult(result, maxOutputCharacters);
+  }
+
+  async function handlePipeCommand(commandInput, message) {
+    if (commandInput?.kind !== "code") return false;
+    const reply = await runCodeRequest({
+      input: commandInput.content,
+      source: "discord_pipe",
+      metadata: {
+        channel_id: message.channelId,
+        message_id: message.id,
+        author_id: message.author?.id || "",
+      },
+    });
+    await safeReply(message, reply);
+    return true;
+  }
+
+  return {
+    name: "code",
+    requiredSettings() {
+      return ["code_skill"];
+    },
+    runCodeRequest,
+    handlePipeCommand,
+    onReady() {
+      if (command) console.log(`Code skill command: ${[command, ...args].join(" ")}`);
+    },
+  };
+}
