@@ -437,15 +437,20 @@ export function createVisualExpressionSkill(context) {
     ].join("\n");
   }
 
-  async function formatVisualMemoryContext() {
+  async function formatVisualMemoryContext({ query = "" } = {}) {
     const limit = Math.max(0, Number(settings.max_visual_memories_per_context || 0));
     if (limit <= 0) return "";
 
-    const memories = (await readAllVisualMemories()).slice(0, limit);
+    const searchText = String(query || "").trim().toLowerCase();
+    const allMemories = await readAllVisualMemories();
+    const memories = (searchText
+      ? allMemories.filter((memory) => visualMemorySearchText(memory).includes(searchText))
+      : allMemories
+    ).slice(0, limit);
     if (memories.length === 0) return "";
 
     return [
-      "Remembered visual guidance:",
+      searchText ? `Remembered visual guidance for: ${query}` : "Remembered visual guidance:",
       ...memories.map((memory) => {
         const type = memory.output_type || memory.memory_type || "visual";
         const summary = String(memory.summary || "").replace(/\s+/g, " ").trim();
@@ -821,7 +826,10 @@ export function createVisualExpressionSkill(context) {
         return true;
       }
       if (command.action === "context") {
-        await safeReply(message, await formatVisualMemoryContext() || "no visual memory context found");
+        const contextText = await formatVisualMemoryContext({ query: command.content });
+        await safeReply(message, contextText || (command.content
+          ? `no visual memory context found for: ${command.content}`
+          : "no visual memory context found"));
         return true;
       }
       if (command.action === "show") {

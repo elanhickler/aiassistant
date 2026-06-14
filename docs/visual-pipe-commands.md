@@ -25,6 +25,7 @@ In servers, use the agent name.
 ||@agent visual memories||
 ||@agent visual memories: search text||
 ||@agent visual context||
+||@agent visual context: search text||
 ||@agent visual show||
 ||@agent visual show: request-id||
 ||@agent visual note: note text||
@@ -60,6 +61,7 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual memories` : Show recent remembered visual guidance.
 * `visual memories: search text` : Search remembered visual guidance by simple local text match.
 * `visual context` : Show remembered visual guidance that can enter hidden context.
+* `visual context: search text` : Show matching remembered visual guidance that can enter hidden context.
 * `visual show` : Show compact details and recent notes for the latest local visual request.
 * `visual show: request-id` : Show compact details and recent notes for a specific local visual request.
 * `visual note: note text` : Attach a human note to the latest local visual request.
@@ -131,6 +133,13 @@ For `visual context`, expected response:
 
 ```text
 Remembered visual guidance:
+* self / self-portrait : Good likeness direction.
+```
+
+For `visual context: soft portrait`, expected response:
+
+```text
+Remembered visual guidance for: soft portrait
 * self / self-portrait : Good likeness direction.
 ```
 

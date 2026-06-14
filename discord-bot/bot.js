@@ -1425,6 +1425,7 @@ function helpCommandLists() {
       [`||${agentCommandName} visual memories||`, "Show recent remembered visual guidance."],
       [`||${agentCommandName} visual memories: text||`, "Search remembered visual guidance."],
       [`||${agentCommandName} visual context||`, "Show remembered visual guidance that can enter hidden context."],
+      [`||${agentCommandName} visual context: text||`, "Show matching remembered visual guidance that can enter hidden context."],
       [`||${agentCommandName} visual show||`, "Show compact details for the latest local visual request."],
       [`||${agentCommandName} visual show: request-id||`, "Show compact details for a specific local visual request."],
       [`||${agentCommandName} visual note: text||`, "Attach a human note to the latest local visual request."],
