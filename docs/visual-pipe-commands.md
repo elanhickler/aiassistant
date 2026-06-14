@@ -24,6 +24,8 @@ In servers, use the agent name.
 ||@agent visual promoted||
 ||@agent visual memories||
 ||@agent visual memories: search text||
+||@agent visual memory||
+||@agent visual memory: memory-id||
 ||@agent visual tags||
 ||@agent visual context||
 ||@agent visual context: search text||
@@ -62,6 +64,8 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual promoted` : Show recent local visual requests marked as promotion candidates.
 * `visual memories` : Show recent remembered visual guidance.
 * `visual memories: search text` : Search remembered visual guidance by simple local text match.
+* `visual memory` : Show details for the latest visual memory.
+* `visual memory: memory-id` : Show details for a specific visual memory.
 * `visual tags` : Show recall tags used by visual memories.
 * `visual context` : Show remembered visual guidance that can enter hidden context.
 * `visual context: search text` : Show matching remembered visual guidance that can enter hidden context.
@@ -131,6 +135,18 @@ For `visual memories: soft portrait`, expected response:
 ```text
 visual memories for: soft portrait
 * memory-id : self : Good likeness direction.
+```
+
+For `visual memory`, expected response:
+
+```text
+visual memory:
+id: memory-id
+type: self
+tags: soft, portrait
+source_request: request-id
+summary:
+Good likeness direction.
 ```
 
 For `visual tags`, expected response:

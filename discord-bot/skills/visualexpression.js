@@ -475,6 +475,39 @@ export function createVisualExpressionSkill(context) {
     ].join("\n");
   }
 
+  async function findVisualMemoryByIdOrLatest(memoryId = "") {
+    const targetId = String(memoryId || "").trim();
+    const memories = await readAllVisualMemories();
+    if (targetId) {
+      const memory = memories.find((candidate) => candidate.id === targetId);
+      if (!memory) throw new Error(`Visual memory not found: ${targetId}`);
+      return memory;
+    }
+
+    const latestMemory = memories[0];
+    if (!latestMemory) throw new Error("No visual memory found.");
+    return latestMemory;
+  }
+
+  async function formatVisualMemoryDetails(memoryId = "") {
+    const memory = await findVisualMemoryByIdOrLatest(memoryId);
+    const tags = Array.isArray(memory.recall_tags) ? memory.recall_tags.join(", ") : "";
+    const summary = String(memory.summary || "").replace(/\s+/g, " ").trim();
+    return [
+      "visual memory:",
+      `id: ${memory.id || ""}`,
+      `type: ${memory.output_type || memory.memory_type || "auto"}`,
+      `tags: ${tags}`,
+      `style_preset: ${memory.style_preset || ""}`,
+      `source_request: ${memory.request_id || ""}`,
+      `source_review_state: ${memory.source_review_state || ""}`,
+      `source_prompt_path: ${memory.source_prompt_path || ""}`,
+      `created_at: ${memory.created_at || ""}`,
+      "summary:",
+      summary || "(empty)",
+    ].join("\n");
+  }
+
   async function formatVisualMemoryContext({ query = "" } = {}) {
     const limit = Math.max(0, Number(settings.max_visual_memories_per_context || 0));
     if (limit <= 0) return "";
@@ -868,6 +901,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatVisualMemoryList({ query: command.content }));
         return true;
       }
+      if (command.action === "memory") {
+        await safeReply(message, await formatVisualMemoryDetails(command.content));
+        return true;
+      }
       if (command.action === "tags") {
         await safeReply(message, await formatVisualMemoryTags());
         return true;
@@ -946,6 +983,7 @@ export function createVisualExpressionSkill(context) {
     formatRequestDetails,
     formatReviewedRequestList,
     formatPromotedRequestList,
+    formatVisualMemoryDetails,
     formatVisualMemoryList,
     formatVisualMemoryTags,
     formatVisualMemoryContext,
