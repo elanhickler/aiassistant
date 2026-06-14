@@ -81,6 +81,21 @@
         "jamendo_enabled": false,
         "newgrounds_audio_enabled": false
     },
+    // descrip: Vision skill settings. The vision skill describes attached images, but does not update memory or image-generation guidance by itself.
+    // default: use a vision-capable OpenRouter model
+    "vision_skill": {
+        // descrip: OpenRouter model string used for image description.
+        // default: "meta-llama/llama-3.2-11b-vision-instruct"
+        "model": "meta-llama/llama-3.2-11b-vision-instruct",
+        // descrip: Maximum image attachment bytes the bot will send to the vision model.
+        // range: 1 or higher.
+        // default: 6000000
+        "max_image_bytes": 6000000,
+        // descrip: Maximum characters to return in one vision description reply.
+        // range: 1 or higher.
+        // default: 1800
+        "max_output_characters": 1800
+    },
     // descrip: Cheap local trigger words that decide whether a skill is allowed to spend tokens on an AI intent check. If no trigger matches, no AI intent check happens.
     // default: music triggers only
     "intent_triggers": {

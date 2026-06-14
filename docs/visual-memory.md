@@ -64,9 +64,10 @@ Before an output image exists, `visual remember` may write a request-backed memo
   "request_id": "",
   "agent": "AgentName",
   "memory_type": "image_style_guidance",
+  "image_action": "style",
   "output_type": "image",
   "summary": "sketches should be rougher and less polished",
-  "recall_tags": ["image", "style", "prompt"],
+  "recall_tags": ["image", "style", "prompt", "style"],
   "prompt": "",
   "style_preset": "conversational",
   "created_at": "2026-06-13T00:00:00.000Z"
@@ -91,6 +92,16 @@ Visual memory should be recalled by tags and summary, not by reading every promp
 The current local search is deterministic and weighted. Matches in `summary`, output type, memory type, recall tags, and style rank above incidental prompt text.
 
 Prompt critique should be the first learning target. A user saying `image: make faces larger in portraits` should become compact guidance for future prompt assembly before the system tries to tune settings such as CFG, sampler, steps, detector settings, or model choice.
+
+`image_action` should use a small verb set:
+
+* `add` : Add prompt/style guidance.
+* `remove` : Remove, avoid, forget, erase, or stop using prompt/style guidance. `delete` is treated as `remove`.
+* `load` : Switch to an existing style or workflow for the next image request.
+* `save` : Save the current guidance or result as a named style.
+* `rename` : Rename an existing style.
+* `style` : Set or adjust look, workflow, ratio, or prompt direction.
+* `note` : Keep the guidance as a general note when no clearer action is present.
 
 For a normal reply, the context assembler should only include visual memory when:
 

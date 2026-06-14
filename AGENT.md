@@ -51,6 +51,7 @@ Settings are loaded from root `settings.jsonc` first, then merged with `agents/<
 * `identity.mention_role_ids` : Optional Discord role IDs that count as targeting this agent inside pipe commands.
 * `enabled_skills` : Optional implemented skills to load. Story and time are core systems and always loaded.
 * `discord_status_update.source_skills` : Optional enabled skills allowed to provide hints for natural-language status notes after summarization. Unknown or unavailable skills are ignored.
+* `vision_skill` : Settings for the optional standalone image-description skill. Vision descriptions are uncertain observations and should not be treated as durable truth without user confirmation.
 * `global_persona_file` : Repo-level persona addition appended to every agent persona at runtime.
 * `use_memory_forum_persona_source` : If true, the bot can load persona from the memory forum `persona` post when no explicit persona source thread is set. If false, the bot uses the local persona file.
 * `model` : Main OpenRouter model used for character replies and creative writing.

@@ -122,6 +122,20 @@ function requestIdSuffix(request) {
   return safeIdText(request?.output_type || "retry") || "retry";
 }
 
+function classifyImageGuidanceAction(content) {
+  const text = String(content || "").trim();
+  const lower = text.toLowerCase();
+
+  if (/^(add|include|use|prefer|remember)\b/.test(lower)) return "add";
+  if (/^(remove|delete|forget|erase|avoid|exclude|stop|do not|don't|dont|less)\b/.test(lower)) return "remove";
+  if (/^(load|switch to|open)\b/.test(lower)) return "load";
+  if (/^(save|store|keep)\b/.test(lower)) return "save";
+  if (/^(rename|call)\b/.test(lower)) return "rename";
+  if (/^(style|make|change|adjust|set|when|if)\b/.test(lower)) return "style";
+
+  return "note";
+}
+
 export function createVisualExpressionSkill(context) {
   const { agentFolder, agentName, safeReply, requiredSetting } = context;
   const plannedSkillSettings = requiredSetting("planned_skill_settings");
@@ -772,15 +786,17 @@ export function createVisualExpressionSkill(context) {
   async function rememberImageStyleGuidance(content = "", message) {
     const guidance = String(content || "").trim();
     if (!guidance) throw new Error("image needs natural-language prompt/style guidance after the colon.");
+    const imageAction = classifyImageGuidanceAction(guidance);
 
     const memory = {
       id: `${timestampId()}-image-style-guidance`,
       request_id: "",
       agent: agentName,
       memory_type: "image_style_guidance",
+      image_action: imageAction,
       output_type: "image",
       summary: guidance,
-      recall_tags: ["image", "style", "prompt"],
+      recall_tags: ["image", "style", "prompt", imageAction],
       prompt: "",
       style_preset: "conversational",
       source_review_state: "",

@@ -23,7 +23,10 @@ Starter project for a multi-agent AI assistant system.
         * `placeholders.js` : Registry of planned skills that are documented but not implemented yet.
         * `story.js` : Core story generation, recall, and story upload system.
         * `time.js` : Core time, sleep, status, and dream system.
+        * `vision.js` : Optional image-description skill for attached images.
+        * `visualexpression.js` : Optional visual prompt/style guidance and future image planning skill.
 * `docs/` : Planning and architecture notes.
+    * `vision-skill.md` : Boundary and usage notes for the standalone image-description skill.
     * `visual-expression-plan.md` : Future local-first generated visual expression pipeline for emojis, self-images, scenes, backgrounds, thoughts, and dreams.
     * `visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
     * `visual-expression-request.md` : Request object format for future generated visual expressions.
@@ -175,6 +178,7 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `||@agent passtimehours: 8||` : Adds a longer one-shot hidden time passage block to the next normal reply.
 * sleep timer : When status changes to `sleeping`, `utility_model` estimates `sleep_planned_minutes` and stores `sleep_remaining_minutes` in `soul/status.json`. Passing time counts that value down. Extra pass-time context can adjust the timer; interruptions reduce it faster, restful protection can extend it. If it reaches zero or below, status becomes `awake` and `woke_minutes_ago` records how long ago the agent woke.
 * `enabled_skills` : Optional implemented skills may contribute small context blocks. Story and time are core systems and always loaded.
+* `vision_skill` : Settings for the optional standalone image-description skill. Vision descriptions are uncertain observations and do not train image generation by themselves.
 * `soul/status.json` : Current agent state used by core replies and status-aware skills. `mode` is the primary state; `status` contains boolean flags. Current modes are `awake`, `sleepy`, `sleeping`, `dreaming`, and `away`. `away` blocks normal replies.
 * `soul/dreams/` : Dream output folder used by the pipe dream command.
 * `soul/stories/` : Story output folder used by `||@agent story||`. Story generation and recall search `.md` and `.txt` files here, then combine relevant story text with shortmemory and longmemory as evidence.

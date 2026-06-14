@@ -9,6 +9,7 @@ import { plannedSkillNames } from "./skills/placeholders.js";
 import { createDiscordStatusUpdateSkill } from "./skills/discordstatusupdate.js";
 import { createStorySkill } from "./skills/story.js";
 import { createTimeSkill } from "./skills/time.js";
+import { createVisionSkill } from "./skills/vision.js";
 import { createVisualExpressionSkill } from "./skills/visualexpression.js";
 
 const require = createRequire(import.meta.url);
@@ -629,6 +630,7 @@ const coreSkillFactories = [
 const skillFactories = new Map([
   ["discordstatusupdate", createDiscordStatusUpdateSkill],
   ["music", createMusicSkill],
+  ["vision", createVisionSkill],
   ["visualexpression", createVisualExpressionSkill],
 ]);
 const placeholderSkillNames = new Set(plannedSkillNames());
@@ -1419,6 +1421,12 @@ function helpCommandLists() {
     );
   }
 
+  if (enabledSkills.includes("vision")) {
+    pipeCommands.push(
+      [`||${agentCommandName} vision: text||`, "Describe an attached image or the image in the replied-to message."],
+    );
+  }
+
   return { slashCommands, pipeCommands };
 }
 
@@ -1952,12 +1960,12 @@ function parsePipeCommandText(text, isDm) {
     };
   }
 
-  const commandMatch = targetedText.match(/^(reply|continue|adjust|subtext|summarize|story|music|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
+  const commandMatch = targetedText.match(/^(reply|continue|adjust|subtext|summarize|story|music|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
   if (!commandMatch) return null;
 
   const kind = commandMatch[1].toLowerCase();
   const content = (commandMatch[2] || "").trimStart().trimEnd();
-  if (!["reply", "continue", "dream", "sleep", "wake", "away", "state", "status", "summarize", "story", "music"].includes(kind) && !content) return null;
+  if (!["reply", "continue", "dream", "sleep", "wake", "away", "state", "status", "summarize", "story", "music", "vision"].includes(kind) && !content) return null;
   return {
     kind,
     content,
