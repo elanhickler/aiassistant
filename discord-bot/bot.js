@@ -4,7 +4,13 @@ import { appendFile, mkdir, open, readFile, unlink, writeFile } from "node:fs/pr
 import path from "node:path";
 import { buildOpenRouterMessages } from "./context.js";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
-import { createRuntimeSkills, normalizeEnabledSkillNames, skillLoadSummary } from "./skills/registry.js";
+import {
+  createRuntimeSkills,
+  normalizeEnabledSkillNames,
+  skillHandlers,
+  skillLoadSummary,
+  skillName,
+} from "./skills/registry.js";
 
 const require = createRequire(import.meta.url);
 const { AttachmentBuilder, Client, GatewayIntentBits, Partials } = require("./regenerated/node_modules/discord.js");
@@ -674,13 +680,11 @@ skills = createRuntimeSkills(enabledSkills, skillContext);
 console.log(`Loaded skills for ${agentName}: ${skillLoadSummary(skills)}`);
 
 async function runSkillHook(hookName, hookContext) {
-  for (const skill of skills) {
-    const hook = skill?.[hookName];
-    if (typeof hook !== "function") continue;
+  for (const { skill, hook } of skillHandlers(skills, hookName)) {
     try {
       await hook(hookContext);
     } catch (error) {
-      console.error(`Skill hook ${hookName} failed for ${skill.name || "unknown"}: ${error.message}`);
+      console.error(`Skill hook ${hookName} failed for ${skillName(skill)}: ${error.message}`);
     }
   }
 }
@@ -693,11 +697,11 @@ function skillCommands() {
 }
 
 async function handleSkillInteraction(interaction) {
-  for (const skill of skills) {
+  for (const { skill, hook } of skillHandlers(skills, "handleInteraction")) {
     try {
-      if (await skill.handleInteraction?.(interaction)) return true;
+      if (await hook(interaction)) return true;
     } catch (error) {
-      const text = `Error running ${skill.name || "unknown"} command: ${error.message}`;
+      const text = `Error running ${skillName(skill)} command: ${error.message}`;
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply(text).catch(() => {});
       } else {
@@ -1414,8 +1418,8 @@ function helpCommandLists() {
     [`||${agentCommandName} dream: text||`, "Dream from seed text; requires sleeping."],
   ];
 
-  for (const skill of skills) {
-    const rows = skill.getPipeHelp?.({ agentCommandName, pipeRowsWithAliases }) || [];
+  for (const { hook } of skillHandlers(skills, "getPipeHelp")) {
+    const rows = hook({ agentCommandName, pipeRowsWithAliases }) || [];
     pipeCommands.push(...rows);
   }
 
@@ -2367,8 +2371,8 @@ async function parseWholeMessagePipeCommand(message) {
 
 async function handleSkillPipeCommand(command, message) {
   if (!command) return false;
-  for (const skill of skills) {
-    if (await skill.handlePipeCommand?.(command, message)) return true;
+  for (const { hook } of skillHandlers(skills, "handlePipeCommand")) {
+    if (await hook(command, message)) return true;
   }
   return false;
 }

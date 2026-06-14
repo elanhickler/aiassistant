@@ -64,3 +64,16 @@ export function skillLoadSummary(skills) {
     .filter(Boolean)
     .join(", ");
 }
+
+export function skillName(skill) {
+  return String(skill?.name || "unknown");
+}
+
+export function skillHandlers(skills, hookName) {
+  return (skills || [])
+    .map((skill) => ({
+      skill,
+      hook: skill?.[hookName],
+    }))
+    .filter(({ hook }) => typeof hook === "function");
+}
