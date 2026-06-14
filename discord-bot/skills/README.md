@@ -6,6 +6,7 @@ Optional skills and core behavior modules live here. Agents choose optional skil
 
 * `README.md` : This skills overview.
 * `discordstatusupdate.js` : Implemented optional status-note skill. It runs after summarization, asks `utility_model` for a concise natural-language status, writes status fields into `soul/status.json`, and mirrors the result through the status memory post.
+* `file.js` : Implemented optional conversational file-management adapter skill. It calls a configured external command over stdin/stdout instead of doing file operations itself.
 * `music.js` : Implemented optional music search and link-formatting hook skill. Discord pipe commands and reactions are one interface; future local or website interfaces can call the same hooks.
 * `placeholders.js` : Registry of planned skills that are allowed to be documented without being implemented.
 * `speak.js` : Implemented optional text-to-speech and voice-training hook skill. Discord pipe commands are one interface; future local or website interfaces can call the same hooks.
@@ -41,6 +42,7 @@ These are always loaded and should not be listed in `enabled_skills`.
 
 * `music` : Finds and formats music links through natural language intent, `||@agent music||`, `||@agent music: description||`, or `:musical_note:` reactions. The skill exposes `findMusic`, `findMusicFromConversation`, and `formatMusicLink` so non-Discord interfaces can reuse the same behavior. Natural language intent is gated by `intent_triggers.music` before it spends tokens on an AI intent check.
 * `discordstatusupdate` : Runs after successful summaries and handles `||@agent status||` and `||@agent status: text||`. It writes a human-readable status note into `soul/status.json`; other skills may only provide optional hints when listed in `discord_status_update.source_skills`.
+* `file` : Sends `||@agent file: instructions||` to the configured external file-management command. The skill exposes `runFileRequest` so non-Discord interfaces can reuse the same adapter.
 * `speak` : Generates speech with `||@agent speak: text||` and can upload an attached audio sample for provider voice training with `||@agent speak: train voice title | transcript||`. The skill stores generated audio and voice model logs locally and keeps provider hooks reusable outside Discord.
 * `vision` : Describes attached images through `||@agent vision: text||`. The description is an uncertain observation aid, not durable truth, and not automatic image-skill training.
 * `visualexpression` : Planning-only bridge for future generated emojis, self-images, scenes, backgrounds, thoughts, and dreams. The public pipe command is `||@agent image: text||`, which records natural-language prompt/style critique for future image prompts. Legacy `visual ...` request-queue commands remain available internally for debugging, but should not be treated as the normal user workflow.

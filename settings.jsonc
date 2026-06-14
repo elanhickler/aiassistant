@@ -72,6 +72,24 @@
         "art",
         "stories"
     ],
+    // descrip: File skill settings. The file skill is a conversational adapter to an external file-management command you provide.
+    // default: disabled until file is listed in enabled_skills and command is configured
+    "file_skill": {
+        // descrip: Executable path for your external file-management command. The bot sends one JSON request on stdin and reads stdout as text or JSON.
+        // default: ""
+        "command": "",
+        // descrip: Extra command arguments passed after command. Keep command and args separate; this skill does not run through a shell.
+        // default: []
+        "args": [],
+        // descrip: Maximum time to wait for the external file command.
+        // range: 1 or higher.
+        // default: 30000
+        "timeout_milliseconds": 30000,
+        // descrip: Maximum characters returned to the user from the external file command.
+        // range: 1 to 1900 recommended for Discord.
+        // default: 1600
+        "max_output_characters": 1600
+    },
     // descrip: Music skill site switches. music_thread_id must be overridden when the music skill is enabled.
     // default: only YouTube discovery enabled, no archive thread
     "music_skill": {

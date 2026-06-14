@@ -4,6 +4,7 @@ import { appendFile, mkdir, open, readFile, unlink, writeFile } from "node:fs/pr
 import path from "node:path";
 import { buildOpenRouterMessages } from "./context.js";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
+import { createFileSkill } from "./skills/file.js";
 import { createMusicSkill } from "./skills/music.js";
 import { plannedSkillNames } from "./skills/placeholders.js";
 import { createDiscordStatusUpdateSkill } from "./skills/discordstatusupdate.js";
@@ -665,6 +666,7 @@ const coreSkillFactories = [
 ];
 const skillFactories = new Map([
   ["discordstatusupdate", createDiscordStatusUpdateSkill],
+  ["file", createFileSkill],
   ["music", createMusicSkill],
   ["speak", createSpeakSkill],
   ["vision", createVisionSkill],
@@ -1452,6 +1454,15 @@ function helpCommandLists() {
     );
   }
 
+  if (enabledSkills.includes("file")) {
+    pipeCommands.push(...pipeRowsWithAliases(
+      agentCommandName,
+      "file",
+      ": instructions",
+      "Send file-management instructions to the configured external file skill command.",
+    ));
+  }
+
   if (enabledSkills.includes("speak")) {
     pipeCommands.push(...pipeRowsWithAliases(
       agentCommandName,
@@ -2015,7 +2026,7 @@ function parsePipeCommandText(text, isDm) {
     };
   }
 
-  const commandMatch = canonicalTargetedText.match(/^(reply|continue|adjust|subtext|summarize|story|music|speak|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
+  const commandMatch = canonicalTargetedText.match(/^(reply|continue|adjust|subtext|summarize|story|file|music|speak|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
   if (!commandMatch) return null;
 
   const kind = commandMatch[1].toLowerCase();
