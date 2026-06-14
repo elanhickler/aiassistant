@@ -69,6 +69,16 @@ export function optionalPipeCommandsAllowedWithoutContentNames() {
   return optionalSkillDefinitions.flatMap((definition) => definition.allowEmptyPipeCommands || []);
 }
 
+export function skillRegistrySnapshot() {
+  return {
+    core: [...coreSkillNames],
+    implemented_optional: implementedOptionalSkillNames(),
+    planned: plannedSkillNamesForRegistry(),
+    optional_pipe_commands: implementedOptionalPipeCommandNames(),
+    optional_pipe_commands_allowed_without_content: optionalPipeCommandsAllowedWithoutContentNames(),
+  };
+}
+
 export function createRuntimeSkills(enabledSkills, context) {
   return [
     ...coreSkillFactories.map((factory) => factory(context)),
