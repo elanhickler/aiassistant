@@ -453,6 +453,28 @@ export function createVisualExpressionSkill(context) {
     ].join("\n");
   }
 
+  async function formatVisualMemoryTags({ limit = 24 } = {}) {
+    const memories = await readAllVisualMemories();
+    const counts = new Map();
+    for (const memory of memories) {
+      const tags = Array.isArray(memory.recall_tags) ? memory.recall_tags : [];
+      for (const tag of tags) {
+        const normalizedTag = String(tag || "").trim();
+        if (!normalizedTag) continue;
+        counts.set(normalizedTag, (counts.get(normalizedTag) || 0) + 1);
+      }
+    }
+    const sortedTags = [...counts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, limit);
+    if (sortedTags.length === 0) return "no visual memory tags found";
+
+    return [
+      "visual memory tags:",
+      ...sortedTags.map(([tag, count]) => `* ${tag} : ${count}`),
+    ].join("\n");
+  }
+
   async function formatVisualMemoryContext({ query = "" } = {}) {
     const limit = Math.max(0, Number(settings.max_visual_memories_per_context || 0));
     if (limit <= 0) return "";
@@ -846,6 +868,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatVisualMemoryList({ query: command.content }));
         return true;
       }
+      if (command.action === "tags") {
+        await safeReply(message, await formatVisualMemoryTags());
+        return true;
+      }
       if (command.action === "context") {
         const contextText = await formatVisualMemoryContext({ query: command.content });
         await safeReply(message, contextText || (command.content
@@ -921,6 +947,7 @@ export function createVisualExpressionSkill(context) {
     formatReviewedRequestList,
     formatPromotedRequestList,
     formatVisualMemoryList,
+    formatVisualMemoryTags,
     formatVisualMemoryContext,
     noteRequest,
     processQueuedRequests,
