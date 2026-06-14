@@ -206,5 +206,7 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 
 ## Memory Maintenance Flow
 
+Summarization is core memory infrastructure, not an optional skill.
+
 * `||@agent summarize||` : Summarize recent shortmemory and adjustment history into `soul/longmemory.txt`, then clean adjustment audit messages.
 * review summary result : Check that useful adjustment lessons made it into longmemory.

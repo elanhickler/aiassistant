@@ -157,6 +157,7 @@ Implemented skills live in `discord-bot/skills/`.
 * Status-aware skills use `soul/status.json` and should clearly state which modes they require.
 * Planned placeholder skills should not be enabled until they are implemented.
 * Optional skill-specific memory forum posts are created only when the skill is enabled and implemented. Core posts for time and story behavior are always available through the standard memory forum posts.
+* summarization : Core memory lifecycle infrastructure, not a skill. Skills may provide context before replies or react through `afterSummary`, but shortmemory to longmemory maintenance belongs to the runtime.
 * `code_skill` : Implemented optional runtime skill for conversational coding. Discord is only one possible interface; real code operations happen in the configured external command.
 * `file_skill` : Implemented optional runtime skill for conversational file management. Discord is only one possible interface; real file operations happen in the configured external command.
 * `music_skill` : Implemented optional runtime skill for music search and formatted music links. Discord is only one possible interface for this skill.

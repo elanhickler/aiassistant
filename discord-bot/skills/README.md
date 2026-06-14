@@ -63,8 +63,15 @@ These are placeholders only. Enabling them should error until they are implement
 * `gamemaster` : Future game master workflow for scenes, rules, pacing, world state, and roleplay coordination.
 * `musiccomposition` : Future music composition workflow.
 * `profilepic` : Future avatar/profile image workflow.
-* `summarization` : Future shortmemory to longmemory maintenance workflow.
 * `art` : Future art prompt, reference, and visual memory workflow.
 * `settings` : Future Discord-editable settings workflow.
 * `tts` : Older placeholder name for local voice-output experiments. Prefer the implemented `speak` skill for runtime TTS and provider voice-training hooks.
 * `videogeneration` : Future video generation workflow.
+
+## Core Memory Lifecycle
+
+Summarization is not a skill. It is shared memory infrastructure used by the runtime and by skill lifecycle hooks.
+
+* `summarization_settings` : Controls shortmemory to longmemory maintenance.
+* `origin_summary_settings` : Controls origin source material condensation.
+* `afterSummary(summaryContext)` : Optional skill hook called after a successful summary.

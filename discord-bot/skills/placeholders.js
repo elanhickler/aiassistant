@@ -3,7 +3,6 @@ const placeholderSkillDescriptions = {
   emoji: "Future emoji preference and emoji context provider.",
   gamemaster: "Future game master workflow for scenes, rules, pacing, and world state.",
   profilepic: "Future avatar/profile image workflow.",
-  summarization: "Future shortmemory to longmemory maintenance workflow.",
   art: "Future art prompt, reference, and visual memory workflow.",
   musiccomposition: "Future music composition workflow.",
   settings: "Future Discord-editable settings workflow.",
