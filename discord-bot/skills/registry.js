@@ -32,10 +32,22 @@ export function implementedOptionalSkillNames() {
   return [...optionalSkillFactories.keys()];
 }
 
+export function normalizeEnabledSkillNames(skillNames) {
+  const normalized = [];
+  const seen = new Set();
+  for (const skillName of skillNames || []) {
+    const name = String(skillName || "").trim().toLowerCase();
+    if (!name || coreSkillNames.has(name) || seen.has(name)) continue;
+    seen.add(name);
+    normalized.push(name);
+  }
+  return normalized;
+}
+
 export function createRuntimeSkills(enabledSkills, context) {
   return [
     ...coreSkillFactories.map((factory) => factory(context)),
-    ...enabledSkills.map((skillName) => {
+    ...normalizeEnabledSkillNames(enabledSkills).map((skillName) => {
       const factory = optionalSkillFactories.get(skillName);
       if (!factory && placeholderSkillNames.has(skillName)) {
         throw new Error(`Skill is planned but not implemented yet: ${skillName}`);

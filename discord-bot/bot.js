@@ -4,7 +4,7 @@ import { appendFile, mkdir, open, readFile, unlink, writeFile } from "node:fs/pr
 import path from "node:path";
 import { buildOpenRouterMessages } from "./context.js";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
-import { coreSkillNames, createRuntimeSkills } from "./skills/registry.js";
+import { createRuntimeSkills, normalizeEnabledSkillNames } from "./skills/registry.js";
 
 const require = createRequire(import.meta.url);
 const { AttachmentBuilder, Client, GatewayIntentBits, Partials } = require("./regenerated/node_modules/discord.js");
@@ -487,9 +487,7 @@ const bot = new Client({
   partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User],
 });
 
-const enabledSkills = requiredSetting("enabled_skills")
-  .map((skillName) => String(skillName))
-  .filter((skillName) => !coreSkillNames.has(skillName));
+const enabledSkills = normalizeEnabledSkillNames(requiredSetting("enabled_skills"));
 const allowedStatusModes = new Set(["awake", "sleepy", "sleeping", "dreaming", "away"]);
 
 async function readStatus() {
