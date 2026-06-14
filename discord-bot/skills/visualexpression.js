@@ -362,6 +362,10 @@ export function createVisualExpressionSkill(context) {
     const reviews = (await readAllReviews()).filter((review) => reviewStates.includes(review?.review_state || ""));
     if (reviews.length === 0) return "no reviewed visual requests found";
 
+    return formatReviewList("reviewed visual requests:", reviews, limit);
+  }
+
+  function formatReviewList(title, reviews, limit) {
     const latestByRequest = new Map();
     for (const review of reviews) {
       if (!review?.request_id || latestByRequest.has(review.request_id)) continue;
@@ -370,12 +374,19 @@ export function createVisualExpressionSkill(context) {
     }
 
     return [
-      "reviewed visual requests:",
+      title,
       ...[...latestByRequest.values()].map((review) => {
         const note = String(review.notes || "").replace(/\s+/g, " ").slice(0, 80);
         return `* ${review.request_id} : ${review.review_state}${note ? ` : ${note}` : ""}`;
       }),
     ].join("\n");
+  }
+
+  async function formatPromotedRequestList({ limit = 8 } = {}) {
+    const reviews = (await readAllReviews()).filter((review) => review?.review_state === "promote_candidate");
+    if (reviews.length === 0) return "no promoted visual requests found";
+
+    return formatReviewList("promoted visual requests:", reviews, limit);
   }
 
   function parseReviewNoteInput(content = "") {
@@ -684,6 +695,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatReviewedRequestList());
         return true;
       }
+      if (command.action === "promoted") {
+        await safeReply(message, await formatPromotedRequestList());
+        return true;
+      }
       if (command.action === "show") {
         await safeReply(message, await formatRequestDetails(command.content));
         return true;
@@ -741,6 +756,7 @@ export function createVisualExpressionSkill(context) {
     formatRequestList,
     formatRequestDetails,
     formatReviewedRequestList,
+    formatPromotedRequestList,
     noteRequest,
     processQueuedRequests,
     promoteRequest,
