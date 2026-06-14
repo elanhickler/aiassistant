@@ -801,6 +801,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatVisualMemoryList());
         return true;
       }
+      if (command.action === "context") {
+        await safeReply(message, await formatVisualMemoryContext() || "no visual memory context found");
+        return true;
+      }
       if (command.action === "show") {
         await safeReply(message, await formatRequestDetails(command.content));
         return true;
