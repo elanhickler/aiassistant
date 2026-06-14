@@ -2,6 +2,8 @@
 
 Use this format when internet resources are downloaded or manually collected for visual expression work.
 
+Use `docs/visual-reference-acquisition.md` for the future download workflow.
+
 References belong in:
 
 ```text

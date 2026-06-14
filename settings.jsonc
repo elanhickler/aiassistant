@@ -223,6 +223,21 @@
             // descrip: If true, future implementation may download visual references from configured sources into reference_folder. It should store source URLs and attribution notes with downloads.
             // default: false
             "allow_internet_reference_downloads": false,
+            // descrip: Maximum internet reference downloads allowed for one future acquisition request.
+            // range: 0 or higher.
+            // default: 3
+            "max_reference_downloads_per_request": 3,
+            // descrip: Allowed MIME types for future visual reference downloads.
+            // default: common web image MIME types
+            "allowed_reference_mime_types": [
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "image/gif"
+            ],
+            // descrip: If true, future internet reference downloads should be shown for local review before being used in prompt assembly.
+            // default: true
+            "preview_downloaded_references_before_use": true,
             // descrip: If true, future implementation must keep source URL, creator/license when known, and download time beside downloaded references.
             // default: true
             "require_reference_attribution_notes": true,
