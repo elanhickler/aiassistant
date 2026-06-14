@@ -218,6 +218,12 @@
             // range: 0 or higher.
             // default: 50
             "recent_request_events_to_show": 50,
+            // descrip: If true, future Yculth visual UI should show generated experiments from regenerated/visualexpression by default.
+            // default: true
+            "show_generated_outputs_in_yculth": true,
+            // descrip: If true, future Yculth visual UI should show downloaded references from soul/visual-references by default.
+            // default: true
+            "show_visual_references_in_yculth": true,
             // descrip: Agent-local folder for human-downloaded or tool-downloaded visual references. This is source material, not generated output.
             // default: "soul/visual-references"
             "reference_folder": "soul/visual-references",
