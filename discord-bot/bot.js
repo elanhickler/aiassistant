@@ -327,6 +327,7 @@ const mentionRoleIds = new Set((identity.mention_role_ids || []).map((roleId) =>
 const model = requiredSetting("model");
 const utilityModel = requiredSetting("utility_model");
 const openRouterProviderRouting = requiredSetting("openrouter_provider_routing");
+const skillAliases = requiredSetting("skill_aliases");
 const systemPromptFile = requiredSetting("system_prompt_file");
 const globalPersonaFile = String(requiredSetting("global_persona_file"));
 const personaSourceThreadId = String(requiredSetting("persona_source_thread_id"));
@@ -401,6 +402,40 @@ const handledDeleteReactionKeys = new Set();
 const handledReactionActionKeys = new Set();
 let summarizationTimer = null;
 let summarizationRunning = false;
+
+function normalizedSkillAliases() {
+  const aliases = {};
+  for (const [canonicalName, aliasList] of Object.entries(skillAliases || {})) {
+    const canonical = String(canonicalName || "").trim().toLowerCase();
+    if (!canonical || !Array.isArray(aliasList)) continue;
+    aliases[canonical] = aliasList
+      .map((alias) => String(alias || "").trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return aliases;
+}
+
+const normalizedPipeAliases = normalizedSkillAliases();
+
+function aliasesForCommand(commandName) {
+  return normalizedPipeAliases[String(commandName || "").toLowerCase()] || [];
+}
+
+function canonicalPipeCommandName(commandName) {
+  const requestedName = String(commandName || "").trim().toLowerCase();
+  for (const [canonicalName, aliases] of Object.entries(normalizedPipeAliases)) {
+    if (aliases.includes(requestedName)) return canonicalName;
+  }
+  return requestedName;
+}
+
+function pipeRowsWithAliases(agentCommandName, commandName, suffix, description) {
+  const commandNames = [commandName, ...aliasesForCommand(commandName)];
+  return commandNames.map((name, index) => [
+    `||${agentCommandName} ${name}${suffix}||`,
+    index === 0 ? description : `Alias for ${commandName}.`,
+  ]);
+}
 
 async function writeRawOpenRouterText(messages, source = "unknown") {
   const text = [
@@ -1416,9 +1451,12 @@ function helpCommandLists() {
   }
 
   if (enabledSkills.includes("visualexpression")) {
-    pipeCommands.push(
-      [`||${agentCommandName} image: text||`, "Describe how future image prompts/style should change, in natural language."],
-    );
+    pipeCommands.push(...pipeRowsWithAliases(
+      agentCommandName,
+      "image",
+      ": text",
+      "Describe how future image prompts/style should change, in natural language.",
+    ));
   }
 
   if (enabledSkills.includes("vision")) {
@@ -1938,7 +1976,13 @@ function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
 
-  const imageMatch = targetedText.match(/^image(?:\s*:\s*([\s\S]*))?$/i);
+  const firstTokenMatch = targetedText.match(/^([a-z][a-z0-9_-]*)([\s\S]*)$/i);
+  const firstToken = canonicalPipeCommandName(firstTokenMatch?.[1] || "");
+  const canonicalTargetedText = firstTokenMatch
+    ? `${firstToken}${firstTokenMatch[2] || ""}`
+    : targetedText;
+
+  const imageMatch = canonicalTargetedText.match(/^image(?:\s*:\s*([\s\S]*))?$/i);
   if (imageMatch) {
     const content = (imageMatch[1] || "").trimStart().trimEnd();
     if (!content) return null;
@@ -1948,7 +1992,7 @@ function parsePipeCommandText(text, isDm) {
     };
   }
 
-  const visualMatch = targetedText.match(/^visual(?:\s+(requests|reviewed|promoted|memories|memory|tags|stats|files|context|show|note|review|promote|remember|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
+  const visualMatch = canonicalTargetedText.match(/^visual(?:\s+(requests|reviewed|promoted|memories|memory|tags|stats|files|context|show|note|review|promote|remember|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
   if (visualMatch) {
     const visualKeyword = (visualMatch[1] || "").toLowerCase();
     const visualActions = ["cancel", "context", "files", "memories", "memory", "note", "process", "promote", "promoted", "remember", "requests", "retry", "review", "reviewed", "show", "stats", "tags"];
@@ -1960,7 +2004,7 @@ function parsePipeCommandText(text, isDm) {
     };
   }
 
-  const commandMatch = targetedText.match(/^(reply|continue|adjust|subtext|summarize|story|music|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
+  const commandMatch = canonicalTargetedText.match(/^(reply|continue|adjust|subtext|summarize|story|music|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
   if (!commandMatch) return null;
 
   const kind = commandMatch[1].toLowerCase();

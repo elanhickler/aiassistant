@@ -24,6 +24,13 @@
     "enabled_skills": [
         "discordstatusupdate"
     ],
+    // descrip: Pipe command aliases for skills and command names. The key is the canonical command, the list contains extra names users may type. Agent settings can override this locally.
+    // default: image can also be called imagegen
+    "skill_aliases": {
+        "image": [
+            "imagegen"
+        ]
+    },
     // descrip: Persona file to load from each agent folder.
     // default: "soul/persona.md"
     "system_prompt_file": "soul/persona.md",

@@ -96,6 +96,7 @@ npm.cmd start
 * `global_persona_file` : Repo-level persona addition appended to every agent persona at runtime.
 * `intent_triggers` : Cheap local trigger words that decide whether a skill is allowed to spend tokens on an AI intent check. For example, music intent only checks OpenRouter when a message contains a configured music trigger.
 * `control_user_ids` : Discord user IDs allowed to run slash-command control actions. If blank, everyone can run slash-command controls.
+* `skill_aliases` : Global/local pipe command aliases. For example, the canonical `image:` command can also be called `imagegen:`, or an agent can override it to `paint:`.
 * common per-agent overrides : optional `enabled_skills`, Discord thread IDs, reply channel IDs, and skill-specific thread IDs such as `music_skill.music_thread_id`.
 
 ## Discord Slash Commands

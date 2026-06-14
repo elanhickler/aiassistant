@@ -50,6 +50,7 @@ Settings are loaded from root `settings.jsonc` first, then merged with `agents/<
 * `identity` : The bot's name, unique ID, nicknames, and optional mention role IDs.
 * `identity.mention_role_ids` : Optional Discord role IDs that count as targeting this agent inside pipe commands.
 * `enabled_skills` : Optional implemented skills to load. Story and time are core systems and always loaded.
+* `skill_aliases` : Pipe command aliases for canonical skills or commands. This can be overridden per agent, for example to let `image:` also be called `paint:`.
 * `discord_status_update.source_skills` : Optional enabled skills allowed to provide hints for natural-language status notes after summarization. Unknown or unavailable skills are ignored.
 * `vision_skill` : Settings for the optional standalone image-description skill. Vision descriptions are uncertain observations and should not be treated as durable truth without user confirmation.
 * `global_persona_file` : Repo-level persona addition appended to every agent persona at runtime.

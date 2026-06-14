@@ -8,6 +8,13 @@ The public command is:
 ||@agent image: natural language guidance||
 ```
 
+`image:` is the canonical command name. `skill_aliases.image` may add local names such as:
+
+```text
+||@agent imagegen: natural language guidance||
+||@agent paint: natural language guidance||
+```
+
 In DMs, `@agent` may be optional when the runtime already knows which agent is being addressed.
 
 ## Meaning
