@@ -25,6 +25,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `docs/visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
 * `docs/visual-expression-request.md` : Request object format for future generated visual expressions.
 * `docs/visual-request-lifecycle.md` : State flow for queued, generating, previewed, saved, promoted, failed, and cancelled visual requests.
+* `docs/visual-pipe-commands.md` : Planned manual pipe command shape for user-requested local visual expressions.
 * `docs/visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
 * `docs/visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
@@ -56,6 +57,7 @@ The first implementation should be local-first.
 
 Requests should follow `docs/visual-expression-request.md` so manual Yculth actions, future bot hooks, and generated output metadata all speak the same shape.
 Request states should follow `docs/visual-request-lifecycle.md`.
+Future manual Discord control should follow `docs/visual-pipe-commands.md`.
 
 ## Boundaries
 
