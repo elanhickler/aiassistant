@@ -84,11 +84,13 @@ When included in hidden context, visual memory should be compact.
 Example:
 
 ```text
-visual memory:
-* Example expression : The agent has a soft, worried expression used when they are trying to be gentle.
+Remembered visual guidance:
+* self / self-portrait : The agent has a soft, worried expression used when they are trying to be gentle.
 ```
 
 Do not include full prompts, absolute paths, provider metadata, or hidden prompt context in normal chat context.
+
+The current Discord runtime includes up to `planned_skill_settings.visualexpression.max_visual_memories_per_context` recent visual memories through the `visualexpression` skill context block.
 
 ## Summary Interaction
 

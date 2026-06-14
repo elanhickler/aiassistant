@@ -418,6 +418,24 @@ export function createVisualExpressionSkill(context) {
     ].join("\n");
   }
 
+  async function formatVisualMemoryContext() {
+    const limit = Math.max(0, Number(settings.max_visual_memories_per_context || 0));
+    if (limit <= 0) return "";
+
+    const memories = (await readAllVisualMemories()).slice(0, limit);
+    if (memories.length === 0) return "";
+
+    return [
+      "Remembered visual guidance:",
+      ...memories.map((memory) => {
+        const type = memory.output_type || memory.memory_type || "visual";
+        const summary = String(memory.summary || "").replace(/\s+/g, " ").trim();
+        const style = String(memory.style_preset || "").trim();
+        return `* ${type}${style ? ` / ${style}` : ""} : ${summary}`;
+      }),
+    ].join("\n");
+  }
+
   function parseReviewNoteInput(content = "") {
     const text = String(content || "").trim();
     if (!text) throw new Error("visual note needs text.");
@@ -729,7 +747,8 @@ export function createVisualExpressionSkill(context) {
     requiredSettings() {
       return ["planned_skill_settings.visualexpression"];
     },
-    getContextBlocks() {
+    async getContextBlocks() {
+      const memoryContext = await formatVisualMemoryContext();
       return {
         title: "Visual Expression Skill",
         source: "discord-bot/skills/visualexpression.js",
@@ -748,6 +767,8 @@ export function createVisualExpressionSkill(context) {
           `Output folder: ${settings.output_folder}`,
           `Max visuals per reply: ${settings.max_visuals_per_reply}`,
           `Max variants per request: ${settings.max_variants_per_request}`,
+          "",
+          memoryContext,
         ].join("\n"),
       };
     },
@@ -848,6 +869,7 @@ export function createVisualExpressionSkill(context) {
     formatReviewedRequestList,
     formatPromotedRequestList,
     formatVisualMemoryList,
+    formatVisualMemoryContext,
     noteRequest,
     processQueuedRequests,
     promoteRequest,
