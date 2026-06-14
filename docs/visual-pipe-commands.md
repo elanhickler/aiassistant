@@ -27,6 +27,7 @@ In servers, use the agent name.
 ||@agent visual memory||
 ||@agent visual memory: memory-id||
 ||@agent visual tags||
+||@agent visual stats||
 ||@agent visual context||
 ||@agent visual context: search text||
 ||@agent visual show||
@@ -67,6 +68,7 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual memory` : Show details for the latest visual memory.
 * `visual memory: memory-id` : Show details for a specific visual memory.
 * `visual tags` : Show recall tags used by visual memories.
+* `visual stats` : Show counts for local visual requests, reviews, and memories.
 * `visual context` : Show remembered visual guidance that can enter hidden context.
 * `visual context: search text` : Show matching remembered visual guidance that can enter hidden context.
 * `visual show` : Show compact details and recent notes for the latest local visual request.
@@ -155,6 +157,17 @@ For `visual tags`, expected response:
 visual memory tags:
 * portrait : 2
 * soft : 1
+```
+
+For `visual stats`, expected response:
+
+```text
+visual stats:
+requests: 3
+request_status: queued 2, failed 1
+reviews: 2
+memories: 1
+recall_tags: 2
 ```
 
 For `visual context`, expected response:

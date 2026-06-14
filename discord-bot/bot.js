@@ -1427,6 +1427,7 @@ function helpCommandLists() {
       [`||${agentCommandName} visual memory||`, "Show details for the latest visual memory."],
       [`||${agentCommandName} visual memory: memory-id||`, "Show details for a specific visual memory."],
       [`||${agentCommandName} visual tags||`, "Show recall tags used by visual memories."],
+      [`||${agentCommandName} visual stats||`, "Show counts for local visual requests, reviews, and memories."],
       [`||${agentCommandName} visual context||`, "Show remembered visual guidance that can enter hidden context."],
       [`||${agentCommandName} visual context: text||`, "Show matching remembered visual guidance that can enter hidden context."],
       [`||${agentCommandName} visual show||`, "Show compact details for the latest local visual request."],
@@ -1958,10 +1959,10 @@ function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
 
-  const visualMatch = targetedText.match(/^visual(?:\s+(requests|reviewed|promoted|memories|memory|tags|context|show|note|review|promote|remember|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
+  const visualMatch = targetedText.match(/^visual(?:\s+(requests|reviewed|promoted|memories|memory|tags|stats|context|show|note|review|promote|remember|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
   if (visualMatch) {
     const visualKeyword = (visualMatch[1] || "").toLowerCase();
-    const visualActions = ["cancel", "context", "memories", "memory", "note", "process", "promote", "promoted", "remember", "requests", "retry", "review", "reviewed", "show", "tags"];
+    const visualActions = ["cancel", "context", "memories", "memory", "note", "process", "promote", "promoted", "remember", "requests", "retry", "review", "reviewed", "show", "stats", "tags"];
     return {
       kind: "visual",
       action: visualActions.includes(visualKeyword) ? visualKeyword : "",

@@ -508,6 +508,43 @@ export function createVisualExpressionSkill(context) {
     ].join("\n");
   }
 
+  function countBy(items, getter) {
+    const counts = new Map();
+    for (const item of items) {
+      const key = String(getter(item) || "unknown").trim() || "unknown";
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return [...counts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  }
+
+  function formatCountLine(title, counts) {
+    if (counts.length === 0) return `${title}: none`;
+    return `${title}: ${counts.map(([key, count]) => `${key} ${count}`).join(", ")}`;
+  }
+
+  async function formatVisualStats() {
+    const [requests, reviews, memories] = await Promise.all([
+      readAllRequests(),
+      readAllReviews(),
+      readAllVisualMemories(),
+    ]);
+    const tagCount = memories.reduce((count, memory) => (
+      count + (Array.isArray(memory.recall_tags) ? memory.recall_tags.length : 0)
+    ), 0);
+
+    return [
+      "visual stats:",
+      `requests: ${requests.length}`,
+      formatCountLine("request_status", countBy(requests, (request) => request?.result?.status)),
+      formatCountLine("request_type", countBy(requests, (request) => request?.output_type || "auto")),
+      `reviews: ${reviews.length}`,
+      formatCountLine("review_state", countBy(reviews, (review) => review?.review_state)),
+      `memories: ${memories.length}`,
+      formatCountLine("memory_type", countBy(memories, (memory) => memory?.output_type || memory?.memory_type || "auto")),
+      `recall_tags: ${tagCount}`,
+    ].join("\n");
+  }
+
   async function formatVisualMemoryContext({ query = "" } = {}) {
     const limit = Math.max(0, Number(settings.max_visual_memories_per_context || 0));
     if (limit <= 0) return "";
@@ -909,6 +946,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatVisualMemoryTags());
         return true;
       }
+      if (command.action === "stats") {
+        await safeReply(message, await formatVisualStats());
+        return true;
+      }
       if (command.action === "context") {
         const contextText = await formatVisualMemoryContext({ query: command.content });
         await safeReply(message, contextText || (command.content
@@ -987,6 +1028,7 @@ export function createVisualExpressionSkill(context) {
     formatVisualMemoryList,
     formatVisualMemoryTags,
     formatVisualMemoryContext,
+    formatVisualStats,
     noteRequest,
     processQueuedRequests,
     promoteRequest,
