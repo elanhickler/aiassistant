@@ -17,6 +17,7 @@ Use only the parts that help the requested visual.
 * references : only selected reference IDs from `soul/visual-references/manifest.jsonl`.
 
 Use `docs/visual-reference-selection.md` to choose references before assembling the prompt.
+Use `docs/visual-privacy-boundary.md` before sending the prompt to a provider or internet search.
 
 ## Prompt Shape
 
@@ -73,3 +74,11 @@ Start small.
 * Use one main subject unless the output type is `scene`.
 * Keep assembled prompt source under the configured context character limit.
 * Do not include raw shortmemory transcripts unless a line is directly relevant.
+
+## Privacy
+
+Assemble from selected facts and summaries.
+
+Do not include secrets, local absolute paths, full memory files, full settings files, or hidden subtext as direct quotes.
+
+Use `docs/visual-privacy-boundary.md` for the full boundary.

@@ -6,6 +6,8 @@ The local machine stays the source of truth. Discord receives selected outputs, 
 
 This is a planning contract only. It is not wired into the Discord runtime yet.
 
+Use `docs/visual-privacy-boundary.md` before posting generated visual notes or attachments to Discord.
+
 ## Default Rule
 
 Generated visuals should not be posted to Discord automatically by default.

@@ -29,6 +29,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `docs/visual-pipe-commands.md` : Planned manual pipe command shape for user-requested local visual expressions.
 * `docs/visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
 * `docs/visual-provider-contract.md` : Provider input, output, error, retry, and path rules for image generation adapters.
+* `docs/visual-privacy-boundary.md` : Rules for what visual tooling may send to providers, web search, or Discord.
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
 * `docs/visual-memory.md` : Compact memory notes for meaningful visuals that should be recallable later.
 * `docs/visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
@@ -41,6 +42,7 @@ Let agents eventually generate their own visual artifacts as needed:
 Internet downloads should stay deliberate and traceable.
 
 * Download only into `soul/visual-references/`.
+* Search queries should follow `docs/visual-privacy-boundary.md`.
 * Keep a sidecar note beside each downloaded reference when possible.
 * The sidecar note should include source URL, creator/license when known, download time, and why the reference was useful.
 * Track downloaded references in `soul/visual-references/manifest.jsonl`.
@@ -70,6 +72,7 @@ Future manual Discord control should follow `docs/visual-pipe-commands.md`.
 Future Discord image posting should follow `docs/visual-discord-posting.md`.
 Visual memory should follow `docs/visual-memory.md`.
 Visual providers should follow `docs/visual-provider-contract.md`.
+Visual privacy boundaries should follow `docs/visual-privacy-boundary.md`.
 
 ## Boundaries
 

@@ -6,6 +6,8 @@ The first intended provider is local Yculth imagegen. Other providers should use
 
 This is a planning contract only. It is not wired into the Discord runtime yet.
 
+Use `docs/visual-privacy-boundary.md` before sending provider input.
+
 ## Provider Input
 
 A provider receives one focused generation job.

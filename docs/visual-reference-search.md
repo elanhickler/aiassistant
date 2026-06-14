@@ -6,6 +6,8 @@ It records what the system looked for and which candidates were found, so downlo
 
 This is a planning contract only. It is not wired into the Discord runtime yet.
 
+Use `docs/visual-privacy-boundary.md` before sending internet search queries.
+
 ## Default Rule
 
 Searching may find many candidates.
@@ -94,3 +96,4 @@ Prefer candidates with:
 * Do not treat search candidates as downloaded references.
 * Do not use a candidate in prompt assembly until it is downloaded or manually approved.
 * Do not put raw roleplay hidden context into web search queries.
+* Do not put local file paths, secrets, or raw memory dumps into search queries.

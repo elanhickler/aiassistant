@@ -30,6 +30,7 @@ Add a future `Visuals` page, separate from `Imagegen`.
 * request detail
 * selected references
 * prompt preview
+* privacy preview
 * visual memory note
 * generated output preview
 * promote buttons
@@ -52,6 +53,7 @@ Useful columns:
 * state
 * output type
 * reason
+* privacy status
 * updated time
 * linked output
 
@@ -86,6 +88,7 @@ Useful controls:
 
 * open image
 * open prompt note
+* open privacy preview
 * open visual memory note
 * copy prompt
 * promote to art
@@ -105,6 +108,7 @@ Promotion should write a short note beside the promoted image.
 
 Use `docs/visual-promotion.md` for details.
 Use `docs/visual-discord-posting.md` for posting selected outputs back into Discord.
+Use `docs/visual-privacy-boundary.md` for outbound prompt and posting previews.
 
 ## Boundaries
 
@@ -114,3 +118,4 @@ Use `docs/visual-discord-posting.md` for posting selected outputs back into Disc
 * Do not merge reference downloads and generated outputs into one folder.
 * Cleanup should follow `docs/visual-retention.md`.
 * Discord posting should follow `docs/visual-discord-posting.md`.
+* Prompt, search, and posting previews should follow `docs/visual-privacy-boundary.md`.
