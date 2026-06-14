@@ -133,6 +133,7 @@ export function createVisualExpressionSkill(context) {
   const promptFolder = path.join(outputFolder, "prompts");
   const requestLogPath = path.join(outputFolder, settings.request_log_file);
   const reviewLogPath = path.join(outputFolder, settings.visual_review_file);
+  const visualMemoryPath = path.join(outputFolder, settings.visual_memory_file);
 
   async function appendRequestEvent(requestId, state, message, extra = {}) {
     await mkdir(outputFolder, { recursive: true });
@@ -389,6 +390,34 @@ export function createVisualExpressionSkill(context) {
     return formatReviewList("promoted visual requests:", reviews, limit);
   }
 
+  async function readAllVisualMemories() {
+    const text = await readFile(visualMemoryPath, "utf8").catch((error) => {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    });
+    if (!text.trim()) return [];
+
+    const memories = [];
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      memories.push(JSON.parse(line));
+    }
+    return memories.sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""));
+  }
+
+  async function formatVisualMemoryList({ limit = 8 } = {}) {
+    const memories = (await readAllVisualMemories()).slice(0, limit);
+    if (memories.length === 0) return "no visual memories found";
+
+    return [
+      "visual memories:",
+      ...memories.map((memory) => {
+        const summary = String(memory.summary || "").replace(/\s+/g, " ").slice(0, 90);
+        return `* ${memory.id} : ${memory.output_type || "auto"} : ${summary}`;
+      }),
+    ].join("\n");
+  }
+
   function parseReviewNoteInput(content = "") {
     const text = String(content || "").trim();
     if (!text) throw new Error("visual note needs text.");
@@ -513,6 +542,54 @@ export function createVisualExpressionSkill(context) {
     await mkdir(outputFolder, { recursive: true });
     await appendFile(reviewLogPath, `${JSON.stringify(review)}\n`);
     return { request, review };
+  }
+
+  function parseRememberInput(content = "") {
+    const text = String(content || "").trim();
+    if (!text) {
+      return { requestId: "", note: "" };
+    }
+
+    const delimiterIndex = text.indexOf("|");
+    if (delimiterIndex === -1) {
+      return { requestId: text, note: "" };
+    }
+
+    const requestId = text.slice(0, delimiterIndex).trim();
+    const note = text.slice(delimiterIndex + 1).trim();
+    if (!requestId) throw new Error("visual remember request id is blank before |.");
+    return { requestId, note };
+  }
+
+  async function rememberRequest(content = "") {
+    const { requestId, note } = parseRememberInput(content);
+    const request = await findRequestByIdOrLatest(requestId);
+    const reviews = await readReviewsForRequest(request.id, { limit: 5 });
+    const latestReview = reviews.find((review) => reviewStates.includes(review?.review_state || ""));
+    const latestPromotion = reviews.find((review) => review?.review_state === "promote_candidate");
+    const summaryParts = [
+      note,
+      latestPromotion?.notes,
+      latestReview?.notes,
+      request.prompt,
+    ].map((part) => String(part || "").trim()).filter(Boolean);
+    const memory = {
+      id: `${timestampId()}-${safeIdText(request.output_type || "visual") || "visual"}`,
+      request_id: request.id,
+      agent: agentName,
+      output_type: request.output_type || "",
+      summary: summaryParts[0] || "Remember this visual direction.",
+      prompt: request.prompt || "",
+      style_preset: request.style_preset || "",
+      source_review_state: latestReview?.review_state || "",
+      source_review_id: latestReview?.id || "",
+      source_prompt_path: request.prompt_path || "",
+      created_at: new Date().toISOString(),
+    };
+
+    await mkdir(outputFolder, { recursive: true });
+    await appendFile(visualMemoryPath, `${JSON.stringify(memory)}\n`);
+    return { request, memory };
   }
 
   async function findRequestByIdOrLatestQueued(requestId) {
@@ -699,6 +776,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatPromotedRequestList());
         return true;
       }
+      if (command.action === "memories") {
+        await safeReply(message, await formatVisualMemoryList());
+        return true;
+      }
       if (command.action === "show") {
         await safeReply(message, await formatRequestDetails(command.content));
         return true;
@@ -726,6 +807,15 @@ export function createVisualExpressionSkill(context) {
           "visual request marked for promotion",
           `id: ${request.id}`,
           "state: promote_candidate",
+        ].join("\n"));
+        return true;
+      }
+      if (command.action === "remember") {
+        const { request, memory } = await rememberRequest(command.content);
+        await safeReply(message, [
+          "visual request remembered",
+          `id: ${request.id}`,
+          `memory: ${memory.id}`,
         ].join("\n"));
         return true;
       }
@@ -757,9 +847,11 @@ export function createVisualExpressionSkill(context) {
     formatRequestDetails,
     formatReviewedRequestList,
     formatPromotedRequestList,
+    formatVisualMemoryList,
     noteRequest,
     processQueuedRequests,
     promoteRequest,
+    rememberRequest,
     reviewRequest,
     retryRequest,
     onReady() {

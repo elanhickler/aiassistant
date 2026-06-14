@@ -1422,6 +1422,7 @@ function helpCommandLists() {
       [`||${agentCommandName} visual requests||`, "Show recent local visual requests and statuses."],
       [`||${agentCommandName} visual reviewed||`, "Show recent local visual requests with human reviews."],
       [`||${agentCommandName} visual promoted||`, "Show recent local visual requests marked for promotion."],
+      [`||${agentCommandName} visual memories||`, "Show recent remembered visual guidance."],
       [`||${agentCommandName} visual show||`, "Show compact details for the latest local visual request."],
       [`||${agentCommandName} visual show: request-id||`, "Show compact details for a specific local visual request."],
       [`||${agentCommandName} visual note: text||`, "Attach a human note to the latest local visual request."],
@@ -1430,6 +1431,8 @@ function helpCommandLists() {
       [`||${agentCommandName} visual review: request-id | state | text||`, "Review a specific local visual request."],
       [`||${agentCommandName} visual promote||`, "Mark the latest local visual request as a promotion candidate."],
       [`||${agentCommandName} visual promote: request-id | text||`, "Mark a specific local visual request as a promotion candidate."],
+      [`||${agentCommandName} visual remember||`, "Remember the latest local visual request as durable visual guidance."],
+      [`||${agentCommandName} visual remember: request-id | text||`, "Remember a specific local visual request as durable visual guidance."],
       [`||${agentCommandName} visual cancel||`, "Cancel the latest queued local visual request without deleting files."],
       [`||${agentCommandName} visual cancel: request-id||`, "Cancel a specific queued local visual request without deleting files."],
       [`||${agentCommandName} visual retry||`, "Clone the latest retryable failed/cancelled visual request into a new queued request."],
@@ -1949,10 +1952,10 @@ function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
 
-  const visualMatch = targetedText.match(/^visual(?:\s+(requests|reviewed|promoted|show|note|review|promote|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
+  const visualMatch = targetedText.match(/^visual(?:\s+(requests|reviewed|promoted|memories|show|note|review|promote|remember|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
   if (visualMatch) {
     const visualKeyword = (visualMatch[1] || "").toLowerCase();
-    const visualActions = ["cancel", "note", "process", "promote", "promoted", "requests", "retry", "review", "reviewed", "show"];
+    const visualActions = ["cancel", "memories", "note", "process", "promote", "promoted", "remember", "requests", "retry", "review", "reviewed", "show"];
     return {
       kind: "visual",
       action: visualActions.includes(visualKeyword) ? visualKeyword : "",

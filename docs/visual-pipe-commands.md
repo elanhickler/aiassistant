@@ -22,6 +22,7 @@ In servers, use the agent name.
 ||@agent visual requests||
 ||@agent visual reviewed||
 ||@agent visual promoted||
+||@agent visual memories||
 ||@agent visual show||
 ||@agent visual show: request-id||
 ||@agent visual note: note text||
@@ -30,6 +31,8 @@ In servers, use the agent name.
 ||@agent visual review: request-id | state | note text||
 ||@agent visual promote||
 ||@agent visual promote: request-id | note text||
+||@agent visual remember||
+||@agent visual remember: request-id | note text||
 ||@agent visual cancel||
 ||@agent visual cancel: request-id||
 ||@agent visual retry||
@@ -52,6 +55,7 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual requests` : Show recent local visual requests and statuses.
 * `visual reviewed` : Show recent local visual requests with human review decisions.
 * `visual promoted` : Show recent local visual requests marked as promotion candidates.
+* `visual memories` : Show recent remembered visual guidance.
 * `visual show` : Show compact details and recent notes for the latest local visual request.
 * `visual show: request-id` : Show compact details and recent notes for a specific local visual request.
 * `visual note: note text` : Attach a human note to the latest local visual request.
@@ -60,6 +64,8 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual review: request-id | state | note text` : Review a specific local visual request.
 * `visual promote` : Mark the latest local visual request as a promotion candidate without moving files.
 * `visual promote: request-id | note text` : Mark a specific local visual request as a promotion candidate without moving files.
+* `visual remember` : Remember the latest local visual request as durable visual guidance without moving files.
+* `visual remember: request-id | note text` : Remember a specific local visual request as durable visual guidance without moving files.
 * `visual cancel` : Cancel the latest queued local visual request without deleting files.
 * `visual cancel: request-id` : Cancel a specific queued local visual request without deleting files.
 * `visual retry` : Clone the latest retryable failed/cancelled request into a new queued request.
@@ -103,6 +109,13 @@ promoted visual requests:
 * request-id : promote_candidate : Good likeness direction.
 ```
 
+For `visual memories`, expected response:
+
+```text
+visual memories:
+* memory-id : self : Good likeness direction.
+```
+
 For `visual show`, expected response:
 
 ```text
@@ -136,6 +149,14 @@ For `visual promote`, expected response:
 visual request marked for promotion
 id: request-id
 state: promote_candidate
+```
+
+For `visual remember`, expected response:
+
+```text
+visual request remembered
+id: request-id
+memory: memory-id
 ```
 
 Supported review states:

@@ -2,7 +2,7 @@
 
 Visual memory is how the agent remembers meaningful generated visuals without dragging every prompt, file, and image into normal chat context.
 
-This is a planning contract only. It is not wired into the Discord runtime yet.
+This is partly wired into the Discord runtime through `visual remember`, which records remembered request guidance before image generation exists.
 
 ## Default Rule
 
@@ -34,6 +34,24 @@ Use one JSON object per remembered visual.
   "source": "generated",
   "created_at": "2026-06-13T00:00:00.000Z",
   "updated_at": "2026-06-13T00:00:00.000Z"
+}
+```
+
+Before an output image exists, `visual remember` may write a request-backed memory row:
+
+```json
+{
+  "id": "2026-06-13-example-visual-memory",
+  "request_id": "2026-06-13-example-visual-request",
+  "agent": "AgentName",
+  "output_type": "self",
+  "summary": "Good likeness direction.",
+  "prompt": "soft portrait",
+  "style_preset": "self-portrait",
+  "source_review_state": "promote_candidate",
+  "source_review_id": "2026-06-13-example-promote-candidate",
+  "source_prompt_path": "prompts/2026-06-13-example-visual-request.md",
+  "created_at": "2026-06-13T00:00:00.000Z"
 }
 ```
 
@@ -91,6 +109,8 @@ There is an image file named 2026-06-13-example.png.
 ## Promotion Interaction
 
 Promotion can create or update a visual memory entry.
+
+`visual remember` creates an append-only memory entry from an existing request. It does not move files, promote images into `soul/art/`, or post images to Discord.
 
 Promoted `soul/art/` and `soul/emojis/` files should have stronger recall weight than unpromoted generated experiments.
 
