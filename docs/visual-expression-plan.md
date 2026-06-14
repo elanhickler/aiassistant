@@ -20,6 +20,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `soul/visual-references/` : Downloaded or manually collected references from the internet. These are source materials, not generated outputs.
 * `regenerated/visualexpression/` : Generated images created by future tooling.
 * `docs/visual-reference-acquisition.md` : Rules for finding and downloading internet visual references.
+* `docs/visual-reference-search.md` : Search log format for internet reference candidates before download.
 * `docs/visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
 * `docs/visual-reference-selection.md` : Rules for choosing relevant references for one visual request.
 * `docs/visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
@@ -42,6 +43,8 @@ Internet downloads should stay deliberate and traceable.
 * Keep a sidecar note beside each downloaded reference when possible.
 * The sidecar note should include source URL, creator/license when known, download time, and why the reference was useful.
 * Track downloaded references in `soul/visual-references/manifest.jsonl`.
+* Track reference searches and candidates in `soul/visual-references/searches.jsonl`.
+* Use `docs/visual-reference-search.md` before download when search candidates need review.
 * Use `docs/visual-reference-acquisition.md` for download limits, source handling, and preview-first behavior.
 * Do not treat downloaded references as agent-owned generated output.
 * Prefer references that are clearly reusable, user-provided, public-domain, Creative Commons, or otherwise suitable for private local reference use.

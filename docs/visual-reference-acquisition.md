@@ -16,6 +16,7 @@ The downloader should create:
 
 ```text
 soul/visual-references/
+    searches.jsonl
     manifest.jsonl
     images/
     notes/
@@ -44,11 +45,14 @@ Search should be driven by a clear visual need.
 
 1. Build a search phrase from output type and prompt seed.
 2. Search configured reference sources, if any.
-3. Keep a short candidate list with source URLs.
-4. Download only the best candidates within the configured limit.
-5. Write sidecar notes.
-6. Append manifest rows.
-7. Let reference selection decide later whether these references are useful for a prompt.
+3. Record candidates in `searches.jsonl`.
+4. Review candidates when review is required.
+5. Download only the best candidates within the configured limit.
+6. Write sidecar notes.
+7. Append manifest rows.
+8. Let reference selection decide later whether these references are useful for a prompt.
+
+Use `docs/visual-reference-search.md` for the candidate search format.
 
 ## Manifest Minimum
 

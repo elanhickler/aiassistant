@@ -34,6 +34,7 @@ Starter project for a multi-agent AI assistant system.
     * `visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
     * `visual-discord-posting.md` : Rules for posting selected generated visuals back into Discord.
     * `visual-reference-acquisition.md` : Rules for finding and downloading internet visual references.
+    * `visual-reference-search.md` : Search log format for internet reference candidates before download.
     * `visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
     * `visual-reference-selection.md` : Rules for choosing relevant references for one visual request.
     * `visual-request-lifecycle.md` : State flow for queued, generating, previewed, saved, promoted, failed, and cancelled visual requests.

@@ -65,6 +65,10 @@ soul/visual-references/manifest.jsonl
 
 Useful controls:
 
+* open search log
+* review candidate
+* reject candidate
+* download approved candidate
 * filter by output type
 * open source URL
 * open sidecar note

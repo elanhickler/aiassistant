@@ -260,12 +260,22 @@
             // descrip: Manifest file inside reference_folder that records downloaded or manually collected visual references.
             // default: "manifest.jsonl"
             "reference_manifest_file": "manifest.jsonl",
+            // descrip: JSONL file inside reference_folder that records future internet search requests and candidate reference results before download.
+            // default: "searches.jsonl"
+            "reference_search_log_file": "searches.jsonl",
             // descrip: Optional websites or search pages to use as visual reference starting points. Keep blank until a source is intentionally chosen.
             // default: []
             "reference_sources": [],
+            // descrip: Maximum candidate reference results future tooling may keep from one internet search before review.
+            // range: 0 or higher.
+            // default: 12
+            "max_reference_candidates_per_search": 12,
             // descrip: If true, future implementation may download visual references from configured sources into reference_folder. It should store source URLs and attribution notes with downloads.
             // default: false
             "allow_internet_reference_downloads": false,
+            // descrip: If true, future visual reference candidates should be reviewed before they become downloaded manifest entries.
+            // default: true
+            "require_reference_review_before_download": true,
             // descrip: Maximum internet reference downloads allowed for one future acquisition request.
             // range: 0 or higher.
             // default: 3

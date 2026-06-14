@@ -20,6 +20,7 @@ agents/<Agent>/regenerated/visualexpression/
 
 ```text
 soul/visual-references/
+    searches.jsonl
     manifest.jsonl
     images/
     notes/
@@ -67,6 +68,7 @@ Useful details:
 ## Rules
 
 * Prefer source pages over direct image URLs when both are available.
+* Search candidates should be recorded in `searches.jsonl` before download when future tooling performs internet search.
 * Keep creator and license blank when unknown instead of guessing.
 * Do not store API keys, cookies, private headers, or session data.
 * Do not treat downloaded references as generated agent-owned art.
