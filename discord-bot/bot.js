@@ -1423,6 +1423,7 @@ function helpCommandLists() {
       [`||${agentCommandName} visual reviewed||`, "Show recent local visual requests with human reviews."],
       [`||${agentCommandName} visual promoted||`, "Show recent local visual requests marked for promotion."],
       [`||${agentCommandName} visual memories||`, "Show recent remembered visual guidance."],
+      [`||${agentCommandName} visual memories: text||`, "Search remembered visual guidance."],
       [`||${agentCommandName} visual context||`, "Show remembered visual guidance that can enter hidden context."],
       [`||${agentCommandName} visual show||`, "Show compact details for the latest local visual request."],
       [`||${agentCommandName} visual show: request-id||`, "Show compact details for a specific local visual request."],

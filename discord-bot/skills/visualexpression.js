@@ -405,12 +405,31 @@ export function createVisualExpressionSkill(context) {
     return memories.sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""));
   }
 
-  async function formatVisualMemoryList({ limit = 8 } = {}) {
-    const memories = (await readAllVisualMemories()).slice(0, limit);
-    if (memories.length === 0) return "no visual memories found";
+  function visualMemorySearchText(memory) {
+    return [
+      memory.id,
+      memory.output_type,
+      memory.memory_type,
+      memory.summary,
+      memory.prompt,
+      memory.style_preset,
+      memory.source_review_state,
+    ].map((part) => String(part || "").toLowerCase()).join("\n");
+  }
+
+  async function formatVisualMemoryList({ limit = 8, query = "" } = {}) {
+    const searchText = String(query || "").trim().toLowerCase();
+    const allMemories = await readAllVisualMemories();
+    const memories = (searchText
+      ? allMemories.filter((memory) => visualMemorySearchText(memory).includes(searchText))
+      : allMemories
+    ).slice(0, limit);
+    if (memories.length === 0) {
+      return searchText ? `no visual memories found for: ${query}` : "no visual memories found";
+    }
 
     return [
-      "visual memories:",
+      searchText ? `visual memories for: ${query}` : "visual memories:",
       ...memories.map((memory) => {
         const summary = String(memory.summary || "").replace(/\s+/g, " ").slice(0, 90);
         return `* ${memory.id} : ${memory.output_type || "auto"} : ${summary}`;
@@ -798,7 +817,7 @@ export function createVisualExpressionSkill(context) {
         return true;
       }
       if (command.action === "memories") {
-        await safeReply(message, await formatVisualMemoryList());
+        await safeReply(message, await formatVisualMemoryList({ query: command.content }));
         return true;
       }
       if (command.action === "context") {
