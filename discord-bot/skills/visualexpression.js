@@ -131,6 +131,7 @@ export function createVisualExpressionSkill(context) {
   const requestFolder = path.join(outputFolder, "requests");
   const promptFolder = path.join(outputFolder, "prompts");
   const requestLogPath = path.join(outputFolder, settings.request_log_file);
+  const reviewLogPath = path.join(outputFolder, settings.visual_review_file);
 
   async function appendRequestEvent(requestId, state, message, extra = {}) {
     await mkdir(outputFolder, { recursive: true });
@@ -324,6 +325,44 @@ export function createVisualExpressionSkill(context) {
     return lines.join("\n");
   }
 
+  function parseReviewNoteInput(content = "") {
+    const text = String(content || "").trim();
+    if (!text) throw new Error("visual note needs text.");
+
+    const delimiterIndex = text.indexOf("|");
+    if (delimiterIndex === -1) {
+      return { requestId: "", note: text };
+    }
+
+    const requestId = text.slice(0, delimiterIndex).trim();
+    const note = text.slice(delimiterIndex + 1).trim();
+    if (!requestId) throw new Error("visual note request id is blank before |.");
+    if (!note) throw new Error("visual note text is blank after |.");
+    return { requestId, note };
+  }
+
+  async function noteRequest(content = "") {
+    const { requestId, note } = parseReviewNoteInput(content);
+    const request = await findRequestByIdOrLatest(requestId);
+    const createdAt = new Date().toISOString();
+    const review = {
+      id: `${timestampId()}-note`,
+      output_id: "",
+      request_id: request.id,
+      agent: agentName,
+      reviewer: "human",
+      review_state: "note",
+      score: null,
+      tags: [],
+      notes: note,
+      created_at: createdAt,
+    };
+
+    await mkdir(outputFolder, { recursive: true });
+    await appendFile(reviewLogPath, `${JSON.stringify(review)}\n`);
+    return { request, review };
+  }
+
   async function findRequestByIdOrLatestQueued(requestId) {
     const targetId = String(requestId || "").trim();
     if (targetId) {
@@ -504,6 +543,14 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatRequestDetails(command.content));
         return true;
       }
+      if (command.action === "note") {
+        const { request } = await noteRequest(command.content);
+        await safeReply(message, [
+          "visual request noted",
+          `id: ${request.id}`,
+        ].join("\n"));
+        return true;
+      }
       if (command.action === "cancel") {
         const cancelled = await cancelRequest(command.content);
         await safeReply(message, `visual request cancelled\nid: ${cancelled.id}`);
@@ -530,6 +577,7 @@ export function createVisualExpressionSkill(context) {
     cancelRequest,
     formatRequestList,
     formatRequestDetails,
+    noteRequest,
     processQueuedRequests,
     retryRequest,
     onReady() {

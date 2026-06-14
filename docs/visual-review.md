@@ -1,8 +1,8 @@
 # Visual Review
 
-Visual review is how generated outputs are judged before they are promoted, posted, or remembered.
+Visual review is how generated outputs and pending requests are judged before they are promoted, posted, or remembered.
 
-This is a planning contract only. It is not wired into the Discord runtime yet.
+This is partly wired into the Discord runtime through `visual note`, which records human notes before image generation exists.
 
 Use `docs/visual-variants.md` when reviewing multiple variants of the same request.
 
@@ -20,7 +20,7 @@ Use a review log beside generated outputs:
 agents/<Agent>/regenerated/visualexpression/reviews.jsonl
 ```
 
-Use one JSON object per review.
+Use one JSON object per review or request note.
 
 ```json
 {
@@ -36,11 +36,29 @@ Use one JSON object per review.
 }
 ```
 
+Before an output exists, `visual note` may write a row with `output_id` blank and `request_id` filled in:
+
+```json
+{
+  "id": "2026-06-13-example-visual-note",
+  "output_id": "",
+  "request_id": "2026-06-13-example-visual-request",
+  "agent": "AgentName",
+  "reviewer": "human",
+  "review_state": "note",
+  "score": null,
+  "tags": [],
+  "notes": "Keep the sleepy expression, but make the room darker next time.",
+  "created_at": "2026-06-13T00:00:00.000Z"
+}
+```
+
 ## Review States
 
 Suggested `review_state` values:
 
 * unreviewed : no decision yet.
+* note : human note attached before a final review decision.
 * usable : worth keeping as a generated experiment.
 * promote_candidate : likely worth promoting to `soul/art/` or `soul/emojis/`.
 * needs_edit : useful direction, but needs crop, cleanup, retry, or inpaint.
