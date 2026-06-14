@@ -30,6 +30,7 @@ Add a future `Visuals` page, separate from `Imagegen`.
 * request detail
 * selected references
 * prompt preview
+* style preset selector
 * privacy preview
 * review note
 * visual memory note
@@ -89,6 +90,7 @@ Useful controls:
 
 * open image
 * open prompt note
+* select style preset
 * open privacy preview
 * open review note
 * open visual memory note
@@ -110,6 +112,7 @@ Promotion should write a short note beside the promoted image.
 
 Use `docs/visual-promotion.md` for details.
 Use `docs/visual-review.md` for review states and promotion checks.
+Use `docs/visual-style-presets.md` for style preset selection.
 Use `docs/visual-discord-posting.md` for posting selected outputs back into Discord.
 Use `docs/visual-privacy-boundary.md` for outbound prompt and posting previews.
 

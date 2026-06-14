@@ -17,6 +17,7 @@ Use only the parts that help the requested visual.
 * references : only selected reference IDs from `soul/visual-references/manifest.jsonl`.
 
 Use `docs/visual-reference-selection.md` to choose references before assembling the prompt.
+Use `docs/visual-style-presets.md` to choose reusable style instructions.
 Use `docs/visual-privacy-boundary.md` before sending the prompt to a provider or internet search.
 
 ## Prompt Shape
@@ -29,6 +30,7 @@ subject: Rena, adult anthropomorphic Renamon-like fox woman, yellow fur, long ea
 moment: standing in a dark bedroom, hearing the trigger phrase, guarded but tempted
 expression: wary, ears lowered, claws tense
 background: laptop glow, dim room, scattered clothes
+style preset: scene-readable
 style: readable character illustration, clear silhouette, expressive face
 ```
 
@@ -48,6 +50,16 @@ blurry, unreadable text, extra limbs, duplicate face, malformed hands, low detai
 * `background` : Prioritize place, lighting, weather, architecture, and atmosphere; avoid unnecessary characters.
 * `thought` : Prioritize symbolism, memory fragments, and internal imagery.
 * `dream` : Prioritize dream logic, surreal continuity, and emotional motifs.
+
+## Style Presets
+
+Use one style preset per visual request.
+
+The style preset should add visual direction without replacing subject, action, memory, or references.
+
+Show the selected preset in Yculth prompt preview.
+
+Use `docs/visual-style-presets.md` for preset names and defaults.
 
 ## Reference Use
 

@@ -205,6 +205,27 @@
             // range: 0 or higher.
             // default: 4000
             "prompt_context_character_limit": 4000,
+            // descrip: Optional agent-local JSONC file for reusable visual style presets.
+            // default: "soul/visual-style-presets.jsonc"
+            "style_presets_file": "soul/visual-style-presets.jsonc",
+            // descrip: Default style preset for generated custom emoji.
+            // default: "emoji-clean"
+            "default_emoji_style_preset": "emoji-clean",
+            // descrip: Default style preset for generated self-images and portraits.
+            // default: "self-portrait"
+            "default_self_style_preset": "self-portrait",
+            // descrip: Default style preset for generated scenes.
+            // default: "scene-readable"
+            "default_scene_style_preset": "scene-readable",
+            // descrip: Default style preset for generated backgrounds.
+            // default: "background-mood"
+            "default_background_style_preset": "background-mood",
+            // descrip: Default style preset for generated thought images.
+            // default: "thought-symbol"
+            "default_thought_style_preset": "thought-symbol",
+            // descrip: Default style preset for generated dream images.
+            // default: "dream-surreal"
+            "default_dream_style_preset": "dream-surreal",
             // descrip: Maximum visual reference IDs to include in one future visual prompt.
             // range: 0 or higher.
             // default: 3

@@ -29,6 +29,7 @@ Starter project for a multi-agent AI assistant system.
     * `visual-expression-request.md` : Request object format for future generated visual expressions.
     * `visual-pipe-commands.md` : Planned manual pipe command shape for user-requested local visual expressions.
     * `visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
+    * `visual-style-presets.md` : Reusable style presets for emoji, portraits, scenes, backgrounds, thoughts, and dreams.
     * `visual-provider-contract.md` : Provider input, output, error, retry, and path rules for image generation adapters.
     * `visual-privacy-boundary.md` : Rules for what visual tooling may send to providers, web search, or Discord.
     * `visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.

@@ -28,6 +28,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `docs/visual-request-lifecycle.md` : State flow for queued, generating, previewed, saved, promoted, failed, and cancelled visual requests.
 * `docs/visual-pipe-commands.md` : Planned manual pipe command shape for user-requested local visual expressions.
 * `docs/visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
+* `docs/visual-style-presets.md` : Reusable style presets for emoji, portraits, scenes, backgrounds, thoughts, and dreams.
 * `docs/visual-provider-contract.md` : Provider input, output, error, retry, and path rules for image generation adapters.
 * `docs/visual-privacy-boundary.md` : Rules for what visual tooling may send to providers, web search, or Discord.
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
@@ -62,11 +63,12 @@ The first implementation should be local-first.
 3. The decision chooses one output type: emoji, self, scene, background, thought, or dream.
 4. The system follows `docs/visual-reference-selection.md` to choose relevant visual references.
 5. The system follows `docs/visual-prompt-assembly.md` to assemble a focused image prompt from selected persona, current message, status, memory, and relevant visual references.
-6. The provider contract sends one focused generation job to Yculth imagegen.
-7. The generated image is cached under `regenerated/visualexpression/`.
-8. The output can receive a visual review note.
-9. If the visual matters, write a compact visual memory note.
-10. Discord posting remains opt-in and should be designed separately.
+6. The prompt includes a style preset from `docs/visual-style-presets.md`.
+7. The provider contract sends one focused generation job to Yculth imagegen.
+8. The generated image is cached under `regenerated/visualexpression/`.
+9. The output can receive a visual review note.
+10. If the visual matters, write a compact visual memory note.
+11. Discord posting remains opt-in and should be designed separately.
 
 Requests should follow `docs/visual-expression-request.md` so manual Yculth actions, future bot hooks, and generated output metadata all speak the same shape.
 Request states should follow `docs/visual-request-lifecycle.md`.
@@ -76,6 +78,7 @@ Visual memory should follow `docs/visual-memory.md`.
 Visual providers should follow `docs/visual-provider-contract.md`.
 Visual privacy boundaries should follow `docs/visual-privacy-boundary.md`.
 Visual review should follow `docs/visual-review.md`.
+Visual style presets should follow `docs/visual-style-presets.md`.
 
 ## Boundaries
 
