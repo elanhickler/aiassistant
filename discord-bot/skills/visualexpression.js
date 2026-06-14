@@ -534,6 +534,11 @@ export function createVisualExpressionSkill(context) {
 
     return [
       "visual stats:",
+      `provider: ${settings.provider}`,
+      `output_folder: ${settings.output_folder}`,
+      `request_log_file: ${settings.request_log_file}`,
+      `visual_review_file: ${settings.visual_review_file}`,
+      `visual_memory_file: ${settings.visual_memory_file}`,
       `requests: ${requests.length}`,
       formatCountLine("request_status", countBy(requests, (request) => request?.result?.status)),
       formatCountLine("request_type", countBy(requests, (request) => request?.output_type || "auto")),

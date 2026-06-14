@@ -163,6 +163,8 @@ For `visual stats`, expected response:
 
 ```text
 visual stats:
+provider: dry-run
+output_folder: regenerated/visualexpression
 requests: 3
 request_status: queued 2, failed 1
 reviews: 2
