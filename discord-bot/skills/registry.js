@@ -36,6 +36,10 @@ export function implementedOptionalSkillNames() {
   return [...optionalSkillFactories.keys()];
 }
 
+export function plannedSkillNamesForRegistry() {
+  return [...placeholderSkillNames];
+}
+
 export function skillImplementationStatus(skillName) {
   const name = String(skillName || "").trim().toLowerCase();
   if (!name) return "blank";

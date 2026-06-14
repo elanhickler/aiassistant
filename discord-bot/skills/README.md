@@ -41,6 +41,8 @@ Startup logs the loaded skill names so a running bot makes its active skill surf
 
 Registry helpers classify skill names as `core`, `implemented`, `planned`, `unknown`, or `blank` so future UI/diagnostics can explain skill settings without duplicating registry logic.
 
+Run `node skills/print-registry.js` from `discord-bot/` to print the current core, implemented, and planned skill names from the registry.
+
 ## Core Systems
 
 These are always loaded and should not be listed in `enabled_skills`.
