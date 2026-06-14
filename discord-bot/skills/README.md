@@ -51,3 +51,4 @@ These are placeholders only. Enabling them should error until they are implement
 * `art` : Future art prompt, reference, and visual memory workflow.
 * `settings` : Future Discord-editable settings workflow.
 * `tts` : Future normal expressive voice output for adult-permitted AI character chat. Fish Audio is the first planned provider through a `SpeechOutputProvider` wrapper; the local Yculth Voice page is the first test surface.
+* `visualexpression` : Future AI-chosen visual expression workflow. Intended outputs include generated emojis, self-images, scenes, backgrounds, thoughts, and dreams that can accompany agent replies when useful.

@@ -158,6 +158,7 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `soul/stories/` : Story output folder used by `||@agent story||`. Story generation and recall search `.md` and `.txt` files here, then combine relevant story text with shortmemory and longmemory as evidence.
 * `soul/art/` and `soul/emojis/` : Placeholder content folders. They are not automatically sent until a future skill or retrieval feature chooses them.
 * `planned_skill_settings.tts` : Placeholder settings for future normal expressive voice output. Fish Audio is the first planned provider. Yculth can use these settings for local TTS tests, but Discord/runtime voice hooks are not implemented yet.
+* `planned_skill_settings.visualexpression` : Placeholder settings for future AI-chosen generated visuals. The intended outputs are emojis, self-images, scenes, backgrounds, thoughts, and dreams. Yculth imagegen is the intended local-first generation surface; Discord posting behavior is not implemented yet.
 
 ## Memory Maintenance Flow
 

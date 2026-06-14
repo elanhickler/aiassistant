@@ -154,6 +154,34 @@
             // range: -20 to 20.
             // default: 0
             "volume": 0
+        },
+        "visualexpression": {
+            // descrip: Placeholder for future AI-chosen generated visuals that can accompany speech, thoughts, scenes, dreams, backgrounds, self-images, and custom emojis. Yculth imagegen is the first local generation surface.
+            // default: false
+            "enabled": false,
+            // descrip: Local generation target. This should stay local-first until Discord posting behavior is intentionally designed.
+            // default: "yculth-imagegen"
+            "provider": "yculth-imagegen",
+            // descrip: Visual output types the agent may eventually request when the skill is implemented.
+            // default: emoji, self, scene, background, thought, dream
+            "output_types": [
+                "emoji",
+                "self",
+                "scene",
+                "background",
+                "thought",
+                "dream"
+            ],
+            // descrip: If true, future implementation may use utility_model to decide when a reply benefits from a generated visual.
+            // default: true
+            "allow_ai_visual_intent": true,
+            // descrip: Maximum generated visuals attached to one normal reply.
+            // range: 0 or higher.
+            // default: 1
+            "max_visuals_per_reply": 1,
+            // descrip: Agent-local folder for generated visual expression outputs.
+            // default: "regenerated/visualexpression"
+            "output_folder": "regenerated/visualexpression"
         }
     },
     // descrip: Maximum number of recent chat messages remembered as hidden context. These messages are sent privately to OpenRouter with each request, which uses input tokens and increases API cost.

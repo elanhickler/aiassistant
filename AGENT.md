@@ -151,6 +151,7 @@ Implemented skills live in `discord-bot/skills/`.
 * Planned placeholder skills should not be enabled until they are implemented.
 * Optional skill-specific memory forum posts are created only when the skill is enabled and implemented. Core posts for time and story behavior are always available through the standard memory forum posts.
 * `planned_skill_settings.tts` : Placeholder settings for normal expressive voice output. Fish Audio is the first planned provider; this is local Yculth TTS only until a runtime skill is implemented.
+* `planned_skill_settings.visualexpression` : Placeholder settings for future AI-chosen generated visuals. Intended output types are emojis, self-images, scenes, backgrounds, thoughts, and dreams. Keep this local-first until Discord posting behavior is deliberately designed.
 
 ## Current Architecture
 

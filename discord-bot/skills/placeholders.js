@@ -7,6 +7,7 @@ const placeholderSkillDescriptions = {
   art: "Future art prompt, reference, and visual memory workflow.",
   settings: "Future Discord-editable settings workflow.",
   tts: "Future normal expressive voice output for adult-permitted AI character chat.",
+  visualexpression: "Future AI-chosen generated visuals for emojis, scenes, thoughts, dreams, backgrounds, and self-images.",
 };
 
 export function plannedSkillNames() {
