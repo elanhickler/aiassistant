@@ -117,6 +117,10 @@ function requestPath(requestFolder, requestId) {
   return path.join(requestFolder, `${requestId}.json`);
 }
 
+function requestIdSuffix(request) {
+  return safeIdText(request?.output_type || "retry") || "retry";
+}
+
 export function createVisualExpressionSkill(context) {
   const { agentFolder, agentName, safeReply, requiredSetting } = context;
   const plannedSkillSettings = requiredSetting("planned_skill_settings");
@@ -254,6 +258,24 @@ export function createVisualExpressionSkill(context) {
     return latestQueued;
   }
 
+  async function findRequestByIdOrLatestRetryable(requestId) {
+    const targetId = String(requestId || "").trim();
+    const requests = await readAllRequests();
+    if (targetId) {
+      const request = requests.find((candidate) => candidate.id === targetId);
+      if (!request) throw new Error(`Visual request not found: ${targetId}`);
+      return request;
+    }
+
+    const latestRetryable = requests.find((request) => {
+      const status = request?.result?.status || "";
+      const retryable = request?.result?.retryable;
+      return status === "cancelled" || (status === "failed" && retryable !== false);
+    });
+    if (!latestRetryable) throw new Error("No failed or cancelled visual request found to retry.");
+    return latestRetryable;
+  }
+
   async function cancelRequest(requestId = "") {
     const request = await findRequestByIdOrLatestQueued(requestId);
     const status = request?.result?.status || "unknown";
@@ -275,6 +297,43 @@ export function createVisualExpressionSkill(context) {
       updated_at: cancelledAt,
     });
     await writeRequest(nextRequest);
+    return nextRequest;
+  }
+
+  async function retryRequest(requestId = "") {
+    const request = await findRequestByIdOrLatestRetryable(requestId);
+    const status = request?.result?.status || "unknown";
+    const retryable = request?.result?.retryable;
+    if (status !== "cancelled" && status !== "failed") {
+      throw new Error(`Visual request ${request.id} is ${status}, only failed or cancelled requests can be retried.`);
+    }
+    if (status === "failed" && retryable === false) {
+      throw new Error(`Visual request ${request.id} is not retryable.`);
+    }
+
+    const createdAt = new Date().toISOString();
+    const retryId = `${timestampId()}-${requestIdSuffix(request)}`;
+    const nextRequest = {
+      ...request,
+      id: retryId,
+      reason: `retry of ${request.id}`,
+      result: {
+        status: "queued",
+        local_path: "",
+        created_at: createdAt,
+        retry_of: request.id,
+      },
+      variants: {
+        ...(request.variants || {}),
+        parent_output_id: request.variants?.parent_output_id || "",
+      },
+    };
+
+    await writeRequest(nextRequest);
+    await appendRequestEvent(retryId, "queued", `retry queued from ${request.id}`, {
+      retry_of: request.id,
+      updated_at: createdAt,
+    });
     return nextRequest;
   }
 
@@ -364,6 +423,15 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, `visual request cancelled\nid: ${cancelled.id}`);
         return true;
       }
+      if (command.action === "retry") {
+        const retry = await retryRequest(command.content);
+        await safeReply(message, [
+          "visual request retry queued",
+          `id: ${retry.id}`,
+          `retry_of: ${retry.result.retry_of}`,
+        ].join("\n"));
+        return true;
+      }
       const request = await queueVisualRequest(command, message);
       await safeReply(message, [
         "visual request queued",
@@ -376,6 +444,7 @@ export function createVisualExpressionSkill(context) {
     cancelRequest,
     formatRequestList,
     processQueuedRequests,
+    retryRequest,
     onReady() {
       console.log(`Visual expression skill loaded with provider ${settings.provider}. Generation remains planning-only.`);
     },
