@@ -7,6 +7,7 @@ Optional skills and core behavior modules live here. Agents choose optional skil
 * `README.md` : This skills overview.
 * `code.js` : Implemented optional conversational coding adapter skill. It calls a configured external command over stdin/stdout instead of doing code operations itself.
 * `discordstatusupdate.js` : Implemented optional status-note skill. It runs after summarization, asks `utility_model` for a concise natural-language status, writes status fields into `soul/status.json`, and mirrors the result through the status memory post.
+* `external-command.js` : Shared helper for skills that call configured external commands with JSON on stdin and text or JSON on stdout.
 * `file.js` : Implemented optional conversational file-management adapter skill. It calls a configured external command over stdin/stdout instead of doing file operations itself.
 * `music.js` : Implemented optional music search and link-formatting hook skill. Discord pipe commands and reactions are one interface; future local or website interfaces can call the same hooks.
 * `placeholders.js` : Registry of planned skills that are allowed to be documented without being implemented.

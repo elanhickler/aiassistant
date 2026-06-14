@@ -2005,6 +2005,47 @@ function stripPipeCommandTarget(text, isDm) {
   return isDm ? trimmedText : null;
 }
 
+const pipeCommandNames = [
+  "reply",
+  "continue",
+  "adjust",
+  "subtext",
+  "summarize",
+  "story",
+  "code",
+  "file",
+  "music",
+  "speak",
+  "vision",
+  "dream",
+  "sleep",
+  "wake",
+  "away",
+  "state",
+  "status",
+  "passtimeminutes",
+  "passtimehours",
+];
+const pipeCommandsAllowedWithoutContent = new Set([
+  "reply",
+  "continue",
+  "dream",
+  "sleep",
+  "wake",
+  "away",
+  "state",
+  "status",
+  "summarize",
+  "story",
+  "music",
+  "speak",
+  "vision",
+]);
+const pipeCommandPattern = new RegExp(
+  `^(${pipeCommandNames.join("|")})(?:\\s*:\\s*([\\s\\S]*))?$`,
+  "i",
+);
+
 function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
@@ -2037,12 +2078,12 @@ function parsePipeCommandText(text, isDm) {
     };
   }
 
-  const commandMatch = canonicalTargetedText.match(/^(reply|continue|adjust|subtext|summarize|story|code|file|music|speak|vision|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
+  const commandMatch = canonicalTargetedText.match(pipeCommandPattern);
   if (!commandMatch) return null;
 
   const kind = commandMatch[1].toLowerCase();
   const content = (commandMatch[2] || "").trimStart().trimEnd();
-  if (!["reply", "continue", "dream", "sleep", "wake", "away", "state", "status", "summarize", "story", "music", "speak", "vision"].includes(kind) && !content) return null;
+  if (!pipeCommandsAllowedWithoutContent.has(kind) && !content) return null;
   return {
     kind,
     content,

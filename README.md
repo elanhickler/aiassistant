@@ -20,6 +20,7 @@ Starter project for a multi-agent AI assistant system.
         * `README.md` : Skills overview.
         * `code.js` : Optional conversational adapter to an external coding command.
         * `discordstatusupdate.js` : Optional status-note skill that updates natural-language status after summarization.
+        * `external-command.js` : Shared helper for external-command-backed skills.
         * `file.js` : Optional conversational adapter to an external file-management command.
         * `music.js` : Optional pipe-command music skill.
         * `placeholders.js` : Registry of planned skills that are documented but not implemented yet.

@@ -1,85 +1,9 @@
-import { spawn } from "node:child_process";
-
-function truncateText(text, maxLength) {
-  const value = String(text || "").trim();
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
-}
-
-function splitCommand(command) {
-  if (Array.isArray(command)) return command.map((part) => String(part)).filter(Boolean);
-  const text = String(command || "").trim();
-  if (!text) return [];
-  return [text];
-}
-
-function runExternalCodeTool({ command, args, payload, timeoutMilliseconds, maxOutputCharacters }) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    });
-
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      child.kill();
-      reject(new Error(`Code skill command timed out after ${timeoutMilliseconds} ms.`));
-    }, timeoutMilliseconds);
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString("utf8");
-      if (stdout.length > maxOutputCharacters * 2) stdout = stdout.slice(-maxOutputCharacters * 2);
-    });
-
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString("utf8");
-      if (stderr.length > maxOutputCharacters * 2) stderr = stderr.slice(-maxOutputCharacters * 2);
-    });
-
-    child.on("error", (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(error);
-    });
-
-    child.on("close", (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(`Code skill command exited ${code}: ${truncateText(stderr || stdout, maxOutputCharacters)}`));
-        return;
-      }
-      resolve({
-        stdout: truncateText(stdout, maxOutputCharacters),
-        stderr: truncateText(stderr, maxOutputCharacters),
-      });
-    });
-
-    child.stdin.end(`${JSON.stringify(payload)}\n`);
-  });
-}
-
-function normalizeCodeToolResult(result, maxOutputCharacters) {
-  const stdout = String(result.stdout || "").trim();
-  if (!stdout) return "code command completed";
-
-  try {
-    const parsed = JSON.parse(stdout);
-    if (typeof parsed.reply === "string") return truncateText(parsed.reply, maxOutputCharacters);
-    if (typeof parsed.message === "string") return truncateText(parsed.message, maxOutputCharacters);
-    if (typeof parsed.text === "string") return truncateText(parsed.text, maxOutputCharacters);
-    return truncateText(JSON.stringify(parsed, null, 2), maxOutputCharacters);
-  } catch {
-    return truncateText(stdout, maxOutputCharacters);
-  }
-}
+import {
+  commandDisplay,
+  normalizeExternalCommandResult,
+  runExternalCommand,
+  splitCommand,
+} from "./external-command.js";
 
 export function createCodeSkill(context) {
   const {
@@ -106,11 +30,12 @@ export function createCodeSkill(context) {
       throw new Error("code_skill.command is blank. Configure it to point at your code tool command.");
     }
 
-    const result = await runExternalCodeTool({
+    const result = await runExternalCommand({
       command,
       args,
       timeoutMilliseconds,
       maxOutputCharacters,
+      label: "Code skill",
       payload: {
         request,
         source,
@@ -120,7 +45,7 @@ export function createCodeSkill(context) {
       },
     });
 
-    return normalizeCodeToolResult(result, maxOutputCharacters);
+    return normalizeExternalCommandResult(result, maxOutputCharacters, "code command completed");
   }
 
   async function handlePipeCommand(commandInput, message) {
@@ -146,7 +71,7 @@ export function createCodeSkill(context) {
     runCodeRequest,
     handlePipeCommand,
     onReady() {
-      if (command) console.log(`Code skill command: ${[command, ...args].join(" ")}`);
+      if (command) console.log(`Code skill command: ${commandDisplay(command, args)}`);
     },
   };
 }
