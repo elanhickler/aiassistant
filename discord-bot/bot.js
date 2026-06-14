@@ -4,7 +4,7 @@ import { appendFile, mkdir, open, readFile, unlink, writeFile } from "node:fs/pr
 import path from "node:path";
 import { buildOpenRouterMessages } from "./context.js";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
-import { createRuntimeSkills, normalizeEnabledSkillNames } from "./skills/registry.js";
+import { createRuntimeSkills, normalizeEnabledSkillNames, skillLoadSummary } from "./skills/registry.js";
 
 const require = createRequire(import.meta.url);
 const { AttachmentBuilder, Client, GatewayIntentBits, Partials } = require("./regenerated/node_modules/discord.js");
@@ -671,6 +671,7 @@ const skillContext = {
   writeRawOpenRouterText,
 };
 skills = createRuntimeSkills(enabledSkills, skillContext);
+console.log(`Loaded skills for ${agentName}: ${skillLoadSummary(skills)}`);
 
 async function runSkillHook(hookName, hookContext) {
   for (const skill of skills) {

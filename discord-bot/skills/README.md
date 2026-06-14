@@ -37,6 +37,8 @@ Implemented skills can expose these fields:
 
 New implemented skills should be registered in `registry.js`. Planned-but-unimplemented ideas should be listed in `placeholders.js` until they have real behavior.
 
+Startup logs the loaded skill names so a running bot makes its active skill surface visible in the terminal.
+
 ## Core Systems
 
 These are always loaded and should not be listed in `enabled_skills`.

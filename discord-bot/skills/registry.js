@@ -57,3 +57,10 @@ export function createRuntimeSkills(enabledSkills, context) {
     }),
   ];
 }
+
+export function skillLoadSummary(skills) {
+  return (skills || [])
+    .map((skill) => String(skill?.name || "unknown"))
+    .filter(Boolean)
+    .join(", ");
+}
