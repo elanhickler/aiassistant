@@ -29,6 +29,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `docs/visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
 * `docs/visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
+* `docs/visual-retention.md` : Cleanup and retention rules for generated visual experiments and references.
 * `docs/visual-yculth-ui.md` : Future Yculth UI shape for requests, references, outputs, and promotion.
 
 ## Internet References
@@ -68,3 +69,4 @@ Future manual Discord control should follow `docs/visual-pipe-commands.md`.
 * The local UI should follow `docs/visual-yculth-ui.md`.
 * Generated visuals should be attached to memory only when they become meaningful, not merely because they exist.
 * Generated visuals become durable soul material only through the promotion rules in `docs/visual-promotion.md`.
+* Generated visual cleanup should follow `docs/visual-retention.md`.

@@ -224,6 +224,16 @@
             // descrip: If true, future Yculth visual UI should show downloaded references from soul/visual-references by default.
             // default: true
             "show_visual_references_in_yculth": true,
+            // descrip: Number of days to keep unpromoted generated visual experiments before future cleanup may offer to remove them.
+            // range: 0 or higher.
+            // default: 30
+            "generated_output_retention_days": 30,
+            // descrip: If true, future cleanup should move generated visual files to trash instead of deleting permanently.
+            // default: true
+            "cleanup_moves_to_trash": true,
+            // descrip: If true, future cleanup must preserve any generated output that was promoted into soul/art or soul/emojis.
+            // default: true
+            "preserve_promoted_outputs": true,
             // descrip: Agent-local folder for human-downloaded or tool-downloaded visual references. This is source material, not generated output.
             // default: "soul/visual-references"
             "reference_folder": "soul/visual-references",

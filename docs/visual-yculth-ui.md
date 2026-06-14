@@ -16,6 +16,7 @@ The UI should make it easy to:
 * preview generated images.
 * promote useful images into `soul/art/` or `soul/emojis/`.
 * keep generated experiments separate from durable soul material.
+* clean old unpromoted experiments without touching promoted soul material.
 
 ## Suggested Page
 
@@ -32,6 +33,7 @@ Add a future `Visuals` page, separate from `Imagegen`.
 * generated output preview
 * promote buttons
 * failure/retry controls
+* cleanup preview
 
 ## Sections
 
@@ -101,3 +103,4 @@ Use `docs/visual-promotion.md` for details.
 * Do not treat all generated images as memory.
 * Do not make visual generation automatic until manual/local workflow is reliable.
 * Do not merge reference downloads and generated outputs into one folder.
+* Cleanup should follow `docs/visual-retention.md`.

@@ -35,6 +35,7 @@ Starter project for a multi-agent AI assistant system.
     * `visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
     * `visual-reference-selection.md` : Rules for choosing relevant references for one visual request.
     * `visual-request-lifecycle.md` : State flow for queued, generating, previewed, saved, promoted, failed, and cancelled visual requests.
+    * `visual-retention.md` : Cleanup and retention rules for generated visual experiments and references.
     * `visual-yculth-ui.md` : Future Yculth UI shape for requests, references, outputs, and promotion.
     * `regenerated/` : Generated dependency area, ignored by git.
         * `node_modules/` : Installed npm packages.
