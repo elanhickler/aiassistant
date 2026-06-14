@@ -20,6 +20,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `soul/visual-references/` : Downloaded or manually collected references from the internet. These are source materials, not generated outputs.
 * `regenerated/visualexpression/` : Generated images created by future tooling.
 * `docs/visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
+* `docs/visual-reference-selection.md` : Rules for choosing relevant references for one visual request.
 * `docs/visual-expression-intent.md` : Intent rules for deciding when a generated visual is useful.
 * `docs/visual-expression-request.md` : Request object format for future generated visual expressions.
 * `docs/visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
@@ -44,10 +45,11 @@ The first implementation should be local-first.
 1. A reply is drafted normally.
 2. A cheap utility model follows `docs/visual-expression-intent.md` to decide whether a visual is useful.
 3. The decision chooses one output type: emoji, self, scene, background, thought, or dream.
-4. The system follows `docs/visual-prompt-assembly.md` to assemble a focused image prompt from selected persona, current message, status, memory, and relevant visual references.
-5. Yculth imagegen generates the image locally.
-6. The generated image is cached under `regenerated/visualexpression/`.
-7. Discord posting remains opt-in and should be designed separately.
+4. The system follows `docs/visual-reference-selection.md` to choose relevant visual references.
+5. The system follows `docs/visual-prompt-assembly.md` to assemble a focused image prompt from selected persona, current message, status, memory, and relevant visual references.
+6. Yculth imagegen generates the image locally.
+7. The generated image is cached under `regenerated/visualexpression/`.
+8. Discord posting remains opt-in and should be designed separately.
 
 Requests should follow `docs/visual-expression-request.md` so manual Yculth actions, future bot hooks, and generated output metadata all speak the same shape.
 

@@ -31,6 +31,7 @@ Starter project for a multi-agent AI assistant system.
     * `visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
     * `visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
     * `visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
+    * `visual-reference-selection.md` : Rules for choosing relevant references for one visual request.
     * `regenerated/` : Generated dependency area, ignored by git.
         * `node_modules/` : Installed npm packages.
         * `package-lock.json` : Exact generated dependency versions.

@@ -16,6 +16,8 @@ Use only the parts that help the requested visual.
 * stories and dreams : only selected files relevant to the image.
 * references : only selected reference IDs from `soul/visual-references/manifest.jsonl`.
 
+Use `docs/visual-reference-selection.md` to choose references before assembling the prompt.
+
 ## Prompt Shape
 
 Use a compact sectioned prompt while assembling, then flatten to the target image model's preferred tag/text style.

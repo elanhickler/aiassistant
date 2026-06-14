@@ -195,6 +195,13 @@
             // range: 0 or higher.
             // default: 3
             "max_reference_ids_per_prompt": 3,
+            // descrip: Maximum visual reference notes to read while selecting references for one future prompt.
+            // range: 0 or higher.
+            // default: 8
+            "max_reference_notes_to_scan": 8,
+            // descrip: If true, future reference selection may use output_type to filter likely matching references before reading notes.
+            // default: true
+            "prefer_output_type_reference_matches": true,
             // descrip: Agent-local folder for generated visual expression outputs.
             // default: "regenerated/visualexpression"
             "output_folder": "regenerated/visualexpression",
