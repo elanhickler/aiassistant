@@ -16,31 +16,19 @@ const coreSkillFactories = [
   createTimeSkill,
 ];
 
-const optionalSkillFactories = new Map([
-  ["code", createCodeSkill],
-  ["discordstatusupdate", createDiscordStatusUpdateSkill],
-  ["file", createFileSkill],
-  ["music", createMusicSkill],
-  ["speak", createSpeakSkill],
-  ["vision", createVisionSkill],
-  ["visualexpression", createVisualExpressionSkill],
-]);
-
-const optionalPipeCommandNames = [
-  "code",
-  "file",
-  "music",
-  "speak",
-  "vision",
-  "image",
-  "visual",
+const optionalSkillDefinitions = [
+  { name: "code", factory: createCodeSkill, pipeCommands: ["code"] },
+  { name: "discordstatusupdate", factory: createDiscordStatusUpdateSkill },
+  { name: "file", factory: createFileSkill, pipeCommands: ["file"] },
+  { name: "music", factory: createMusicSkill, pipeCommands: ["music"], allowEmptyPipeCommands: ["music"] },
+  { name: "speak", factory: createSpeakSkill, pipeCommands: ["speak"], allowEmptyPipeCommands: ["speak"] },
+  { name: "vision", factory: createVisionSkill, pipeCommands: ["vision"], allowEmptyPipeCommands: ["vision"] },
+  { name: "visualexpression", factory: createVisualExpressionSkill, pipeCommands: ["image", "visual"] },
 ];
 
-const optionalPipeCommandsAllowedWithoutContent = [
-  "music",
-  "speak",
-  "vision",
-];
+const optionalSkillFactories = new Map(
+  optionalSkillDefinitions.map((definition) => [definition.name, definition.factory]),
+);
 
 const placeholderSkillNames = new Set(plannedSkillNames());
 
@@ -70,11 +58,11 @@ export function normalizeEnabledSkillNames(skillNames) {
 }
 
 export function implementedOptionalPipeCommandNames() {
-  return [...optionalPipeCommandNames];
+  return optionalSkillDefinitions.flatMap((definition) => definition.pipeCommands || []);
 }
 
 export function optionalPipeCommandsAllowedWithoutContentNames() {
-  return [...optionalPipeCommandsAllowedWithoutContent];
+  return optionalSkillDefinitions.flatMap((definition) => definition.allowEmptyPipeCommands || []);
 }
 
 export function createRuntimeSkills(enabledSkills, context) {
