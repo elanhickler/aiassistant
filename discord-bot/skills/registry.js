@@ -48,6 +48,15 @@ export function implementedOptionalSkillNames() {
   return [...optionalSkillFactories.keys()];
 }
 
+export function skillImplementationStatus(skillName) {
+  const name = String(skillName || "").trim().toLowerCase();
+  if (!name) return "blank";
+  if (coreSkillNames.has(name)) return "core";
+  if (optionalSkillFactories.has(name)) return "implemented";
+  if (placeholderSkillNames.has(name)) return "planned";
+  return "unknown";
+}
+
 export function normalizeEnabledSkillNames(skillNames) {
   const normalized = [];
   const seen = new Set();
@@ -73,7 +82,7 @@ export function createRuntimeSkills(enabledSkills, context) {
     ...coreSkillFactories.map((factory) => factory(context)),
     ...normalizeEnabledSkillNames(enabledSkills).map((skillName) => {
       const factory = optionalSkillFactories.get(skillName);
-      if (!factory && placeholderSkillNames.has(skillName)) {
+      if (skillImplementationStatus(skillName) === "planned") {
         throw new Error(`Skill is planned but not implemented yet: ${skillName}`);
       }
       if (!factory) throw new Error(`Unknown enabled skill: ${skillName}`);

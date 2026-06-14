@@ -39,6 +39,8 @@ New implemented skills should be registered in `registry.js`. Planned-but-unimpl
 
 Startup logs the loaded skill names so a running bot makes its active skill surface visible in the terminal.
 
+Registry helpers classify skill names as `core`, `implemented`, `planned`, `unknown`, or `blank` so future UI/diagnostics can explain skill settings without duplicating registry logic.
+
 ## Core Systems
 
 These are always loaded and should not be listed in `enabled_skills`.
