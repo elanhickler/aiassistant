@@ -64,6 +64,8 @@ Use one JSON object per generated image.
 
 Prompt files should be human-readable Markdown.
 
+Queued request prompt notes and completed output prompt notes both live under `prompts/`.
+
 ```md
 # Example Visual
 

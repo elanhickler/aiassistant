@@ -17,6 +17,7 @@ Use `docs/visual-provider-contract.md` when a request is submitted to a generato
   "reason": "why this visual belongs with the current moment",
   "visibility": "local",
   "prompt": "focused image prompt for the generator",
+  "prompt_path": "prompts/example-visual.md",
   "negative_prompt": "",
   "style_preset": "scene-readable",
   "source_context": {
@@ -98,6 +99,16 @@ Use `docs/visual-prompt-assembly.md` for the full prompt assembly rules.
 * selected visual reference IDs
 
 The prompt should name the intended output type clearly.
+
+## Prompt Notes
+
+Current visual pipe commands write a human-readable prompt note beside each queued request:
+
+```text
+regenerated/visualexpression/prompts/<request-id>.md
+```
+
+The note mirrors request status, prompt text, style preset, size, variant data, and source IDs for local review.
 
 ## Provider Handoff
 

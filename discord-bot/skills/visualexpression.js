@@ -129,6 +129,7 @@ export function createVisualExpressionSkill(context) {
   validateSettings(settings);
   const outputFolder = path.join(agentFolder, settings.output_folder);
   const requestFolder = path.join(outputFolder, "requests");
+  const promptFolder = path.join(outputFolder, "prompts");
   const requestLogPath = path.join(outputFolder, settings.request_log_file);
 
   async function appendRequestEvent(requestId, state, message, extra = {}) {
@@ -145,6 +146,44 @@ export function createVisualExpressionSkill(context) {
   async function writeRequest(request) {
     await mkdir(requestFolder, { recursive: true });
     await writeFile(requestPath(requestFolder, request.id), `${JSON.stringify(request, null, 2)}\n`);
+  }
+
+  function promptNoteText(request) {
+    return [
+      `# Visual Request: ${request.id}`,
+      "",
+      `* agent : ${request.agent}`,
+      `* output_type : ${request.output_type || "auto"}`,
+      `* status : ${request.result?.status || "queued"}`,
+      `* provider : ${request.generation?.provider || settings.provider}`,
+      `* style_preset : ${request.style_preset || ""}`,
+      `* size : ${request.generation?.width || ""} x ${request.generation?.height || ""}`,
+      `* variant_group_id : ${request.variants?.variant_group_id || ""}`,
+      `* variant_count : ${request.variants?.variant_count || 1}`,
+      `* variant_strategy : ${request.variants?.variant_strategy || ""}`,
+      "",
+      "## Prompt",
+      "",
+      request.prompt || "",
+      "",
+      "## Negative Prompt",
+      "",
+      request.negative_prompt || "",
+      "",
+      "## Source",
+      "",
+      `* message_id : ${request.source_context?.message_id || ""}`,
+      `* channel_id : ${request.source_context?.channel_id || ""}`,
+      `* reference_ids : ${(request.source_context?.reference_ids || []).join(", ")}`,
+      `* story_files : ${(request.source_context?.story_files || []).join(", ")}`,
+      `* dream_files : ${(request.source_context?.dream_files || []).join(", ")}`,
+    ].join("\n");
+  }
+
+  async function writePromptNote(request) {
+    if (!request.prompt_path) return;
+    await mkdir(promptFolder, { recursive: true });
+    await writeFile(path.join(outputFolder, request.prompt_path), `${promptNoteText(request)}\n`);
   }
 
   async function queueVisualRequest(command, message) {
@@ -170,6 +209,7 @@ export function createVisualExpressionSkill(context) {
       reason: "manual visual pipe command",
       visibility: "local",
       prompt: requestPrompt(command),
+      prompt_path: `prompts/${requestId}.md`,
       negative_prompt: "",
       style_preset: selectedOutputType ? defaultStylePresetForType(settings, selectedOutputType) : "",
       source_context: {
@@ -202,6 +242,7 @@ export function createVisualExpressionSkill(context) {
     };
 
     await writeRequest(request);
+    await writePromptNote(request);
     await appendRequestEvent(
       requestId,
       "queued",
@@ -297,6 +338,7 @@ export function createVisualExpressionSkill(context) {
       updated_at: cancelledAt,
     });
     await writeRequest(nextRequest);
+    await writePromptNote(nextRequest);
     return nextRequest;
   }
 
@@ -330,6 +372,7 @@ export function createVisualExpressionSkill(context) {
     };
 
     await writeRequest(nextRequest);
+    await writePromptNote(nextRequest);
     await appendRequestEvent(retryId, "queued", `retry queued from ${request.id}`, {
       retry_of: request.id,
       updated_at: createdAt,
@@ -362,6 +405,7 @@ export function createVisualExpressionSkill(context) {
       updated_at: failedAt,
     });
     await writeRequest(nextRequest);
+    await writePromptNote(nextRequest);
     return nextRequest;
   }
 
