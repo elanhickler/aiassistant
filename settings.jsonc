@@ -181,7 +181,19 @@
             "max_visuals_per_reply": 1,
             // descrip: Agent-local folder for generated visual expression outputs.
             // default: "regenerated/visualexpression"
-            "output_folder": "regenerated/visualexpression"
+            "output_folder": "regenerated/visualexpression",
+            // descrip: Agent-local folder for human-downloaded or tool-downloaded visual references. This is source material, not generated output.
+            // default: "soul/visual-references"
+            "reference_folder": "soul/visual-references",
+            // descrip: Optional websites or search pages to use as visual reference starting points. Keep blank until a source is intentionally chosen.
+            // default: []
+            "reference_sources": [],
+            // descrip: If true, future implementation may download visual references from configured sources into reference_folder. It should store source URLs and attribution notes with downloads.
+            // default: false
+            "allow_internet_reference_downloads": false,
+            // descrip: If true, future implementation must keep source URL, creator/license when known, and download time beside downloaded references.
+            // default: true
+            "require_reference_attribution_notes": true
         }
     },
     // descrip: Maximum number of recent chat messages remembered as hidden context. These messages are sent privately to OpenRouter with each request, which uses input tokens and increases API cost.

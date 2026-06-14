@@ -14,6 +14,7 @@ Trish is an agent in the `aiassistant` multi-agent project.
     * `art/` : Visual art and image references for Trish.
     * `dreams/` : Literal dream drafts, surreal memory fragments, and proposed summary drafts created by future background processes.
     * `emojis/` : Custom emoji assets and notes for Trish.
+    * `visual-references/` : Downloaded or manually collected visual references for future visual expression work. Keep source and attribution notes beside internet downloads.
     * `longmemory.txt` : Long memory file that summarization updates with `# Past`, `# Present`, and `# Future / Plans` sections.
     * `persona.md` : Trish's persona; each time the bot asks OpenRouter's AI model to write a reply, it sends this Markdown text as the instruction for how Trish should behave. This can include personality descriptors, what to say when, and conversationally written guidance.
     * `raw.txt` : Latest OpenRouter message text uploaded by Trish. This overwrites on each OpenRouter request and is for checking exactly what context was sent.

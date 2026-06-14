@@ -11,6 +11,7 @@ Rena is a new aiassistant agent.
 * `soul/persona.md` : Write Rena's identity, voice, personality, boundaries, and role.
 * `soul/origin.md` : Optional full lore dump for Rena's origin/backstory. On startup, the bot mirrors non-empty text from the Discord `origin` memory post into this file. This is editable source material and is not sent in every model request.
 * `soul/origin_summary.md` : Optional compact origin summary generated from `soul/origin.md`. If non-empty, it is sent as hidden Origin Summary context.
+* `soul/visual-references/` : Downloaded or manually collected visual references for future visual expression work. Keep source and attribution notes beside internet downloads.
 * `soul/longmemory.txt` : Durable summary memory. Starts mostly empty.
 * `soul/shortmemory.jsonl` : Recent memory cache. Starts empty.
 * `soul/status.json` : Current state used by state/status-aware skills.

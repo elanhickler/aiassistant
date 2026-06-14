@@ -82,6 +82,7 @@ Settings are loaded from root `settings.jsonc` first, then merged with `agents/<
 * `soul/art/` : Placeholder folder for future art context.
 * `soul/dreams/` : Dream output folder used by the pipe dream command.
 * `soul/emojis/` : Placeholder folder for future emoji behavior.
+* `soul/visual-references/` : Future folder for downloaded or manually collected visual references. Store source and attribution notes beside internet downloads.
 * `soul/stories/` : Story output folder used by `||@agent story||`.
 * `soul/status.json` : Current agent state used by core replies and status-aware skills. Current modes are `awake`, `sleepy`, `sleeping`, `dreaming`, and `away`.
 
@@ -151,7 +152,7 @@ Implemented skills live in `discord-bot/skills/`.
 * Planned placeholder skills should not be enabled until they are implemented.
 * Optional skill-specific memory forum posts are created only when the skill is enabled and implemented. Core posts for time and story behavior are always available through the standard memory forum posts.
 * `planned_skill_settings.tts` : Placeholder settings for normal expressive voice output. Fish Audio is the first planned provider; this is local Yculth TTS only until a runtime skill is implemented.
-* `planned_skill_settings.visualexpression` : Placeholder settings for future AI-chosen generated visuals. Intended output types are emojis, self-images, scenes, backgrounds, thoughts, and dreams. Keep this local-first until Discord posting behavior is deliberately designed.
+* `planned_skill_settings.visualexpression` : Placeholder settings for future AI-chosen generated visuals. Intended output types are emojis, self-images, scenes, backgrounds, thoughts, and dreams. Keep this local-first until Discord posting behavior is deliberately designed. Internet reference downloads should go to `soul/visual-references/`; generated images should go to `regenerated/visualexpression/`.
 
 ## Current Architecture
 

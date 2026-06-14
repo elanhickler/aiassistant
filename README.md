@@ -23,6 +23,8 @@ Starter project for a multi-agent AI assistant system.
         * `placeholders.js` : Registry of planned skills that are documented but not implemented yet.
         * `story.js` : Core story generation, recall, and story upload system.
         * `time.js` : Core time, sleep, status, and dream system.
+* `docs/` : Planning and architecture notes.
+    * `visual-expression-plan.md` : Future local-first generated visual expression pipeline for emojis, self-images, scenes, backgrounds, thoughts, and dreams.
     * `regenerated/` : Generated dependency area, ignored by git.
         * `node_modules/` : Installed npm packages.
         * `package-lock.json` : Exact generated dependency versions.
@@ -159,6 +161,7 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `soul/art/` and `soul/emojis/` : Placeholder content folders. They are not automatically sent until a future skill or retrieval feature chooses them.
 * `planned_skill_settings.tts` : Placeholder settings for future normal expressive voice output. Fish Audio is the first planned provider. Yculth can use these settings for local TTS tests, but Discord/runtime voice hooks are not implemented yet.
 * `planned_skill_settings.visualexpression` : Placeholder settings for future AI-chosen generated visuals. The intended outputs are emojis, self-images, scenes, backgrounds, thoughts, and dreams. Yculth imagegen is the intended local-first generation surface; Discord posting behavior is not implemented yet.
+* `soul/visual-references/` : Future folder for downloaded or manually collected visual references. Keep source and attribution notes beside internet downloads; generated outputs belong in `regenerated/visualexpression/`.
 
 ## Memory Maintenance Flow
 
