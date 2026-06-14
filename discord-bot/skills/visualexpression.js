@@ -1,3 +1,6 @@
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 const knownOutputTypes = ["emoji", "self", "scene", "background", "thought", "dream"];
 
 function asList(value) {
@@ -57,12 +60,120 @@ function stylePresetSummary(settings) {
   ].join("\n");
 }
 
+function timestampId() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function safeIdText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+}
+
+function defaultStylePresetForType(settings, outputType) {
+  const defaults = {
+    emoji: settings.default_emoji_style_preset || "emoji-clean",
+    self: settings.default_self_style_preset || "self-portrait",
+    scene: settings.default_scene_style_preset || "scene-readable",
+    background: settings.default_background_style_preset || "background-mood",
+    thought: settings.default_thought_style_preset || "thought-symbol",
+    dream: settings.default_dream_style_preset || "dream-surreal",
+  };
+  return defaults[outputType] || "";
+}
+
+function requestPrompt(command) {
+  const prompt = String(command.content || "").trim();
+  return prompt || "Use current context to decide the visual subject and mood.";
+}
+
+function defaultSizeForType(outputType) {
+  if (outputType === "emoji" || outputType === "thought" || outputType === "dream") {
+    return { width: 768, height: 768 };
+  }
+  if (outputType === "scene" || outputType === "background") {
+    return { width: 1152, height: 768 };
+  }
+  return { width: 768, height: 1152 };
+}
+
 export function createVisualExpressionSkill(context) {
-  const { requiredSetting } = context;
+  const { agentFolder, agentName, safeReply, requiredSetting } = context;
   const plannedSkillSettings = requiredSetting("planned_skill_settings");
   const settings = plannedSkillSettings.visualexpression;
   if (!settings) throw new Error("Missing planned_skill_settings.visualexpression because visualexpression is enabled.");
   validateSettings(settings);
+  const outputFolder = path.join(agentFolder, settings.output_folder);
+  const requestFolder = path.join(outputFolder, "requests");
+  const requestLogPath = path.join(outputFolder, settings.request_log_file);
+
+  async function queueVisualRequest(command, message) {
+    const outputType = command.outputType || "";
+    const allowedOutputTypes = asList(settings.output_types);
+    if (outputType && !allowedOutputTypes.includes(outputType)) {
+      throw new Error(`Unknown visual output type: ${outputType}`);
+    }
+
+    const createdAt = new Date().toISOString();
+    const idSuffix = safeIdText(outputType || "visual");
+    const requestId = `${timestampId()}-${idSuffix || "visual"}`;
+    const selectedOutputType = outputType || "";
+    const size = defaultSizeForType(selectedOutputType);
+    const variantCount = Math.min(
+      Number(settings.max_variants_per_request || 1),
+      selectedOutputType === "emoji" ? 4 : selectedOutputType === "dream" ? 3 : 2,
+    );
+    const request = {
+      id: requestId,
+      agent: agentName,
+      output_type: selectedOutputType,
+      reason: "manual visual pipe command",
+      visibility: "local",
+      prompt: requestPrompt(command),
+      negative_prompt: "",
+      style_preset: selectedOutputType ? defaultStylePresetForType(settings, selectedOutputType) : "",
+      source_context: {
+        message_id: String(message.id || ""),
+        channel_id: String(message.channelId || ""),
+        shortmemory_ids: [],
+        longmemory_sections: [],
+        story_files: [],
+        dream_files: [],
+        reference_ids: [],
+      },
+      generation: {
+        provider: settings.provider,
+        width: size.width,
+        height: size.height,
+        model: "",
+        seed: "",
+      },
+      variants: {
+        variant_group_id: requestId,
+        variant_count: Math.max(1, variantCount),
+        variant_strategy: settings.default_variant_strategy || "same prompt, different seeds",
+        parent_output_id: "",
+      },
+      result: {
+        status: "queued",
+        local_path: "",
+        created_at: createdAt,
+      },
+    };
+
+    await mkdir(requestFolder, { recursive: true });
+    await writeFile(path.join(requestFolder, `${requestId}.json`), `${JSON.stringify(request, null, 2)}\n`);
+    await appendFile(requestLogPath, `${JSON.stringify({
+      request_id: requestId,
+      state: "queued",
+      updated_at: createdAt,
+      message: `manual visual request queued${selectedOutputType ? ` for ${selectedOutputType}` : ""}`,
+    })}\n`);
+
+    return request;
+  }
 
   return {
     name: "visualexpression",
@@ -96,6 +207,17 @@ export function createVisualExpressionSkill(context) {
         `visual expression provider is planned as ${settings.provider}`,
         `visual outputs available later: ${asList(settings.output_types).join(", ")}`,
       ];
+    },
+    async handlePipeCommand(command, message) {
+      if (command?.kind !== "visual") return false;
+      const request = await queueVisualRequest(command, message);
+      await safeReply(message, [
+        "visual request queued",
+        `id: ${request.id}`,
+        `type: ${request.output_type || "auto"}`,
+        "generation: not started",
+      ].join("\n"));
+      return true;
     },
     onReady() {
       console.log(`Visual expression skill loaded with provider ${settings.provider}. Generation remains planning-only.`);

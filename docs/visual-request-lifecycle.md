@@ -32,6 +32,12 @@ Provider failures should use the short failure shape from `docs/visual-provider-
 
 `requests.jsonl` should record state changes as append-only events when possible.
 
+Request JSON files may be stored under:
+
+```text
+regenerated/visualexpression/requests/
+```
+
 ```json
 {
   "request_id": "2026-06-13-example-visual",

@@ -1413,6 +1413,15 @@ function helpCommandLists() {
     );
   }
 
+  if (enabledSkills.includes("visualexpression")) {
+    pipeCommands.push(
+      [`||${agentCommandName} visual||`, "Queue a local visual request from current context."],
+      [`||${agentCommandName} visual: text||`, "Queue a local visual request from text."],
+      [`||${agentCommandName} visual dream: text||`, "Queue a local dream visual request from text."],
+      [`||${agentCommandName} visual emoji: text||`, "Queue a local emoji visual request from text."],
+    );
+  }
+
   return { slashCommands, pipeCommands };
 }
 
@@ -1923,6 +1932,15 @@ function stripPipeCommandTarget(text, isDm) {
 function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
+
+  const visualMatch = targetedText.match(/^visual(?:\s+(emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
+  if (visualMatch) {
+    return {
+      kind: "visual",
+      outputType: (visualMatch[1] || "").toLowerCase(),
+      content: (visualMatch[2] || "").trimStart().trimEnd(),
+    };
+  }
 
   const commandMatch = targetedText.match(/^(reply|continue|adjust|subtext|summarize|story|music|dream|sleep|wake|away|state|status|passtimeminutes|passtimehours)(?:\s*:\s*([\s\S]*))?$/i);
   if (!commandMatch) return null;

@@ -10,7 +10,7 @@ Optional skills and core behavior modules live here. Agents choose optional skil
 * `placeholders.js` : Registry of planned skills that are allowed to be documented without being implemented.
 * `story.js` : Core story system. It owns `||@agent story||`, `||@agent story: text||`, `/uploadstory`, local story files, story recall context, and the Discord `stories` memory post.
 * `time.js` : Core time system. It owns sleep, wake, status, time passage, and dream behavior.
-* `visualexpression.js` : Implemented optional planning skill for future generated visuals. It validates visualexpression settings and exposes compact context/status hints, but does not generate images yet.
+* `visualexpression.js` : Implemented optional planning skill for future generated visuals. It validates visualexpression settings, queues local request JSON from visual pipe commands, and exposes compact context/status hints, but does not generate images yet.
 
 ## Skill Interface
 
@@ -39,7 +39,7 @@ These are always loaded and should not be listed in `enabled_skills`.
 
 * `music` : Finds and formats music links through natural language intent, `||@agent music||`, `||@agent music: description||`, or `:musical_note:` reactions. Natural language intent is gated by `intent_triggers.music` before it spends tokens on an AI intent check.
 * `discordstatusupdate` : Runs after successful summaries and handles `||@agent status||` and `||@agent status: text||`. It writes a human-readable status note into `soul/status.json`; other skills may only provide optional hints when listed in `discord_status_update.source_skills`.
-* `visualexpression` : Planning-only bridge for future generated emojis, self-images, scenes, backgrounds, thoughts, and dreams. Enabling it validates the visual settings and adds concise visual capability context, but does not call image generation yet.
+* `visualexpression` : Planning-only bridge for future generated emojis, self-images, scenes, backgrounds, thoughts, and dreams. Enabling it validates the visual settings, handles `||@agent visual ...||`, and adds concise visual capability context, but does not call image generation yet.
 
 ## Planned Skills
 

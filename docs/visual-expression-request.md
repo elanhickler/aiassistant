@@ -18,6 +18,7 @@ Use `docs/visual-provider-contract.md` when a request is submitted to a generato
   "visibility": "local",
   "prompt": "focused image prompt for the generator",
   "negative_prompt": "",
+  "style_preset": "scene-readable",
   "source_context": {
     "message_id": "",
     "channel_id": "",

@@ -2,7 +2,9 @@
 
 Visual pipe commands are the future manual control surface for visual expression.
 
-This is a planning contract only. These commands are not wired into the Discord runtime yet.
+These commands are partially wired into the Discord runtime when the optional `visualexpression` skill is enabled.
+
+Current implementation queues local request JSON and request log entries. It does not generate images yet.
 
 ## Command Shape
 
@@ -34,7 +36,7 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 
 ## Output
 
-The first implementation should create a local visual request, not post an image directly.
+The current implementation creates a local visual request, not an image.
 
 Expected response:
 

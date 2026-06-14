@@ -19,6 +19,7 @@ regenerated/visualexpression/
     requests.jsonl
     reviews.jsonl
     visual-memory.jsonl
+    requests/
     images/
     prompts/
 ```
