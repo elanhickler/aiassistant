@@ -5,6 +5,7 @@ Use this format when an agent or local tool wants to request a generated visual 
 This is a planning contract only. It is not wired into the Discord runtime yet.
 
 Use `docs/visual-request-lifecycle.md` for request state changes after creation.
+Use `docs/visual-provider-contract.md` when a request is submitted to a generator.
 
 ## Request Object
 
@@ -90,3 +91,11 @@ Use `docs/visual-prompt-assembly.md` for the full prompt assembly rules.
 * selected visual reference IDs
 
 The prompt should name the intended output type clearly.
+
+## Provider Handoff
+
+Only send focused provider input to image generation.
+
+Do not send full shortmemory, full longmemory, secret values, local settings, or raw Discord message dumps to the provider.
+
+Use `docs/visual-provider-contract.md` for provider input, output, and error handling.

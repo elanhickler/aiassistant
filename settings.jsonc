@@ -162,6 +162,17 @@
             // descrip: Local generation target. This should stay local-first until Discord posting behavior is intentionally designed.
             // default: "yculth-imagegen"
             "provider": "yculth-imagegen",
+            // descrip: Maximum seconds future visual generation may wait for the provider before recording a timeout failure.
+            // range: 1 or higher.
+            // default: 120
+            "provider_timeout_seconds": 120,
+            // descrip: Maximum automatic retries for retryable visual provider failures.
+            // range: 0 or higher.
+            // default: 1
+            "provider_max_retries": 1,
+            // descrip: If true, normal text replies may still be sent when an optional visual generation fails.
+            // default: true
+            "continue_reply_when_visual_fails": true,
             // descrip: Visual output types the agent may eventually request when the skill is implemented.
             // default: emoji, self, scene, background, thought, dream
             "output_types": [

@@ -28,6 +28,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `docs/visual-request-lifecycle.md` : State flow for queued, generating, previewed, saved, promoted, failed, and cancelled visual requests.
 * `docs/visual-pipe-commands.md` : Planned manual pipe command shape for user-requested local visual expressions.
 * `docs/visual-prompt-assembly.md` : Rules for assembling focused image prompts from selected context.
+* `docs/visual-provider-contract.md` : Provider input, output, error, retry, and path rules for image generation adapters.
 * `docs/visual-output-manifest.md` : Manifest and prompt-note format for completed generated visual expressions.
 * `docs/visual-memory.md` : Compact memory notes for meaningful visuals that should be recallable later.
 * `docs/visual-promotion.md` : Rules for promoting generated visuals into durable `soul/art/` or `soul/emojis/` material.
@@ -58,7 +59,7 @@ The first implementation should be local-first.
 3. The decision chooses one output type: emoji, self, scene, background, thought, or dream.
 4. The system follows `docs/visual-reference-selection.md` to choose relevant visual references.
 5. The system follows `docs/visual-prompt-assembly.md` to assemble a focused image prompt from selected persona, current message, status, memory, and relevant visual references.
-6. Yculth imagegen generates the image locally.
+6. The provider contract sends one focused generation job to Yculth imagegen.
 7. The generated image is cached under `regenerated/visualexpression/`.
 8. If the visual matters, write a compact visual memory note.
 9. Discord posting remains opt-in and should be designed separately.
@@ -68,6 +69,7 @@ Request states should follow `docs/visual-request-lifecycle.md`.
 Future manual Discord control should follow `docs/visual-pipe-commands.md`.
 Future Discord image posting should follow `docs/visual-discord-posting.md`.
 Visual memory should follow `docs/visual-memory.md`.
+Visual providers should follow `docs/visual-provider-contract.md`.
 
 ## Boundaries
 
