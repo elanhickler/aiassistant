@@ -182,6 +182,9 @@
             // descrip: Agent-local folder for generated visual expression outputs.
             // default: "regenerated/visualexpression"
             "output_folder": "regenerated/visualexpression",
+            // descrip: JSONL file inside output_folder that future tooling can use to record requested/generated visual expressions.
+            // default: "requests.jsonl"
+            "request_log_file": "requests.jsonl",
             // descrip: Agent-local folder for human-downloaded or tool-downloaded visual references. This is source material, not generated output.
             // default: "soul/visual-references"
             "reference_folder": "soul/visual-references",

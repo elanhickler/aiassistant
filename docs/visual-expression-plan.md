@@ -20,6 +20,7 @@ Let agents eventually generate their own visual artifacts as needed:
 * `soul/visual-references/` : Downloaded or manually collected references from the internet. These are source materials, not generated outputs.
 * `regenerated/visualexpression/` : Generated images created by future tooling.
 * `docs/visual-reference-manifest.md` : Manifest and sidecar note format for downloaded or manually collected visual references.
+* `docs/visual-expression-request.md` : Request object format for future generated visual expressions.
 
 ## Internet References
 
@@ -43,6 +44,8 @@ The first implementation should be local-first.
 5. Yculth imagegen generates the image locally.
 6. The generated image is cached under `regenerated/visualexpression/`.
 7. Discord posting remains opt-in and should be designed separately.
+
+Requests should follow `docs/visual-expression-request.md` so manual Yculth actions, future bot hooks, and generated output metadata all speak the same shape.
 
 ## Boundaries
 
