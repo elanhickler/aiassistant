@@ -302,23 +302,25 @@ export function createVisualExpressionSkill(context) {
     return latestRequest;
   }
 
-  async function readReviewsForRequest(requestId, { limit = 3 } = {}) {
+  async function readAllReviews() {
     const text = await readFile(reviewLogPath, "utf8").catch((error) => {
       if (error.code === "ENOENT") return "";
       throw error;
     });
     if (!text.trim()) return [];
 
-    const notes = [];
+    const reviews = [];
     for (const line of text.split(/\r?\n/)) {
       if (!line.trim()) continue;
       const review = JSON.parse(line);
-      if (review?.request_id !== requestId) continue;
-      notes.push(review);
+      reviews.push(review);
     }
+    return reviews.sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""));
+  }
 
-    return notes
-      .sort((left, right) => Date.parse(right.created_at || "") - Date.parse(left.created_at || ""))
+  async function readReviewsForRequest(requestId, { limit = 3 } = {}) {
+    return (await readAllReviews())
+      .filter((review) => review?.request_id === requestId)
       .slice(0, limit);
   }
 
@@ -354,6 +356,26 @@ export function createVisualExpressionSkill(context) {
       );
     }
     return lines.join("\n");
+  }
+
+  async function formatReviewedRequestList({ limit = 8 } = {}) {
+    const reviews = (await readAllReviews()).filter((review) => reviewStates.includes(review?.review_state || ""));
+    if (reviews.length === 0) return "no reviewed visual requests found";
+
+    const latestByRequest = new Map();
+    for (const review of reviews) {
+      if (!review?.request_id || latestByRequest.has(review.request_id)) continue;
+      latestByRequest.set(review.request_id, review);
+      if (latestByRequest.size >= limit) break;
+    }
+
+    return [
+      "reviewed visual requests:",
+      ...[...latestByRequest.values()].map((review) => {
+        const note = String(review.notes || "").replace(/\s+/g, " ").slice(0, 80);
+        return `* ${review.request_id} : ${review.review_state}${note ? ` : ${note}` : ""}`;
+      }),
+    ].join("\n");
   }
 
   function parseReviewNoteInput(content = "") {
@@ -619,6 +641,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, await formatRequestList());
         return true;
       }
+      if (command.action === "reviewed") {
+        await safeReply(message, await formatReviewedRequestList());
+        return true;
+      }
       if (command.action === "show") {
         await safeReply(message, await formatRequestDetails(command.content));
         return true;
@@ -666,6 +692,7 @@ export function createVisualExpressionSkill(context) {
     cancelRequest,
     formatRequestList,
     formatRequestDetails,
+    formatReviewedRequestList,
     noteRequest,
     processQueuedRequests,
     reviewRequest,

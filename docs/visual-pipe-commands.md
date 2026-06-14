@@ -20,6 +20,7 @@ In servers, use the agent name.
 ||@agent visual thought: prompt text||
 ||@agent visual dream: prompt text||
 ||@agent visual requests||
+||@agent visual reviewed||
 ||@agent visual show||
 ||@agent visual show: request-id||
 ||@agent visual note: note text||
@@ -46,6 +47,7 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual thought: text` : Request an internal or symbolic image.
 * `visual dream: text` : Request a dream image. This should usually require sleep or dream context.
 * `visual requests` : Show recent local visual requests and statuses.
+* `visual reviewed` : Show recent local visual requests with human review decisions.
 * `visual show` : Show compact details and recent notes for the latest local visual request.
 * `visual show: request-id` : Show compact details and recent notes for a specific local visual request.
 * `visual note: note text` : Attach a human note to the latest local visual request.
@@ -79,6 +81,13 @@ For `visual requests`, expected response:
 ```text
 visual requests:
 * request-id : queued : dream : blue hallway dream
+```
+
+For `visual reviewed`, expected response:
+
+```text
+reviewed visual requests:
+* request-id : usable : Keep the sleepy expression.
 ```
 
 For `visual show`, expected response:
