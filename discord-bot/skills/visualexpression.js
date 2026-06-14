@@ -99,6 +99,20 @@ function defaultSizeForType(outputType) {
   return { width: 768, height: 1152 };
 }
 
+function requestTimestamp(request) {
+  const timestamps = [
+    request?.result?.failed_at,
+    request?.result?.created_at,
+    request?.created_at,
+    request?.id?.slice(0, 24),
+  ];
+  for (const timestamp of timestamps) {
+    const value = Date.parse(String(timestamp || ""));
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
 function requestPath(requestFolder, requestId) {
   return path.join(requestFolder, `${requestId}.json`);
 }
@@ -195,6 +209,10 @@ export function createVisualExpressionSkill(context) {
   }
 
   async function readQueuedRequests() {
+    return (await readAllRequests()).filter((request) => request?.result?.status === "queued");
+  }
+
+  async function readAllRequests() {
     const files = await readdir(requestFolder).catch((error) => {
       if (error.code === "ENOENT") return [];
       throw error;
@@ -203,9 +221,24 @@ export function createVisualExpressionSkill(context) {
     for (const file of files.filter((name) => name.endsWith(".json"))) {
       const filePath = path.join(requestFolder, file);
       const request = JSON.parse(await readFile(filePath, "utf8"));
-      if (request?.result?.status === "queued") requests.push(request);
+      requests.push(request);
     }
-    return requests;
+    return requests.sort((left, right) => requestTimestamp(right) - requestTimestamp(left));
+  }
+
+  async function formatRequestList({ limit = 8 } = {}) {
+    const requests = (await readAllRequests()).slice(0, limit);
+    if (requests.length === 0) return "no visual requests found";
+
+    return [
+      "visual requests:",
+      ...requests.map((request) => {
+        const status = request?.result?.status || "unknown";
+        const type = request?.output_type || "auto";
+        const prompt = String(request?.prompt || "").replace(/\s+/g, " ").slice(0, 80);
+        return `* ${request.id} : ${status} : ${type} : ${prompt}`;
+      }),
+    ].join("\n");
   }
 
   async function markRequestProviderUnimplemented(request) {
@@ -285,6 +318,10 @@ export function createVisualExpressionSkill(context) {
         await safeReply(message, `visual request processor checked ${processed.length} queued request${processed.length === 1 ? "" : "s"}`);
         return true;
       }
+      if (command.action === "requests") {
+        await safeReply(message, await formatRequestList());
+        return true;
+      }
       const request = await queueVisualRequest(command, message);
       await safeReply(message, [
         "visual request queued",
@@ -294,6 +331,7 @@ export function createVisualExpressionSkill(context) {
       ].join("\n"));
       return true;
     },
+    formatRequestList,
     processQueuedRequests,
     onReady() {
       console.log(`Visual expression skill loaded with provider ${settings.provider}. Generation remains planning-only.`);
