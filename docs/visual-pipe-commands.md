@@ -27,6 +27,8 @@ In servers, use the agent name.
 ||@agent visual note: request-id | note text||
 ||@agent visual review: state | note text||
 ||@agent visual review: request-id | state | note text||
+||@agent visual promote||
+||@agent visual promote: request-id | note text||
 ||@agent visual cancel||
 ||@agent visual cancel: request-id||
 ||@agent visual retry||
@@ -54,6 +56,8 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual note: request-id | note text` : Attach a human note to a specific local visual request.
 * `visual review: state | note text` : Review the latest local visual request.
 * `visual review: request-id | state | note text` : Review a specific local visual request.
+* `visual promote` : Mark the latest local visual request as a promotion candidate without moving files.
+* `visual promote: request-id | note text` : Mark a specific local visual request as a promotion candidate without moving files.
 * `visual cancel` : Cancel the latest queued local visual request without deleting files.
 * `visual cancel: request-id` : Cancel a specific queued local visual request without deleting files.
 * `visual retry` : Clone the latest retryable failed/cancelled request into a new queued request.
@@ -115,6 +119,14 @@ For `visual review`, expected response:
 visual request reviewed
 id: request-id
 state: usable
+```
+
+For `visual promote`, expected response:
+
+```text
+visual request marked for promotion
+id: request-id
+state: promote_candidate
 ```
 
 Supported review states:

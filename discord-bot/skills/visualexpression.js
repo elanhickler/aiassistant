@@ -465,6 +465,45 @@ export function createVisualExpressionSkill(context) {
     return { request, review };
   }
 
+  function parsePromoteInput(content = "") {
+    const text = String(content || "").trim();
+    if (!text) {
+      return { requestId: "", note: "marked as promotion candidate" };
+    }
+
+    const delimiterIndex = text.indexOf("|");
+    if (delimiterIndex === -1) {
+      return { requestId: text, note: "marked as promotion candidate" };
+    }
+
+    const requestId = text.slice(0, delimiterIndex).trim();
+    const note = text.slice(delimiterIndex + 1).trim();
+    if (!requestId) throw new Error("visual promote request id is blank before |.");
+    return { requestId, note: note || "marked as promotion candidate" };
+  }
+
+  async function promoteRequest(content = "") {
+    const { requestId, note } = parsePromoteInput(content);
+    const request = await findRequestByIdOrLatest(requestId);
+    const createdAt = new Date().toISOString();
+    const review = {
+      id: `${timestampId()}-promote-candidate`,
+      output_id: "",
+      request_id: request.id,
+      agent: agentName,
+      reviewer: "human",
+      review_state: "promote_candidate",
+      score: null,
+      tags: ["promotion candidate"],
+      notes: note,
+      created_at: createdAt,
+    };
+
+    await mkdir(outputFolder, { recursive: true });
+    await appendFile(reviewLogPath, `${JSON.stringify(review)}\n`);
+    return { request, review };
+  }
+
   async function findRequestByIdOrLatestQueued(requestId) {
     const targetId = String(requestId || "").trim();
     if (targetId) {
@@ -666,6 +705,15 @@ export function createVisualExpressionSkill(context) {
         ].join("\n"));
         return true;
       }
+      if (command.action === "promote") {
+        const { request } = await promoteRequest(command.content);
+        await safeReply(message, [
+          "visual request marked for promotion",
+          `id: ${request.id}`,
+          "state: promote_candidate",
+        ].join("\n"));
+        return true;
+      }
       if (command.action === "cancel") {
         const cancelled = await cancelRequest(command.content);
         await safeReply(message, `visual request cancelled\nid: ${cancelled.id}`);
@@ -695,6 +743,7 @@ export function createVisualExpressionSkill(context) {
     formatReviewedRequestList,
     noteRequest,
     processQueuedRequests,
+    promoteRequest,
     reviewRequest,
     retryRequest,
     onReady() {

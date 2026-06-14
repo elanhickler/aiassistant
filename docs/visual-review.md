@@ -2,7 +2,7 @@
 
 Visual review is how generated outputs and pending requests are judged before they are promoted, posted, or remembered.
 
-This is partly wired into the Discord runtime through `visual note` and `visual review`, which record human guidance before image generation exists.
+This is partly wired into the Discord runtime through `visual note`, `visual review`, and `visual promote`, which record human guidance before image generation exists.
 
 Use `docs/visual-variants.md` when reviewing multiple variants of the same request.
 
@@ -109,6 +109,8 @@ AI review should use a small, structured response:
 ## Promotion Interaction
 
 Promotion should prefer outputs with `promote_candidate` or an explicit user confirmation.
+
+`visual promote` records `review_state: promote_candidate`. It does not move files, copy images into soul folders, or post images to Discord yet.
 
 Rejected or blocked outputs should not be promoted unless the user intentionally overrides the review.
 

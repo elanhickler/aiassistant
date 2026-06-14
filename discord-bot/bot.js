@@ -1427,6 +1427,8 @@ function helpCommandLists() {
       [`||${agentCommandName} visual note: request-id | text||`, "Attach a human note to a specific local visual request."],
       [`||${agentCommandName} visual review: state | text||`, "Review the latest local visual request."],
       [`||${agentCommandName} visual review: request-id | state | text||`, "Review a specific local visual request."],
+      [`||${agentCommandName} visual promote||`, "Mark the latest local visual request as a promotion candidate."],
+      [`||${agentCommandName} visual promote: request-id | text||`, "Mark a specific local visual request as a promotion candidate."],
       [`||${agentCommandName} visual cancel||`, "Cancel the latest queued local visual request without deleting files."],
       [`||${agentCommandName} visual cancel: request-id||`, "Cancel a specific queued local visual request without deleting files."],
       [`||${agentCommandName} visual retry||`, "Clone the latest retryable failed/cancelled visual request into a new queued request."],
@@ -1946,10 +1948,10 @@ function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
 
-  const visualMatch = targetedText.match(/^visual(?:\s+(requests|reviewed|show|note|review|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
+  const visualMatch = targetedText.match(/^visual(?:\s+(requests|reviewed|show|note|review|promote|cancel|retry|process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
   if (visualMatch) {
     const visualKeyword = (visualMatch[1] || "").toLowerCase();
-    const visualActions = ["cancel", "note", "process", "requests", "retry", "review", "reviewed", "show"];
+    const visualActions = ["cancel", "note", "process", "promote", "requests", "retry", "review", "reviewed", "show"];
     return {
       kind: "visual",
       action: visualActions.includes(visualKeyword) ? visualKeyword : "",
