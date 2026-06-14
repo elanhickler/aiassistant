@@ -19,6 +19,7 @@ In servers, use the agent name.
 ||@agent visual background: prompt text||
 ||@agent visual thought: prompt text||
 ||@agent visual dream: prompt text||
+||@agent visual process||
 ```
 
 In DMs, `@agent` may be optional when the runtime already knows which agent is being addressed.
@@ -33,6 +34,7 @@ In DMs, `@agent` may be optional when the runtime already knows which agent is b
 * `visual background: text` : Request an environment or location image.
 * `visual thought: text` : Request an internal or symbolic image.
 * `visual dream: text` : Request a dream image. This should usually require sleep or dream context.
+* `visual process` : Process queued local visual requests as far as the current implementation can. Right now this records a provider-unimplemented failure instead of generating an image.
 
 ## Output
 
@@ -42,6 +44,12 @@ Expected response:
 
 ```text
 visual request queued
+```
+
+For `visual process`, expected response:
+
+```text
+visual request processor checked 1 queued request
 ```
 
 The request should then follow:

@@ -27,6 +27,7 @@ This is a planning contract only. It is not wired into the Discord runtime yet.
 * `cancelled` should not delete source references, prompts, or completed outputs unless the user explicitly deletes them.
 
 Provider failures should use the short failure shape from `docs/visual-provider-contract.md`.
+Until provider handoff is implemented, the manual visual processor may mark queued requests as `failed` with `error_kind: provider_unimplemented`.
 
 ## Request Log
 

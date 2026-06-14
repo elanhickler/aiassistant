@@ -39,7 +39,7 @@ These are always loaded and should not be listed in `enabled_skills`.
 
 * `music` : Finds and formats music links through natural language intent, `||@agent music||`, `||@agent music: description||`, or `:musical_note:` reactions. Natural language intent is gated by `intent_triggers.music` before it spends tokens on an AI intent check.
 * `discordstatusupdate` : Runs after successful summaries and handles `||@agent status||` and `||@agent status: text||`. It writes a human-readable status note into `soul/status.json`; other skills may only provide optional hints when listed in `discord_status_update.source_skills`.
-* `visualexpression` : Planning-only bridge for future generated emojis, self-images, scenes, backgrounds, thoughts, and dreams. Enabling it validates the visual settings, handles `||@agent visual ...||`, and adds concise visual capability context, but does not call image generation yet.
+* `visualexpression` : Planning-only bridge for future generated emojis, self-images, scenes, backgrounds, thoughts, and dreams. Enabling it validates the visual settings, handles `||@agent visual ...||`, can dry-run queued requests into a provider-unimplemented failure state, and adds concise visual capability context, but does not call image generation yet.
 
 ## Planned Skills
 

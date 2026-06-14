@@ -1419,6 +1419,7 @@ function helpCommandLists() {
       [`||${agentCommandName} visual: text||`, "Queue a local visual request from text."],
       [`||${agentCommandName} visual dream: text||`, "Queue a local dream visual request from text."],
       [`||${agentCommandName} visual emoji: text||`, "Queue a local emoji visual request from text."],
+      [`||${agentCommandName} visual process||`, "Dry-run queued local visual requests to the current provider-unimplemented state."],
     );
   }
 
@@ -1933,11 +1934,13 @@ function parsePipeCommandText(text, isDm) {
   const targetedText = stripPipeCommandTarget(text, isDm);
   if (!targetedText) return null;
 
-  const visualMatch = targetedText.match(/^visual(?:\s+(emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
+  const visualMatch = targetedText.match(/^visual(?:\s+(process|emoji|self|scene|background|thought|dream))?(?:\s*:\s*([\s\S]*))?$/i);
   if (visualMatch) {
+    const visualKeyword = (visualMatch[1] || "").toLowerCase();
     return {
       kind: "visual",
-      outputType: (visualMatch[1] || "").toLowerCase(),
+      action: visualKeyword === "process" ? "process" : "",
+      outputType: visualKeyword === "process" ? "" : visualKeyword,
       content: (visualMatch[2] || "").trimStart().trimEnd(),
     };
   }

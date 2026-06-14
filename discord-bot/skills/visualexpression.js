@@ -1,4 +1,4 @@
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const knownOutputTypes = ["emoji", "self", "scene", "background", "thought", "dream"];
@@ -99,6 +99,10 @@ function defaultSizeForType(outputType) {
   return { width: 768, height: 1152 };
 }
 
+function requestPath(requestFolder, requestId) {
+  return path.join(requestFolder, `${requestId}.json`);
+}
+
 export function createVisualExpressionSkill(context) {
   const { agentFolder, agentName, safeReply, requiredSetting } = context;
   const plannedSkillSettings = requiredSetting("planned_skill_settings");
@@ -108,6 +112,22 @@ export function createVisualExpressionSkill(context) {
   const outputFolder = path.join(agentFolder, settings.output_folder);
   const requestFolder = path.join(outputFolder, "requests");
   const requestLogPath = path.join(outputFolder, settings.request_log_file);
+
+  async function appendRequestEvent(requestId, state, message, extra = {}) {
+    await mkdir(outputFolder, { recursive: true });
+    await appendFile(requestLogPath, `${JSON.stringify({
+      request_id: requestId,
+      state,
+      updated_at: new Date().toISOString(),
+      message,
+      ...extra,
+    })}\n`);
+  }
+
+  async function writeRequest(request) {
+    await mkdir(requestFolder, { recursive: true });
+    await writeFile(requestPath(requestFolder, request.id), `${JSON.stringify(request, null, 2)}\n`);
+  }
 
   async function queueVisualRequest(command, message) {
     const outputType = command.outputType || "";
@@ -163,16 +183,66 @@ export function createVisualExpressionSkill(context) {
       },
     };
 
-    await mkdir(requestFolder, { recursive: true });
-    await writeFile(path.join(requestFolder, `${requestId}.json`), `${JSON.stringify(request, null, 2)}\n`);
-    await appendFile(requestLogPath, `${JSON.stringify({
-      request_id: requestId,
-      state: "queued",
-      updated_at: createdAt,
-      message: `manual visual request queued${selectedOutputType ? ` for ${selectedOutputType}` : ""}`,
-    })}\n`);
+    await writeRequest(request);
+    await appendRequestEvent(
+      requestId,
+      "queued",
+      `manual visual request queued${selectedOutputType ? ` for ${selectedOutputType}` : ""}`,
+      { updated_at: createdAt },
+    );
 
     return request;
+  }
+
+  async function readQueuedRequests() {
+    const files = await readdir(requestFolder).catch((error) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    const requests = [];
+    for (const file of files.filter((name) => name.endsWith(".json"))) {
+      const filePath = path.join(requestFolder, file);
+      const request = JSON.parse(await readFile(filePath, "utf8"));
+      if (request?.result?.status === "queued") requests.push(request);
+    }
+    return requests;
+  }
+
+  async function markRequestProviderUnimplemented(request) {
+    const assemblingAt = new Date().toISOString();
+    const failedAt = new Date().toISOString();
+    const nextRequest = {
+      ...request,
+      result: {
+        ...(request.result || {}),
+        status: "failed",
+        failed_at: failedAt,
+        error_kind: "provider_unimplemented",
+        message: "visual provider handoff is not implemented yet",
+        retryable: true,
+      },
+    };
+
+    await appendRequestEvent(request.id, "assembling_prompt", "validated queued visual request", {
+      updated_at: assemblingAt,
+    });
+    await appendRequestEvent(request.id, "failed", "visual provider handoff is not implemented yet", {
+      error_kind: "provider_unimplemented",
+      retryable: true,
+      provider: request.generation?.provider || settings.provider,
+      updated_at: failedAt,
+    });
+    await writeRequest(nextRequest);
+    return nextRequest;
+  }
+
+  async function processQueuedRequests({ limit = 5 } = {}) {
+    const queuedRequests = (await readQueuedRequests()).slice(0, limit);
+    const processed = [];
+    for (const request of queuedRequests) {
+      processed.push(await markRequestProviderUnimplemented(request));
+    }
+    return processed;
   }
 
   return {
@@ -210,6 +280,11 @@ export function createVisualExpressionSkill(context) {
     },
     async handlePipeCommand(command, message) {
       if (command?.kind !== "visual") return false;
+      if (command.action === "process") {
+        const processed = await processQueuedRequests();
+        await safeReply(message, `visual request processor checked ${processed.length} queued request${processed.length === 1 ? "" : "s"}`);
+        return true;
+      }
       const request = await queueVisualRequest(command, message);
       await safeReply(message, [
         "visual request queued",
@@ -219,6 +294,7 @@ export function createVisualExpressionSkill(context) {
       ].join("\n"));
       return true;
     },
+    processQueuedRequests,
     onReady() {
       console.log(`Visual expression skill loaded with provider ${settings.provider}. Generation remains planning-only.`);
     },
