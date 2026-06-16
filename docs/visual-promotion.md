@@ -56,17 +56,17 @@ Use `docs/visual-memory.md` for that memory shape.
 
 ## Memory Rules
 
-Promotion does not automatically rewrite `longmemory.txt`.
+Promotion does not automatically rewrite `memorysummary.txt`.
 
 If a promoted visual changes durable identity, appearance, location, or lore, summarize that fact explicitly through the normal memory flow.
 
-Good longmemory fact:
+Good Memorysummary fact:
 
 ```text
 Rena has a recurring Bimbomon expression image used as an emoji for corruption surfacing.
 ```
 
-Bad longmemory fact:
+Bad Memorysummary fact:
 
 ```text
 Generated image 2026-06-13-example-visual exists.
@@ -76,4 +76,4 @@ Generated image 2026-06-13-example-visual exists.
 
 Deleting regenerated outputs should not delete promoted soul copies.
 
-Deleting promoted soul art or emojis is a user-owned edit and should require the same care as editing persona or longmemory.
+Deleting promoted soul art or emojis is a user-owned edit and should require the same care as editing persona or Memorysummary.

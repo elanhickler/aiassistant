@@ -13,3 +13,4 @@ discord-bot/npm-debug.log*
 
 *.bak
 *.log
+.ycult/

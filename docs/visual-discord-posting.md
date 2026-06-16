@@ -56,7 +56,7 @@ It should not be acceptable by default for:
 
 * private thoughts.
 * hidden subtext.
-* longmemory-derived images.
+* Memorysummary-derived images.
 * unreviewed internet reference downloads.
 * generated images that may expose private local files or prompt internals.
 

@@ -12,7 +12,7 @@ Use only the parts that help the requested visual.
 * agent appearance : stable body, face, clothing, colors, species, and style anchors.
 * current moment : the message, reply intent, pose, action, location, or mood that caused the visual request.
 * status : awake, sleepy, sleeping, dreaming, away, energy, and current activity when relevant.
-* memory : only selected shortmemory or longmemory lines relevant to the image.
+* memory : only selected shortmemory or Memorysummary lines relevant to the image.
 * stories and dreams : only selected files relevant to the image.
 * references : only selected reference IDs from `soul/visual-references/manifest.jsonl`.
 

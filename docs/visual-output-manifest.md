@@ -116,7 +116,7 @@ Use `docs/visual-variants.md` when outputs belong to a variant group.
 
 ## Rules
 
-* Generated outputs are not automatically longmemory.
+* Generated outputs are not automatically Memorysummary.
 * Generated outputs are not automatically visual memory.
 * Generated outputs are not automatically reviewed.
 * Save prompt and source IDs so useful images can be traced later.

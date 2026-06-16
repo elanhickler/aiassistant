@@ -19,7 +19,7 @@
     // descrip: OpenRouter model string used for small utility decisions like intent checks, status inference, and whether sleep should create a dream.
     // default: "openai/gpt-oss-20b:free"
     "utility_model": "openai/gpt-oss-20b:free",
-    // descrip: Optional bot skills loaded for agents unless overridden. Time and story are core systems and are always loaded.
+    // descrip: Optional bot skills loaded for agents unless overridden. Journal, story, thought, and time are core systems and are always loaded.
     // default: discordstatusupdate
     "enabled_skills": [
         "discordstatusupdate"
@@ -34,7 +34,7 @@
     // descrip: Persona file to load from each agent folder.
     // default: "soul/persona.md"
     "system_prompt_file": "soul/persona.md",
-    // descrip: Repo-level persona addition appended to every agent persona at runtime. This file does not overwrite agent persona files.
+    // descrip: Repo-level generation defaults applied to every agent model request, including replies, thoughts, dreams, journals, stories, memorysummary updates, status updates, and text transformation. This file does not overwrite agent persona files.
     // default: "global-persona.md"
     "global_persona_file": "global-persona.md",
     // descrip: Discord forum post/thread ID used by /reloadpersona. Per-agent override recommended.
@@ -66,9 +66,10 @@
         "adjustments",
         "status",
         "profilepic",
-        "longmemory",
+        "memorysummary",
         "shortmemory",
         "dreams",
+        "thoughts",
         "art",
         "stories"
     ],
@@ -208,6 +209,23 @@
         // default: 25000000
         "max_training_audio_bytes": 25000000
     },
+    // descrip: Textgen skill settings. Textgen is an optional generation skill for intent-preserving text transformation. Its first mode is remux: same intent, different language container.
+    // default: sfw-discord remux styles, history saved locally
+    "textgen_skill": {
+        // descrip: Style preset used when the textgen request does not mention an existing style by name.
+        // default: "sfw-discord"
+        "default_style": "sfw-discord",
+        // descrip: Agent-local folder containing textgen style preset JSONC files.
+        // default: "soul/textgen/styles"
+        "styles_folder": "soul/textgen/styles",
+        // descrip: Agent-local folder where textgen request and output history is saved.
+        // default: "soul/textgen/history"
+        "history_folder": "soul/textgen/history",
+        // descrip: If true, textgen saves remux input and output history locally for later review.
+        // range: true or false.
+        // default: true
+        "save_history": true
+    },
     // descrip: Vision skill settings. The vision skill describes attached images, but does not update memory or image-generation guidance by itself.
     // default: use a vision-capable OpenRouter model
     "vision_skill": {
@@ -233,14 +251,12 @@
             "music"
         ]
     },
-    // descrip: Natural-language status update settings. These status notes are written into soul/status.json and mirrored to the status memory thread after summarization.
+    // descrip: Natural-language status update settings. These status notes are written into soul/status.json and mirrored to the status memory thread after summarization. Core sleep, dream, and status fields are read directly; source_skills is only for optional extra hints.
     // default: allow implemented major context skills to influence status text
     "discord_status_update": {
         // descrip: Skills allowed to provide optional status hints. Unknown, disabled, or unavailable skill names are ignored.
         // default:
         "source_skills": [
-            "time",
-            "dreams",
             "story",
             "music"
         ]
@@ -415,10 +431,10 @@
             // descrip: JSONL file inside output_folder that future tooling can use to record requested/generated visual expressions.
             // default: "requests.jsonl"
             "request_log_file": "requests.jsonl",
-            // descrip: JSONL file inside output_folder that future tooling can use to record compact visual memory summaries for recall.
+            // descrip: JSONL file inside output_folder that future tooling can use to record compact visual memory entries for recall.
             // default: "visual-memory.jsonl"
             "visual_memory_file": "visual-memory.jsonl",
-            // descrip: Maximum visual memory summaries future context assembly may include in one model request.
+            // descrip: Maximum visual memory entries future context assembly may include in one model request.
             // range: 0 or higher.
             // default: 4
             "max_visual_memories_per_context": 4,
@@ -506,24 +522,320 @@
             "promoted_emoji_folder": "soul/emojis"
         }
     },
-    // descrip: Maximum number of recent chat messages remembered as hidden context. These messages are sent privately to OpenRouter with each request, which uses input tokens and increases API cost.
-    // range: 0 or higher; practical range is 5 to 100 for normal chat, higher if you accept more cost and possible distraction.
-    // default: 100
-    "conversation_history_limit": 100,
+    // descrip: Number of recent shortmemory entries and live conversation entries sent privately to OpenRouter for normal replies. This is not how much is saved; shortmemory can save the whole day locally. Higher improves recall but every reply resends more text and costs more input tokens.
+    // range: 0 or higher; practical range is 100 to 300 for strong chat recall.
+    // default: 300
+    "recent_context_entries": 300,
+    // descrip: Deprecated older name kept only as a fallback if recent_context_entries is missing. Prefer editing recent_context_entries.
+    // range: 0 or higher.
+    // default: 300
+    "conversation_history_limit": 300,
     // descrip: Seconds to wait before a normal reply, then re-check that the source message still exists before spending OpenRouter tokens. Set to 0 to disable. This was a Tupper hack for bots that delete/replace user messages.
     // range: 0 or higher.
     // default: 0
     "seconds_before_reply": 0,
-    // descrip: Summarization settings control automatic memory maintenance. This turns shortmemory into compact longmemory text.
-    // default: soul/shortmemory.jsonl input, soul/longmemory.txt output
+    // descrip: Natural roleplay time settings. Before normal replies, the core time system can ask utility_model whether the user's message clearly implies time passed, then update soul/status.json and include that elapsed time as hidden context.
+    // default: enabled, conservative confidence, vague time capped at 8 hours
+    "natural_time_settings": {
+        // descrip: If true, normal replies may infer roleplay time from clear natural-language cues like after a shower, later, next morning, or three days later.
+        // range: true or false.
+        // default: true
+        "enabled": true,
+        // descrip: Minimum utility_model confidence required before inferred time updates status. Higher means fewer accidental time jumps.
+        // range: 0 to 1.
+        // default: 0.75
+        "minimum_confidence": 0.75,
+        // descrip: Maximum minutes allowed for vague inferred time such as later or after a while. Explicit wording like three hours later uses explicit_max_minutes instead.
+        // range: 1 or higher.
+        // default: 480
+        "vague_max_minutes": 480,
+        // descrip: Maximum minutes allowed for explicit inferred time such as three days later. This prevents accidental huge jumps from malformed model output.
+        // range: 1 or higher.
+        // default: 525600
+        "explicit_max_minutes": 525600,
+        // descrip: Recent live conversation entries sent to utility_model for the time inference decision.
+        // range: 0 or higher.
+        // default: 8
+        "recent_context_entries": 8
+    },
+    // descrip: Visible debug header for tuning agent roleplay time. If enabled, normal generated replies start with the current in-game datetime and how much roleplay time advanced before that reply.
+    // default: disabled for normal roleplay
+    "agent_time_debug": {
+        // descrip: If true, normal generated replies begin with a visible in-game time/debug header.
+        // range: true or false.
+        // default: false
+        "enabled": false,
+        // descrip: If true, include the latest time-passage reason when one exists.
+        // range: true or false.
+        // default: true
+        "show_reason": true,
+        // descrip: If true, show current_datetime in a compact local-readable format instead of raw ISO text.
+        // range: true or false.
+        // default: true
+        "compact_datetime": true
+    },
+    // descrip: Summarization settings control automatic memory maintenance. Summarizing creates durable memory entries and updates compact memorysummary, then clears temporary thoughts after successful memory absorption.
+    // default: soul/shortmemory.jsonl plus thoughts/journals/dreams/stories/neural memory input, soul/memorysummary.txt output, soul/memory entries
     "summarization_settings": {
-        // descrip: Summarization instruction. Longmemory must keep # Past, # Present, and # Future / Plans sections. Keep durable user-specific facts when they help future replies, such as names, stable preferences, boundaries, relationships, ongoing situations, and important context. Do not save throwaway moods, one-off wording, private subtext, or raw transcripts unless they became durably important.
+        // descrip: Memorysummary instruction. Memorysummary must keep # Past, # Present, and # Future / Plans sections. Keep durable user-specific facts when they help future replies, such as names, stable preferences, boundaries, relationships, ongoing situations, and important context. Do not save throwaway moods, one-off wording, private subtext, or raw transcripts unless they became durably important.
         // default: remember durable per-user context, not everything
         "summary_policy": "remember durable per-user context, not everything",
-        // descrip: Maximum recent shortmemory lines to include in one summarization run. Older shortmemory is not read directly during that run; it should already be represented in soul/longmemory.txt from earlier summaries.
+        // descrip: Maximum recent shortmemory lines to include in one daily memory run during sleep/dream memory maintenance. Older shortmemory is not read directly during that run; it should already be represented in soul/memorysummary.txt from earlier memory updates.
         // range: 1 or higher.
-        // default: 200
-        "max_lines_per_summary": 200
+        // default: 1000
+        "daily_summary_entries": 1000,
+        // descrip: If true, entering sleep runs the daily memory update in the background as part of the sleep/dream cycle.
+        // range: true or false.
+        // default: true
+        "summarize_on_sleep": true
+    },
+    // descrip: Shortmemory trash settings control how long user-trashed shortmemory entries remain recoverable before automatic memory cleanup removes them.
+    // default: keep trash for 7 successful automatic memory cycles
+    "shortmemory_trash": {
+        // descrip: Number of successful scheduled automatic memory cycles to keep trashed shortmemory entries. This uses cycle counts instead of calendar dates so a wrong system clock cannot instantly delete the wrong memories.
+        // range: 1 or higher.
+        // default: 7
+        "keep_auto_summary_cycles": 7
+    },
+    // descrip: Daily memory cycle settings control backup checks for the automatic consciousness cycle. The cycle still only runs when enough new memory entries accumulated.
+    // default: check after about 24 hours of bot runtime
+    "daily_memory_cycle": {
+        // descrip: Bot runtime hours between backup consciousness-cycle checks. Time while the bot is offline does not count.
+        // range: 1 or higher.
+        // default: 24
+        "automatic_cycle_hours": 24
+    },
+    // descrip: Consciousness cycle settings estimate when about one day of meaningful interaction has accumulated. The cycle generates neural memory, journal, dream, memory entries, memorysummary, then clears temporary thoughts after the memory update succeeds.
+    // default: one cycle after about 288 memory entries
+    "consciousness_cycle": {
+        // descrip: Estimated seconds between meaningful memory entries. Used to estimate how many entries roughly equal one day of interaction. For example, 300 means about one entry every 5 minutes.
+        // range: 1 or higher.
+        // default: 300
+        "seconds_per_message": 300,
+        // descrip: Number of hours that should count as one memory cycle. The default 24 means the system tries to summarize about one day of interaction at a time.
+        // range: 1 or higher.
+        // default: 24
+        "cycle_hours": 24
+    },
+    // descrip: Consciousness cleanup settings. Cleanup only applies to backup files/folders under the agent backups folder, never to active soul or memory files.
+    // default: keep backups 7 days, move expired backups to OS trash, never permanently delete by default
+    "consciousness": {
+        "cleanup": {
+            // descrip: Number of days to keep backup files before they are eligible for cleanup.
+            // range: 1 or higher.
+            // default: 7
+            "backup_retention_days": 7,
+            // descrip: When true, expired backups are moved to the operating system trash / Windows Recycle Bin. If OS trash fails, backups are left untouched.
+            // range: true or false.
+            // default: true
+            "move_expired_backups_to_os_trash": true,
+            // descrip: When true, expired backups are permanently deleted instead of moved to OS trash. Dangerous; must stay false unless you explicitly accept permanent deletion.
+            // range: true or false.
+            // default: false
+            "permanently_delete_expired_backups": false
+        }
+    },
+    // descrip: Neural memory settings describe the future consciousness loop memory system. This is inert for now and does not affect replies while mode is off.
+    // default: off, read 1000 entries, write about 100 downscaled memory nodes
+    "neural_memory": {
+        // descrip: Controls how neural memory participates in replies. "off" means neural memory is not used in replies. "debug" means neural memory is built and shown with tiny safe reply influence for testing. "on" means selected neural memory can affect replies normally.
+        // range: off, debug, or on.
+        // default: off
+        "mode": "off",
+        // descrip: Number of recent memory entries used to write the agent's private first-person thought before a visible reply.
+        // range: 1 or higher.
+        // default: 10
+        "thought_window_entries": 10,
+        // descrip: Number of recent memory entries sent as raw conversation context for the visible reply.
+        // range: 1 or higher.
+        // default: 100
+        "reply_window_entries": 100,
+        // descrip: Number of recent memory entries read by neural memory semantic downscale.
+        // range: 1 or higher; should be greater than or equal to reply_window_entries.
+        // default: 1000
+        "read_entries": 1000,
+        // descrip: Approximate number of downscaled neural memory nodes to write from read_entries.
+        // range: 1 or higher; should usually be much smaller than read_entries.
+        // default: 100
+        "write_nodes": 100
+    },
+    // descrip: Consciousness descriptors define what each generated artifact is. They are human-editable model-facing instructions for thought, journal, dream, dreamjournal, story, memory, memorysummary, neural memory, and reply behavior.
+    // default: first-person private thought, durable journal/dream/story/memory artifacts, visible reply separation, and compact memorysummary updates.
+    "consciousness_descriptors": {
+        // descrip: Instruction for generating the private thought attached to a reply.
+        // default: private first-person internal monologue
+        "thought": "Write my private first-person internal monologue for this moment. Focus on what I am thinking or feeling right now, including anything I might not say out loud.",
+        // descrip: Instruction for generating the visible reply.
+        // default: visible reply that does not reveal private thought unless natural
+        "reply": "Write my visible reply to the user. Use persona, the current message, recent raw conversation, and any allowed memory context. Do not reveal private thought unless it naturally belongs in the reply.",
+        // descrip: Instruction for downscaling memory into neural memory nodes.
+        // default: dense memory nodes about patterns, meaning, subtext, and future relevance
+        "neural_memory": "Downscale a larger window of recent memory into dense semantic memory nodes that help me understand patterns, scene meaning, emotional subtext, and what may matter later. Include text-upscale guidance for how future replies, journals, dreams, stories, memory entries, or memorysummary should use those nodes without inventing unsupported details.",
+        // descrip: Instruction for writing durable emotional journal reflections.
+        // default: first-person emotional reflection for dreams and memory updates
+        "journal": "Write my first-person emotional reflection about what the recent cycle meant to me. Use thoughts, recent memory, neural memory, and durable memory. This journal is durable and may shape dreams and memory updates.",
+        // descrip: Instruction for writing dreams from memory and emotional material.
+        // default: first-person dream shaped by mood and natural-language instructions
+        "dream": "Write my first-person dream from my journal, thoughts, neural memory, and durable memory. Infer mood from context. Follow any natural-language instructions about symbolism, chaos, intensity, or style.",
+        // descrip: Instruction for interpreting an existing dream's meaning. This analyzes a dream; it does not create a new dream.
+        // default: separate supported meaning from speculation
+        "dreamjournal": "Figure out what the meaning of the dream is. Analyze an existing dream using bounded relevant memory. Do not create a new dream. Do not treat dream events as literal real events unless supported elsewhere. Separate supported meaning from speculation.",
+        // descrip: Instruction for writing stories from what happened.
+        // default: first-person story from real events shaped by natural-language style instructions
+        "story": "Write a first-person story from what actually happened. Use recent memory, neural memory, thoughts, and durable memory. Follow any natural-language instructions about factuality, creativity, literary style, or expressive intensity.",
+        // descrip: Instruction for creating durable memory entries over time during the consciousness / memory cycle.
+        // default: preserve specific durable events, patterns, and relationship developments
+        "memory": "Create durable memory entries from recent shortmemory, thoughts, journals, dreams, stories, and neural memory. Preserve specific events, relationship developments, important preferences, boundaries, unresolved plans, and lasting changes without dumping transcripts.",
+        // descrip: Instruction for updating the compact active durable memorysummary used in model context.
+        // default: compact durable memory used in future replies
+        "memorysummary": "Update memorysummary with what should affect future replies: stable facts, relationship truths, recurring preferences, important boundaries, unresolved plans, and lasting changes. Keep it compact. Absorb useful temporary thoughts, then clear thoughts only after the memory cycle succeeds.",
+        // descrip: Legacy alias for older code paths. Prefer consciousness_descriptors.memorysummary for new behavior.
+        // default: same intent as memorysummary
+        "summary": "Update memorysummary with what should affect future replies: stable facts, relationship truths, recurring preferences, important boundaries, unresolved plans, and lasting changes. Keep it compact. Absorb useful temporary thoughts, then clear thoughts only after the memory cycle succeeds."
+    },
+    // descrip: Human-editable scale definition for numeric thought influence values. This defines how to interpret numbers in model prompts; it is not a separate thought-usage descriptor system.
+    // range: keys should describe values from 0.0 through 1.0.
+    // default: 0.0 none, 0.5 balanced, 1.0 thoughts dominate interpretation
+    "thought_influence_scale": {
+        "0.0": "Thoughts have no meaningful influence. Use observable events and durable memory.",
+        "0.25": "Thoughts are faint background color. Do not let them change facts or conclusions.",
+        "0.5": "Thoughts are balanced with observable memory and durable memory.",
+        "0.75": "Thoughts strongly shape emotional framing, motive, and interpretation while still respecting observable events.",
+        "1.0": "Thoughts dominate. Private interpretation, feeling, bias, and internal monologue become the main source of meaning."
+    },
+    // descrip: Thought debug visibility controls whether private thoughts are shown in visible replies for debugging. Keep off for normal use.
+    // default: off
+    "thought_debug": {
+        // descrip: off keeps private thoughts hidden. append_to_reply appends the generated private thought under the visible reply for debugging.
+        // range: off or append_to_reply.
+        // default: off
+        "visibility": "off"
+    },
+    // descrip: Journal generation controls. use_thoughts decides whether private thoughts may be read; thought_influence controls how strongly thoughts shape the journal when enabled.
+    // default: use thoughts with strong emotional influence
+    "journal": {
+        // descrip: Whether journal generation may read private thought files.
+        // range: true or false.
+        // default: true
+        "use_thoughts": true,
+        // descrip: How strongly private thoughts influence journal generation when use_thoughts is true. The model interprets this using thought_influence_scale.
+        // range: 0.0 through 1.0.
+        // default: 0.75
+        "thought_influence": 0.75
+    },
+    // descrip: Dream generation controls. use_thoughts decides whether private thoughts may be read; thought_influence controls how strongly thoughts shape dreams when enabled.
+    // default: use thoughts with strong symbolic influence
+    "dream": {
+        // descrip: Whether dream generation may read private thought files.
+        // range: true or false.
+        // default: true
+        "use_thoughts": true,
+        // descrip: How strongly private thoughts influence dream generation when use_thoughts is true. The model interprets this using thought_influence_scale.
+        // range: 0.0 through 1.0.
+        // default: 0.75
+        "thought_influence": 0.75
+    },
+    // descrip: Dream journal controls. Dream journals interpret existing dreams; they do not create new dreams.
+    // default: automatically create a dream journal after a dream is successfully saved
+    "dream_journal": {
+        // descrip: If true, automatically create a dream journal after a dream file is successfully saved. If false, only create dream journals with the dreamjournal magic pipe command.
+        // range: true or false.
+        // default: true
+        "auto_enabled": true,
+        // descrip: Bounded read limits for dream journal interpretation. "Everything" means all relevant lanes within these limits, not unlimited archive reads.
+        // default: latest dream plus bounded recent slices of shortmemory, thoughts, journals, stories, dream journals, memory entries, neural memory, and origin summary
+        "read_limits": {
+            // descrip: Number of latest dream files to include. Dreamjournal v1 interprets the latest selected dream, so this is usually 1.
+            // range: 1 or higher.
+            // default: 1
+            "latest_dreams": 1,
+            // descrip: Recent raw conversation entries to include.
+            // range: 0 or higher.
+            // default: 100
+            "shortmemory_entries": 100,
+            // descrip: Recent private thought entries to include.
+            // range: 0 or higher.
+            // default: 50
+            "thought_entries": 50,
+            // descrip: Recent durable journal artifacts to include.
+            // range: 0 or higher.
+            // default: 7
+            "journal_entries": 7,
+            // descrip: Recent story artifacts to include.
+            // range: 0 or higher.
+            // default: 5
+            "story_entries": 5,
+            // descrip: Previous dream journal artifacts to include for recurring symbols and interpretations.
+            // range: 0 or higher.
+            // default: 3
+            "dream_journal_entries": 3,
+            // descrip: Durable memory entry files to include from soul/memory.
+            // range: 0 or higher.
+            // default: 14
+            "memory_entries": 14,
+            // descrip: Semantic downscale / text-upscale neural memory nodes to include if available. This is counted by JSONL lines where possible.
+            // range: 0 or higher.
+            // default: 50
+            "neural_memory_nodes": 50,
+            // descrip: Origin summary entries to include if entry-based; otherwise include the current origin summary safely when this is 1 or higher.
+            // range: 0 or higher.
+            // default: 1
+            "origin_summary_entries": 1
+        }
+    },
+    // descrip: Story generation controls. use_thoughts decides whether private thoughts may be read; thought_influence controls how strongly thoughts shape stories when enabled.
+    // default: use thoughts as balanced interpretive evidence
+    "story": {
+        // descrip: Whether story generation may read private thought files.
+        // range: true or false.
+        // default: true
+        "use_thoughts": true,
+        // descrip: How strongly private thoughts influence story generation when use_thoughts is true. The model interprets this using thought_influence_scale.
+        // range: 0.0 through 1.0.
+        // default: 0.5
+        "thought_influence": 0.5
+    },
+    // descrip: Memorysummary update controls. use_thoughts decides whether private thoughts may be read; thought_influence controls how strongly thoughts shape durable memory when enabled.
+    // default: use thoughts as balanced supporting evidence
+    "memorysummary_update": {
+        // descrip: Whether memorysummary updates may read private thought files.
+        // range: true or false.
+        // default: true
+        "use_thoughts": true,
+        // descrip: How strongly private thoughts influence memorysummary updates when use_thoughts is true. The model interprets this using thought_influence_scale.
+        // range: 0.0 through 1.0.
+        // default: 0.5
+        "thought_influence": 0.5
+    },
+    // descrip: Experimental disabled Memory Layers / Neural Memory settings. Memory Layers are now the visual/debug surface for future neural_memory. When disabled and use_in_context is false, this must not affect replies.
+    // default: disabled, read from soul/shortmemory.jsonl, write experimental files under soul/memory-layers
+    "memory_layers": {
+        // descrip: Whether the experimental Memory Layers builder is allowed to run.
+        // range: true or false.
+        // default: false
+        "enabled": false,
+        // descrip: How many memory nodes the system is allowed to grow toward.
+        // range: 1 or higher.
+        // default: 100
+        "neurons": 100,
+        // descrip: How many lower-layer memories are grouped into one higher-layer semantic downscale node. This is an internal builder ratio, not the main user-facing control.
+        // range: 2 or higher.
+        // default: 8
+        "compression_ratio": 8,
+        // descrip: Maximum number of generated layer files. For example, 5 means layer-0.jsonl through layer-4.jsonl.
+        // range: 1 or higher.
+        // default: 5
+        "max_layers": 5,
+        // descrip: Agent-local source file for raw layer 0 memory.
+        // default: "soul/shortmemory.jsonl"
+        "layer_0_source": "soul/shortmemory.jsonl",
+        // descrip: Agent-local folder where generated Memory Layers files live.
+        // default: "soul/memory-layers"
+        "folder": "soul/memory-layers",
+        // descrip: Whether Memory Layers affect normal replies. Keep false until Memory Layers are proven useful and previewable.
+        // range: true or false.
+        // default: false
+        "use_in_context": false
     },
     // descrip: Origin summary settings control how soul/origin.md becomes soul/origin_summary.md. Origin is backstory/lore source material, not ordinary chat memory.
     // default: lore-dense summary that keeps memorable roleplay details while staying shorter than the source
@@ -536,7 +848,18 @@
         // default: 2200
         "max_tokens": 4000
     },
-    // descrip: Dream settings control the dream part of the core time system. Dreams are creative artifacts and do not directly replace summaries.
+    // descrip: Temporary Yculth Character Sheet background summary generation. This fills Past Summary, Present Summary, and Future Summary from persona, origin, memorysummary, status, and recent shortmemory.
+    // default: concise practical sheet summaries
+    "background_summary_settings": {
+        // descrip: Natural-language instruction used when the Character Sheet star button generates past, present, and future summaries. This is intentionally flexible and temporary.
+        // default: create concise Character Sheet summaries
+        "instruction": "Create concise Character Sheet summaries. Past should describe important backstory and prior events. Present should describe current state, active relationship context, mood, and situation. Future should describe likely next direction, unresolved plans, open tensions, and what may matter soon.",
+        // descrip: Maximum output tokens for the generated past, present, and future JSON.
+        // range: 1 or higher.
+        // default: 850
+        "max_tokens": 850
+    },
+    // descrip: Dream settings control the dream part of the core time system. Dreams are creative artifacts and do not directly replace memorysummary.
     // default: manual dream generation, write drafts into soul/dreams
     "dream_settings": {
         "enabled": true,
@@ -548,11 +871,26 @@
         },
         "output_folder": "soul/dreams",
         "source_files": [
-            "soul/longmemory.txt",
+            "soul/memorysummary.txt",
             "soul/shortmemory.jsonl"
         ],
+        // descrip: Folder containing private first-person thoughts that can feed dreams and end-of-day story support. Thoughts are softer than memory and should be treated as interpretation, not fact.
+        // default: "soul/consciousness/thoughts"
+        "thoughts_folder": "soul/consciousness/thoughts",
+        // descrip: Folder containing durable first-person journals that can feed dreams and future memory updates. Journals are durable emotional reflections, not temporary thoughts.
+        // default: "soul/consciousness/journals"
+        "journals_folder": "soul/consciousness/journals",
+        // descrip: Durable summary of past dreams used when dream instructions ask for more symbolic, recurring, or emotionally intensified material.
+        // default: "soul/dream_summary.md"
+        "dream_summary_file": "soul/dream_summary.md",
+        // descrip: Maximum characters of dream summary to include in dream generation.
+        // range: 1 or higher.
+        // default: 6000
+        "dream_summary_max_characters": 6000,
         "max_words": 500,
-        "can_feed_summarization": false
+        // descrip: If true, durable dream files may be read by memory updates as evidence. Dream files are never deleted by memory updates.
+        // default: true
+        "can_feed_summarization": true
     },
     // descrip: Reply randomness; chaos here is temperature for OpenRouter. Higher values are looser, lower values are steadier.
     // range: 0 to 2.
@@ -566,11 +904,11 @@
     // range: 1 to 2000 for normal Discord messages.
     // default: 1900
     "discord_reply_character_limit": 1900,
-    // descrip: Channel and server reply policy. reply_to lists are ambient reply zones where the bot may answer without being directly @mentioned or named. Direct @mentions and name calls may reply outside reply_to lists. do_not_reply lists always win.
+    // descrip: Channel and server reply policy. reply_to lists are ambient reply zones where the bot may answer without being directly @mentioned or named. Direct Discord @mentions may reply outside reply_to lists when only_allow_replies_to_specific_channels is false. Plain names and nicknames do not bypass reply_to lists. do_not_reply lists always win.
     // default: listed mode with empty lists
     "location_reply_policy": {
         "mode": "listed",
-        // descrip: If true, the bot may only reply inside reply_to_channel_ids, reply_to_server_ids, or DMs. If false, direct @mentions and name calls may reply outside those ambient reply zones.
+        // descrip: If true, the bot may only reply inside reply_to_channel_ids, reply_to_server_ids, or DMs. If false, direct Discord @mentions may reply outside those ambient reply zones, but plain names and nicknames still cannot.
         // range: true or false.
         // default: false
         "only_allow_replies_to_specific_channels": false,

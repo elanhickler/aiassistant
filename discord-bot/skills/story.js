@@ -1,6 +1,7 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "../memory.js";
+import { semanticMemoryUsageContract } from "../semantic-memory.js";
 
 function timestampForFileName() {
   return new Date().toISOString().replace(/[:.]/g, "-");
@@ -99,6 +100,40 @@ async function readRequiredTextFile(filePath) {
   return readFile(filePath, "utf8").then((text) => text.trim());
 }
 
+async function readRecentMemoryFiles(agentFolder, folderSetting, filePattern, limit, maxCharactersPerFile) {
+  const folderPath = path.resolve(agentFolder, String(folderSetting));
+  const resolvedAgentFolder = path.resolve(agentFolder);
+  if (folderPath !== resolvedAgentFolder && !folderPath.startsWith(`${resolvedAgentFolder}${path.sep}`)) {
+    throw new Error(`Story memory source folder escapes agent folder: ${folderSetting}`);
+  }
+
+  const files = await readdir(folderPath, { withFileTypes: true }).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  const matchingFiles = files
+    .filter((entry) => entry.isFile() && filePattern.test(entry.name))
+    .map((entry) => path.join(folderPath, entry.name))
+    .sort()
+    .slice(-limit);
+
+  const sourceFiles = [];
+  for (const filePath of matchingFiles) {
+    sourceFiles.push({
+      relativeFilePath: path.relative(agentFolder, filePath),
+      text: limitText((await readFile(filePath, "utf8")).trim(), maxCharactersPerFile),
+    });
+  }
+  return sourceFiles;
+}
+
+function formatSourceFilesForContext(sourceFiles, emptyText = "(empty)") {
+  if (!sourceFiles.length) return emptyText;
+  return sourceFiles
+    .map((sourceFile) => [`# ${sourceFile.relativeFilePath}`, sourceFile.text].join("\n"))
+    .join("\n\n");
+}
+
 export function createStorySkill(context) {
   const {
     agentFolder,
@@ -116,6 +151,54 @@ export function createStorySkill(context) {
   } = context;
 
   const storiesFolder = path.join(agentFolder, "soul", "stories");
+
+  function optionalSetting(name, fallback = {}) {
+    try {
+      return requiredSetting(name);
+    } catch (error) {
+      if (String(error.message || "").includes("Missing required setting")) return fallback;
+      throw error;
+    }
+  }
+
+  function clampThoughtInfluence(value, fallback) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return fallback;
+    return Math.min(1, Math.max(0, numericValue));
+  }
+
+  function formatThoughtInfluenceScale() {
+    const scale = optionalSetting("thought_influence_scale", {});
+    if (typeof scale === "string") return scale.trim();
+    if (scale && typeof scale === "object" && !Array.isArray(scale)) {
+      return Object.entries(scale)
+        .sort(([left], [right]) => Number(left) - Number(right))
+        .map(([key, value]) => `${key}: ${String(value)}`)
+        .join("\n");
+    }
+    return "";
+  }
+
+  function thoughtInfluenceControl(processName, fallbackInfluence) {
+    const processSettings = optionalSetting(processName, {});
+    const useThoughts = processSettings.use_thoughts !== false;
+    return {
+      influence: clampThoughtInfluence(processSettings.thought_influence, fallbackInfluence),
+      scaleText: formatThoughtInfluenceScale(),
+      useThoughts,
+    };
+  }
+
+  function formatThoughtInfluenceInstruction(processLabel, control) {
+    if (!control.useThoughts) {
+      return `${processLabel} thought influence: private thoughts are disabled for this process. Do not use private thoughts as evidence.`;
+    }
+    return [
+      `${processLabel} thought influence: ${control.influence}`,
+      "Interpret this value using the editable thought_influence_scale below. If the value falls between listed scale points, interpolate naturally.",
+      control.scaleText || "(thought_influence_scale is empty)",
+    ].join("\n");
+  }
 
   async function listStoryFiles() {
     const entries = await readdir(storiesFolder, { withFileTypes: true }).catch((error) => {
@@ -252,16 +335,55 @@ export function createStorySkill(context) {
   }
 
   async function generateStory(commandContent = "") {
+    const consciousnessDescriptors = optionalSetting("consciousness_descriptors", {});
+    const storyDescriptor = String(consciousnessDescriptors.story || "").trim() ||
+      "Write a first-person story from what actually happened.";
+    const userInstructions = String(commandContent || "").trim();
+    const storyPrompt = userInstructions
+      ? `${storyDescriptor}\n\nAdditional user story instructions:\n${userInstructions}`
+      : storyDescriptor;
+    const discordReplyCharacterLimit = Number(requiredSetting("discord_reply_character_limit")) || 1900;
     const recentEntries = (await readShortMemoryEntries(shortMemoryPath)).slice(-conversationHistoryLimit);
     const recentShortMemory = shortMemoryEntriesToSource(recentEntries);
-    const existingLongMemory = await readRequiredTextFile(longMemoryPath).catch((error) => {
+    const existingMemorySummary = await readRequiredTextFile(longMemoryPath).catch((error) => {
       if (error.code === "ENOENT") return "";
       throw error;
     });
-    const storyPrompt = commandContent.trim() ||
-      "Look at the saved stories, recent shortmemory, and longmemory, then write only what the evidence supports.";
+    const dreamSettings = optionalSetting("dream_settings", {});
+    const memoryLayersSettings = optionalSetting("memory_layers", {});
+    const storyThoughtControl = thoughtInfluenceControl("story", 0.5);
+    const thoughts = storyThoughtControl.useThoughts
+      ? await readRecentMemoryFiles(
+        agentFolder,
+        dreamSettings.thoughts_folder || "soul/consciousness/thoughts",
+        /\.(md|txt)$/i,
+        12,
+        5000,
+      )
+      : [];
+    const journals = await readRecentMemoryFiles(
+      agentFolder,
+      dreamSettings.journals_folder || "soul/consciousness/journals",
+      /\.(md|txt)$/i,
+      8,
+      7000,
+    );
+    const neuralMemory = await readRecentMemoryFiles(
+      agentFolder,
+      memoryLayersSettings.folder || "soul/memory-layers",
+      /^layer-\d+\.jsonl$/i,
+      5,
+      9000,
+    ).catch((error) => [{
+      relativeFilePath: memoryLayersSettings.folder || "soul/memory-layers",
+      text: `(neural memory unavailable: ${error.message})`,
+      unavailable: true,
+    }]);
+    const neuralMemoryNodeCount = neuralMemory
+      .filter((file) => !file.unavailable)
+      .reduce((count, file) => count + file.text.split(/\r?\n/).filter(Boolean).length, 0);
     const savedStories = await listStoryFiles();
-    const relevantStories = await selectRelevantStories(storyPrompt, savedStories).catch((error) => {
+    const relevantStories = await selectRelevantStories(userInstructions || storyPrompt, savedStories).catch((error) => {
       console.error(`Story evidence selection failed: ${error.message}`);
       return [];
     });
@@ -273,11 +395,18 @@ export function createStorySkill(context) {
           systemPrompt(),
           "",
           "# Story Task",
-          "Write one short story as this agent, but treat memory as evidence, not as permission to invent.",
-          "Search the provided saved stories, recent shortmemory, and longmemory for the scene or subject the user is asking about.",
+          storyPrompt,
+          "",
+          "Write one short story as this agent, in first person by default unless the user explicitly asks for another perspective.",
+          "Treat memory as evidence, not as permission to invent.",
+          "Search the provided saved stories, recent shortmemory, thoughts when story.use_thoughts is enabled, journals, neural memory if present, and memorysummary for the scene or subject the user is asking about.",
+          formatThoughtInfluenceInstruction("Story", storyThoughtControl),
+          semanticMemoryUsageContract(),
           "Use only facts, scenes, character details, emotions, preferences, continuity, and plans that appear in that evidence.",
           "Use the user's story prompt to decide what part of memory they are asking about.",
           "If the prompt is blank, choose a relevant recent scene or thread from the evidence.",
+          "Stories should lean toward what actually happened, but can become creative, poetic, scientific, chaotic, or stylized when the user asks for that.",
+          "Treat any user mention of creativity, realism, poetic style, scientific detail, chaos, or numeric style values as temporary natural-language guidance only.",
           "Do not add new events, locations, outcomes, names, relationships, or lore that are not supported by the evidence.",
           "Small connective prose is allowed only to make supported memory read smoothly.",
           "If the evidence is too thin, say that the memory is thin inside the story_markdown instead of filling the gap with new facts.",
@@ -296,11 +425,22 @@ export function createStorySkill(context) {
           "# Relevant Saved Stories",
           formatStoriesForContext(relevantStories, 9000),
           "",
-          "# Longmemory",
-          existingLongMemory || "(empty)",
+          "# Memorysummary",
+          existingMemorySummary || "(empty)",
           "",
           "# Recent Shortmemory",
           recentShortMemory || "(empty)",
+          "",
+          "# Recent Thoughts",
+          storyThoughtControl.useThoughts
+            ? formatSourceFilesForContext(thoughts)
+            : "(disabled by story.use_thoughts)",
+          "",
+          "# Recent Journals",
+          formatSourceFilesForContext(journals),
+          "",
+          "# Neural Memory If Available",
+          formatSourceFilesForContext(neuralMemory),
         ].join("\n"),
       },
     ];
@@ -339,7 +479,22 @@ export function createStorySkill(context) {
     const fileName = `${timestampForFileName()}-${safeFileName(title)}.md`;
     const storyPath = path.join(storiesFolder, fileName);
     await mkdir(storiesFolder, { recursive: true });
-    await writeFile(storyPath, `${storyMarkdown}\n`, "utf8");
+    const fileText = [
+      storyMarkdown,
+      "",
+      "---",
+      `agent: ${agentName}`,
+      `created: ${new Date().toISOString()}`,
+      `prompt: ${storyPrompt.replace(/\r?\n/g, " ")}`,
+      `local_file: soul/stories/${fileName}`,
+      `shortmemory_entries_included_count: ${recentEntries.length}`,
+      `thoughts_included_count: ${thoughts.length}`,
+      `journals_included_count: ${journals.length}`,
+      `neural_memory_nodes_included_count: ${neuralMemoryNodeCount}`,
+      `saved_stories_included_count: ${relevantStories.length}`,
+      "",
+    ].join("\n");
+    await writeFile(storyPath, fileText, "utf8");
 
     const storiesPost = await findMemoryForumPostByName("stories").catch(() => null);
     let postedToDiscord = false;
@@ -377,7 +532,9 @@ export function createStorySkill(context) {
     },
     async handleInteraction(interaction) {
       if (interaction.commandName !== "uploadstory") return false;
-      await interaction.deferReply({ ephemeral: true });
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
 
       try {
         const filename = interaction.options.getString("filename", true);
@@ -404,7 +561,7 @@ export function createStorySkill(context) {
         content: [
           "Story generation and upload are available.",
           "When the user asks to write a new story, use the story pipe command workflow.",
-          "Stories should be grounded in saved stories, shortmemory, and longmemory instead of inventing new continuity.",
+          "Stories should be grounded in saved stories, shortmemory, and memorysummary instead of inventing new continuity.",
         ].join("\n"),
       }];
 
@@ -422,7 +579,7 @@ export function createStorySkill(context) {
         content: [
           "The user appears to be asking about saved story material.",
           "Use the relevant saved story text below to answer naturally.",
-          "Also use the longmemory and recent shortmemory context that are already included in this request.",
+          "Also use the memorysummary and recent shortmemory context that are already included in this request.",
           "Do not pretend to search; you have the saved story context here.",
           "Do not add unsupported story details. If evidence is missing, say the saved memory does not show that.",
           "If the user asks what happened, summarize the story.",

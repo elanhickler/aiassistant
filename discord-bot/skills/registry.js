@@ -1,19 +1,28 @@
 import { createCodeSkill } from "./code.js";
 import { createDiscordStatusUpdateSkill } from "./discordstatusupdate.js";
+import { createDreamJournalSkill } from "./dreamjournal.js";
+import { createEmojiSkill } from "./emoji.js";
 import { createFileSkill } from "./file.js";
 import { createMusicSkill } from "./music.js";
 import { plannedSkillNames } from "./placeholders.js";
 import { createRunProgramSkill } from "./runprogram.js";
 import { createSpeakSkill } from "./speak.js";
 import { createStorySkill } from "./story.js";
+import { createJournalSkill } from "./journal.js";
+import { createTextgenSkill } from "./textgen.js";
+import { createThoughtSkill } from "./thought.js";
 import { createTimeSkill } from "./time.js";
 import { createVisionSkill } from "./vision.js";
 import { createVisualExpressionSkill } from "./visualexpression.js";
 
-export const coreSkillNames = new Set(["story", "time"]);
+export const coreSkillNames = new Set(["dreamjournal", "emoji", "journal", "story", "thought", "time"]);
 
 const coreSkillFactories = [
+  createDreamJournalSkill,
+  createEmojiSkill,
+  createJournalSkill,
   createStorySkill,
+  createThoughtSkill,
   createTimeSkill,
 ];
 
@@ -24,6 +33,7 @@ const optionalSkillDefinitions = [
   { name: "music", factory: createMusicSkill, pipeCommands: ["music"], allowEmptyPipeCommands: ["music"] },
   { name: "runprogram", factory: createRunProgramSkill, pipeCommands: ["runprogram"] },
   { name: "speak", factory: createSpeakSkill, pipeCommands: ["speak"], allowEmptyPipeCommands: ["speak"] },
+  { name: "textgen", factory: createTextgenSkill, pipeCommands: ["textgen"] },
   { name: "vision", factory: createVisionSkill, pipeCommands: ["vision"], allowEmptyPipeCommands: ["vision"] },
   { name: "visualexpression", factory: createVisualExpressionSkill, pipeCommands: ["image", "visual"] },
 ];

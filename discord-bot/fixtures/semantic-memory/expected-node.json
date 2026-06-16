@@ -1,0 +1,8 @@
+{
+  "kind": "scene_impression",
+  "compressed": "Jace brought tea during a storm; the agent felt nervous about thunder but steadied because of Jace's kindness.",
+  "upscale_direction": "When storms, tea, nervousness, or Jace's care become relevant, expand this as a soft emotional continuity note rather than an exact transcript.",
+  "do_not_invent": "Do not invent that Jace stayed all night, made a promise, or ended the storm fear completely.",
+  "confidence": 0.92,
+  "source": "fixtures/semantic-memory/shortmemory.jsonl entries 0-1 plus fixtures/semantic-memory/thought.md"
+}

@@ -10,7 +10,7 @@
 
 * `settings.jsonc` : Rena's local overrides.
 * `soul/persona.md` : Rena's identity and voice.
-* `soul/longmemory.txt` : Durable memory.
+* `soul/memorysummary.txt` : Durable memory.
 * `soul/shortmemory.jsonl` : Recent memory cache.
 * `soul/status.json` : Current raw state.
 * `secrets/discord_token.txt` : Rena's Discord app token.

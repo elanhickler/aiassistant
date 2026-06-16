@@ -28,6 +28,7 @@ export function createDiscordStatusUpdateSkill(context) {
     requiredSetting,
     safeReply,
     statusApi,
+    systemPrompt,
     utilityModel,
     writeRawOpenRouterText,
   } = context;
@@ -86,12 +87,16 @@ export function createDiscordStatusUpdateSkill(context) {
     const statusHints = await collectStatusHints(summaryContext);
     const summaryText = limitText(summaryContext.summaryText, 6000);
     const sourceText = limitText(summaryContext.sourceText, 6000);
-    const longMemoryText = summaryText || limitText(await readFile(longMemoryPath, "utf8").catch(() => ""), 6000);
+    const memorySummaryText = summaryText || limitText(await readFile(longMemoryPath, "utf8").catch(() => ""), 6000);
 
     const messages = [
       {
         role: "system",
         content: [
+          `# Persona: ${agentName}`,
+          typeof systemPrompt === "function" ? systemPrompt() : "",
+          "",
+          "# Status Update Task",
           `You write ${agentName}'s concise natural-language status.`,
           "This is not Discord presence. It is an auditable memory/status note for humans and future context.",
           "Use current status as truth. Do not change mode, wake state, or sleep state.",
@@ -117,8 +122,8 @@ export function createDiscordStatusUpdateSkill(context) {
           "# User Basis Or Suggested Status",
           basisText || "(none)",
           "",
-          "# Longmemory",
-          longMemoryText || "(empty)",
+          "# Memorysummary",
+          memorySummaryText || "(empty)",
           "",
           "# Recent Shortmemory Source Used By Summary",
           sourceText || "(empty)",

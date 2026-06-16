@@ -1,9 +1,14 @@
-﻿import { createRequire } from "node:module";
+import { createRequire } from "node:module";
 import { readFileSync, unlinkSync } from "node:fs";
-import { appendFile, mkdir, open, readFile, unlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { appendFile, mkdir, open, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { savePrivateThought } from "./consciousness.js";
 import { buildOpenRouterMessages } from "./context.js";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
+import { semanticMemoryUsageContract } from "./semantic-memory.js";
 import {
   createRuntimeSkills,
   implementedOptionalPipeCommandNames,
@@ -15,6 +20,8 @@ import {
 } from "./skills/registry.js";
 
 const require = createRequire(import.meta.url);
+const execFileAsync = promisify(execFile);
+const runtimeFolder = path.dirname(fileURLToPath(import.meta.url));
 const { AttachmentBuilder, Client, GatewayIntentBits, Partials } = require("./regenerated/node_modules/discord.js");
 
 async function readTextFile(path) {
@@ -57,7 +64,7 @@ async function appendConversationLog(entry) {
   const shortMemoryEntry = { timestamp: new Date().toISOString(), ...entry };
   await appendFile(shortMemoryPath, `${JSON.stringify(shortMemoryEntry)}\n`);
   await appendShortMemoryThread(shortMemoryEntry);
-  scheduleAutoSummarization();
+  scheduleDailyMemoryCycleCheck();
 }
 
 async function appendShortMemoryEntries(entries) {
@@ -81,10 +88,34 @@ function requiredSetting(name) {
   return settings[name];
 }
 
+function nonNegativeIntegerSetting(name, fallbackName = null) {
+  const rawValue = name in settings ? settings[name] : (fallbackName ? settings[fallbackName] : undefined);
+  const value = Number(rawValue);
+  if (!Number.isInteger(value) || value < 0) {
+    const source = name in settings ? name : fallbackName;
+    throw new Error(`Setting ${source || name} must be a whole number 0 or higher.`);
+  }
+  return value;
+}
+
+function positiveIntegerFromObject(object, name, defaultValue) {
+  return positiveIntegerFromNamedObject(object, name, defaultValue, "summarization_settings");
+}
+
+function positiveIntegerFromNamedObject(object, name, defaultValue, settingName) {
+  const rawValue = object?.[name] ?? defaultValue;
+  const value = Number(rawValue);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`Setting ${settingName}.${name} must be a whole number 1 or higher.`);
+  }
+  return value;
+}
+
 const temporaryErrorSeconds = 15;
 
 async function replyWithTemporaryError(message, text) {
   const errorMessage = await safeReply(message, `${text}\n\nmessage will be removed in ${temporaryErrorSeconds} seconds`);
+  if (!errorMessage) return;
   setTimeout(() => {
     errorMessage.delete().catch(() => {});
   }, temporaryErrorSeconds * 1000);
@@ -92,6 +123,7 @@ async function replyWithTemporaryError(message, text) {
 
 async function replyTemporarily(message, text, milliseconds = 30000) {
   const reply = await safeReply(message, text);
+  if (!reply) return null;
   setTimeout(() => {
     reply.delete().catch(() => {});
   }, milliseconds);
@@ -103,23 +135,31 @@ async function safeReply(message, text) {
     return await message.reply(text);
   } catch (error) {
     console.error(`message.reply failed in ${message.channelId}: ${error.message}. Falling back to channel.send.`);
-    if (!message.channel?.send) throw error;
-    return message.channel.send(text);
+    if (!message.channel?.send) {
+      console.error(`No channel.send fallback is available in ${message.channelId}; dropping reply text.`);
+      return null;
+    }
+    try {
+      return await message.channel.send(text);
+    } catch (sendError) {
+      console.error(`channel.send failed in ${message.channelId}: ${sendError.message}. Dropping reply text.`);
+      return null;
+    }
   }
 }
 
 function isDeleteReactionEmoji(emoji) {
   const emojiName = String(emoji?.name || "");
   const emojiIdentifier = String(emoji?.identifier || "");
-  return emojiName === "❌" || emojiName.toLowerCase() === "x" || emojiIdentifier.includes("%E2%9D%8C");
+  return emojiName === "\u274C" || emojiName.toLowerCase() === "x" || emojiIdentifier.includes("%E2%9D%8C");
 }
 
 function isMemoReactionEmoji(emoji) {
   const emojiName = String(emoji?.name || "");
   const emojiIdentifier = String(emoji?.identifier || "");
-  return emojiName === "📝" ||
-    emojiName === "✏️" ||
-    emojiName === "✏" ||
+  return emojiName === "\u{1F4DD}" ||
+    emojiName === "\u270F\uFE0F" ||
+    emojiName === "\u270F" ||
     ["memo", "pencil"].includes(emojiName.toLowerCase()) ||
     emojiIdentifier.includes("%F0%9F%93%9D") ||
     emojiIdentifier.includes("%E2%9C%8F");
@@ -128,22 +168,31 @@ function isMemoReactionEmoji(emoji) {
 function isRedoReactionEmoji(emoji) {
   const emojiName = String(emoji?.name || "");
   const emojiIdentifier = String(emoji?.identifier || "");
-  return emojiName === "🔁" || emojiName.toLowerCase() === "repeat" || emojiIdentifier.includes("%F0%9F%94%81");
+  return emojiName === "\u{1F501}" || emojiName.toLowerCase() === "repeat" || emojiIdentifier.includes("%F0%9F%94%81");
+}
+
+function isCodeRefreshReactionEmoji(emoji) {
+  const emojiName = String(emoji?.name || "");
+  const emojiIdentifier = String(emoji?.identifier || "");
+  return emojiName === "\u267B\uFE0F" ||
+    emojiName === "\u267B" ||
+    emojiName.toLowerCase() === "recycle" ||
+    emojiIdentifier.includes("%E2%99%BB");
 }
 
 function isRewindReactionEmoji(emoji) {
   const emojiName = String(emoji?.name || "");
   const emojiIdentifier = String(emoji?.identifier || "");
-  return emojiName === "⏪" ||
+  return emojiName === "\u23EA" ||
     emojiName.toLowerCase() === "rewind" ||
     emojiIdentifier.includes("%E2%8F%AA");
 }
 
-function isReplaceReactionEmoji(emoji) {
+function isContinueReactionEmoji(emoji) {
   const emojiName = String(emoji?.name || "");
   const emojiIdentifier = String(emoji?.identifier || "");
-  return emojiName === "▶️" ||
-    emojiName === "▶" ||
+  return emojiName === "\u25B6\uFE0F" ||
+    emojiName === "\u25B6" ||
     emojiName.toLowerCase() === "arrow_forward" ||
     emojiIdentifier.includes("%E2%96%B6");
 }
@@ -151,11 +200,10 @@ function isReplaceReactionEmoji(emoji) {
 function isMusicReactionEmoji(emoji) {
   const emojiName = String(emoji?.name || "");
   const emojiIdentifier = String(emoji?.identifier || "");
-  return emojiName === "🎵" ||
+  return emojiName === "\u{1F3B5}" ||
     emojiName.toLowerCase() === "musical_note" ||
     emojiIdentifier.includes("%F0%9F%8E%B5");
 }
-
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -349,10 +397,13 @@ const settings = mergeSettings(await loadJson(globalSettingsPath), await loadJso
 const soulFolder = path.join(agentFolder, "soul");
 const originPath = path.join(soulFolder, "origin.md");
 const originSummaryPath = path.join(soulFolder, "origin_summary.md");
-const longMemoryPath = path.join(soulFolder, "longmemory.txt");
+const memorySummaryPath = path.join(soulFolder, "memorysummary.txt");
+const legacyMemorySummaryPath = path.join(soulFolder, "longmemory.txt");
 const shortMemoryPath = path.join(soulFolder, "shortmemory.jsonl");
+const shortMemoryTrashPath = path.join(soulFolder, "trash", "shortmemory-trash.jsonl");
 const statusPath = path.join(soulFolder, "status.json");
 const rawOpenRouterPath = path.join(soulFolder, "raw.txt");
+const rawOpenRouterFolder = path.join(soulFolder, "raw");
 const secretsFolder = path.join(agentFolder, "secrets");
 const discordToken = await readTextFile(path.join(secretsFolder, "discord_token.txt"));
 const openrouterApiKey = await readTextFile(path.join(secretsFolder, "openrouter_api_key.txt"));
@@ -379,12 +430,24 @@ if (!memoryForumChannelId) {
 }
 const systemPromptPath = path.join(agentFolder, systemPromptFile);
 const globalPersonaPath = path.join("..", globalPersonaFile);
+
+function formatGlobalPersonaDefaults(globalPrompt) {
+  const trimmed = String(globalPrompt || "").trim();
+  if (!trimmed) return "";
+  return [
+    "# Global Persona Defaults",
+    "These instructions apply to every model generation for this agent, including replies, thoughts, dreams, journals, dream journals, stories, memory updates, status updates, utility decisions, and text transformation.",
+    "",
+    trimmed,
+  ].join("\n");
+}
+
 async function loadSystemPrompt({ allowEmpty = false } = {}) {
   const agentPrompt = await readTextFile(systemPromptPath);
   const globalPrompt = await readTextFile(globalPersonaPath);
   if (!agentPrompt && !allowEmpty) throw new Error(`Persona file is empty: ${systemPromptPath}`);
   if (!globalPrompt) throw new Error(`Global persona file is empty: ${globalPersonaPath}`);
-  const prompt = [agentPrompt, globalPrompt].filter((part) => part.trim()).join("\n\n");
+  const prompt = [agentPrompt, formatGlobalPersonaDefaults(globalPrompt)].filter((part) => part.trim()).join("\n\n");
   return prompt;
 }
 let systemPrompt = await loadSystemPrompt({ allowEmpty: Boolean(personaSourceThreadId) });
@@ -416,10 +479,16 @@ const controlUserIds = new Set(requiredSetting("control_user_ids").map((userId) 
 const botReplyPolicy = requiredSetting("bot_reply_policy");
 const replyToBotIds = new Set(botReplyPolicy.reply_to_bot_ids.map((botId) => String(botId)));
 const replyToWebhooks = Boolean(botReplyPolicy.reply_to_webhooks);
-const conversationHistoryLimit = Number(requiredSetting("conversation_history_limit"));
+const recentContextEntries = nonNegativeIntegerSetting("recent_context_entries", "conversation_history_limit");
+const conversationHistoryLimit = recentContextEntries;
 const secondsBeforeReply = Number(requiredSetting("seconds_before_reply"));
 const discordReplyCharacterLimit = Number(requiredSetting("discord_reply_character_limit"));
+const naturalTimeSettings = requiredSetting("natural_time_settings");
+const agentTimeDebug = requiredSetting("agent_time_debug");
 const summarizationSettings = requiredSetting("summarization_settings");
+const shortMemoryTrashSettings = requiredSetting("shortmemory_trash");
+const dailyMemoryCycleSettings = requiredSetting("daily_memory_cycle");
+const consciousnessCycleSettings = requiredSetting("consciousness_cycle");
 const originSummarySettings = requiredSetting("origin_summary_settings");
 const intentTriggers = requiredSetting("intent_triggers");
 const replyWhenMentioned = Boolean(requiredSetting("reply_when_mentioned"));
@@ -435,8 +504,37 @@ const pendingTimePassages = [];
 const pendingReplyEditsByChannelId = new Map();
 const handledDeleteReactionKeys = new Set();
 const handledReactionActionKeys = new Set();
-let summarizationTimer = null;
+let agentWorkQueue = Promise.resolve();
+let queuedAgentWorkCount = 0;
+let dailyMemoryCycleTimer = null;
+let dailyMemoryCycleCheckTimer = null;
 let summarizationRunning = false;
+
+async function enqueueAgentWork(label, work) {
+  queuedAgentWorkCount += 1;
+  const queuedAhead = Math.max(0, queuedAgentWorkCount - 1);
+  if (queuedAhead > 0) {
+    console.log(`Queued ${agentName} agent work (${label}); ${queuedAhead} job(s) already waiting/running.`);
+  }
+
+  const run = agentWorkQueue
+    .catch((error) => {
+      console.error(`Previous queued agent work failed before ${label}: ${error.message}`);
+    })
+    .then(async () => {
+      try {
+        return await work();
+      } finally {
+        queuedAgentWorkCount = Math.max(0, queuedAgentWorkCount - 1);
+      }
+    });
+
+  agentWorkQueue = run.catch((error) => {
+    console.error(`Queued agent work failed (${label}): ${error.message}`);
+  });
+
+  return run;
+}
 
 function normalizedSkillAliases() {
   const aliases = {};
@@ -472,18 +570,64 @@ function pipeRowsWithAliases(agentCommandName, commandName, suffix, description)
   ]);
 }
 
+async function clearRawOpenRouterFolder() {
+  await mkdir(rawOpenRouterFolder, { recursive: true });
+  const entries = await readdir(rawOpenRouterFolder, { withFileTypes: true }).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  for (const entry of entries) {
+    await rm(path.join(rawOpenRouterFolder, entry.name), {
+      recursive: entry.isDirectory(),
+      force: true,
+      maxRetries: 3,
+      retryDelay: 100,
+    });
+  }
+}
+
 async function writeRawOpenRouterText(messages, source = "unknown") {
-  const text = [
+  const writtenAt = new Date().toISOString();
+  const safeSource = safeBackupName(source).toLowerCase();
+  await clearRawOpenRouterFolder();
+
+  const manifest = [
     `source: ${source}`,
-    `written_at: ${new Date().toISOString()}`,
+    `written_at: ${writtenAt}`,
+    `parts: ${messages.length}`,
     "",
-    ...messages.map((message, index) => [
-      `# message ${index + 1}: ${message.role || "unknown"}`,
+  ].join("\n");
+  const partTexts = [];
+  await writeFile(path.join(rawOpenRouterFolder, "000-manifest.txt"), manifest, "utf8");
+  partTexts.push(["# 000-manifest.txt", manifest].join("\n"));
+
+  for (const [index, message] of messages.entries()) {
+    const role = String(message.role || "unknown");
+    const partNumber = String(index + 1).padStart(3, "0");
+    const partName = `${partNumber}-${safeBackupName(role).toLowerCase() || "message"}.txt`;
+    const text = [
+      `source: ${source}`,
+      `written_at: ${writtenAt}`,
+      `part: ${index + 1}/${messages.length}`,
+      `role: ${role}`,
+      "",
       String(message.content || ""),
-    ].join("\n")),
+      "",
+    ].join("\n");
+    await writeFile(path.join(rawOpenRouterFolder, partName), text, "utf8");
+    partTexts.push([`# ${partName}`, text].join("\n"));
+  }
+
+  const concatenated = [
+    `source: ${source}`,
+    `written_at: ${writtenAt}`,
+    `raw_folder: ${path.relative(agentFolder, rawOpenRouterFolder)}`,
+    `source_slug: ${safeSource}`,
+    "",
+    ...partTexts,
     "",
   ].join("\n\n");
-  await writeFile(rawOpenRouterPath, text, "utf8");
+  await writeFile(rawOpenRouterPath, concatenated, "utf8");
 }
 
 function backupTimestamp() {
@@ -509,6 +653,131 @@ async function backupFileBeforeOverwrite(filePath, reason) {
   return backupPath;
 }
 
+function parseBackupTimestampFromName(name) {
+  const match = String(name || "").match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?Z(?:-|$)/);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second, millisecond = "000"] = match;
+  const time = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second),
+    Number(millisecond),
+  );
+  return Number.isFinite(time) ? time : null;
+}
+
+function backupCleanupSettings() {
+  const cleanup = settings.consciousness?.cleanup || {};
+  const retentionDays = Math.max(1, Number.parseInt(cleanup.backup_retention_days ?? 7, 10) || 7);
+  return {
+    retentionDays,
+    moveExpiredBackupsToOsTrash: cleanup.move_expired_backups_to_os_trash !== false,
+    permanentlyDeleteExpiredBackups: cleanup.permanently_delete_expired_backups === true,
+  };
+}
+
+function assertDirectBackupChild(targetPath) {
+  const resolvedBackupFolder = path.resolve(backupFolder);
+  const resolvedTarget = path.resolve(targetPath);
+  if (path.dirname(resolvedTarget) !== resolvedBackupFolder) {
+    throw new Error(`Refusing to clean non-backup path: ${targetPath}`);
+  }
+}
+
+async function moveBackupToOsTrash(targetPath) {
+  if (process.platform !== "win32") {
+    throw new Error("OS trash cleanup is only implemented for Windows in this build.");
+  }
+  const script = [
+    "$target = $args[0]",
+    "Add-Type -AssemblyName Microsoft.VisualBasic",
+    "$item = Get-Item -LiteralPath $target -Force",
+    "if ($item.PSIsContainer) {",
+    "  [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($item.FullName, 'OnlyErrorDialogs', 'SendToRecycleBin')",
+    "} else {",
+    "  [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($item.FullName, 'OnlyErrorDialogs', 'SendToRecycleBin')",
+    "}",
+  ].join("\n");
+  await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script, targetPath], {
+    windowsHide: true,
+  });
+}
+
+async function cleanupExpiredBackups() {
+  const {
+    retentionDays,
+    moveExpiredBackupsToOsTrash,
+    permanentlyDeleteExpiredBackups,
+  } = backupCleanupSettings();
+  const report = {
+    retentionDays,
+    checked: 0,
+    eligible: 0,
+    movedToTrash: 0,
+    permanentlyDeleted: 0,
+    skipped: 0,
+    failed: 0,
+    failures: [],
+  };
+
+  const entries = await readdir(backupFolder, { withFileTypes: true }).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+
+  for (const entry of entries) {
+    report.checked += 1;
+    const timestampMs = parseBackupTimestampFromName(entry.name);
+    if (timestampMs === null) {
+      report.skipped += 1;
+      continue;
+    }
+
+    const targetPath = path.join(backupFolder, entry.name);
+    assertDirectBackupChild(targetPath);
+    const stats = await stat(targetPath).catch((error) => {
+      report.failed += 1;
+      report.failures.push({ path: targetPath, error: error.message });
+      return null;
+    });
+    if (!stats) continue;
+
+    const isExpiredBackup = timestampMs < cutoff && stats.mtimeMs < cutoff;
+    if (!isExpiredBackup) {
+      report.skipped += 1;
+      continue;
+    }
+
+    report.eligible += 1;
+    try {
+      if (permanentlyDeleteExpiredBackups) {
+        await rm(targetPath, { recursive: stats.isDirectory(), force: true });
+        report.permanentlyDeleted += 1;
+      } else if (moveExpiredBackupsToOsTrash) {
+        await moveBackupToOsTrash(targetPath);
+        report.movedToTrash += 1;
+      } else {
+        report.skipped += 1;
+      }
+    } catch (error) {
+      report.failed += 1;
+      report.failures.push({ path: targetPath, error: error.message });
+    }
+  }
+
+  console.log(
+    `Backup cleanup for ${agentName}: checked ${report.checked}, eligible ${report.eligible}, moved to OS trash ${report.movedToTrash}, permanently deleted ${report.permanentlyDeleted}, skipped ${report.skipped}, failed ${report.failed}.`,
+  );
+  if (report.failed > 0) {
+    console.error(`Backup cleanup failures for ${agentName}: ${JSON.stringify(report.failures)}`);
+  }
+  return report;
+}
+
 async function readRawOpenRouterText() {
   return readFile(rawOpenRouterPath, "utf8").catch((error) => {
     if (error.code === "ENOENT") return "";
@@ -529,10 +798,50 @@ const bot = new Client({
 });
 
 const enabledSkills = normalizeEnabledSkillNames(requiredSetting("enabled_skills"));
-const allowedStatusModes = new Set(["awake", "sleepy", "sleeping", "dreaming", "away"]);
+const allowedStatusModes = new Set(["awake", "sleepy", "falling_asleep", "sleeping", "dreaming", "away"]);
+
+function clampNumber(value, minimum, maximum, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(maximum, Math.max(minimum, number));
+}
+
+function defaultAwarenessForMode(mode) {
+  if (mode === "sleeping") return 0;
+  if (mode === "dreaming") return 0.15;
+  if (mode === "falling_asleep") return 0.25;
+  if (mode === "sleepy") return 0.55;
+  if (mode === "awake") return 1;
+  return 0.8;
+}
+
+function normalizeStatus(status) {
+  const mode = String(status.mode || "awake");
+  const sleepPlannedMinutes = Number(status.sleep_planned_minutes);
+  const sleepNeededMinutes = Number(status.sleep_needed_minutes);
+  const sleepRemainingMinutes = Number(status.sleep_remaining_minutes);
+  const sleepInterruptedMinutes = Number(status.sleep_interrupted_minutes);
+  return {
+    ...status,
+    status: {
+      ...(status.status || {}),
+      ...statusFlagsForMode(mode),
+    },
+    awareness: clampNumber(status.awareness, 0, 1, defaultAwarenessForMode(mode)),
+    sleep_needed_minutes: Number.isFinite(sleepNeededMinutes)
+      ? Math.max(0, Math.round(sleepNeededMinutes))
+      : (Number.isFinite(sleepPlannedMinutes) ? Math.max(0, Math.round(sleepPlannedMinutes)) : status.sleep_needed_minutes),
+    sleep_remaining_minutes: Number.isFinite(sleepRemainingMinutes)
+      ? Math.round(sleepRemainingMinutes)
+      : status.sleep_remaining_minutes,
+    sleep_interrupted_minutes: Number.isFinite(sleepInterruptedMinutes)
+      ? Math.max(0, Math.round(sleepInterruptedMinutes))
+      : 0,
+  };
+}
 
 async function readStatus() {
-  const status = await loadJson(statusPath);
+  const status = normalizeStatus(await loadJson(statusPath));
   if (!allowedStatusModes.has(String(status.mode))) {
     throw new Error(`Invalid status.mode in ${statusPath}: ${status.mode}`);
   }
@@ -543,17 +852,41 @@ async function writeStatus(status) {
   if (!allowedStatusModes.has(String(status.mode))) {
     throw new Error(`Invalid status.mode: ${status.mode}`);
   }
-  await writeFile(statusPath, `${JSON.stringify(status, null, 2)}\n`, "utf8");
+  await writeFile(statusPath, `${JSON.stringify(normalizeStatus(status), null, 2)}\n`, "utf8");
+}
+
+function addMinutesToIsoDateTime(value, minutes) {
+  const baseDate = value ? new Date(value) : new Date();
+  const date = Number.isNaN(baseDate.getTime()) ? new Date() : baseDate;
+  return new Date(date.getTime() + minutes * 60 * 1000).toISOString();
 }
 
 function statusFlagsForMode(mode) {
   return {
     awake: mode === "awake",
     sleepy: mode === "sleepy",
+    falling_asleep: mode === "falling_asleep",
     sleeping: mode === "sleeping",
     dreaming: mode === "dreaming",
     away: mode === "away",
   };
+}
+
+function readableStatusText(status) {
+  const explicitStatus = String(status.discord_status_text || "").trim();
+  if (explicitStatus) return explicitStatus;
+
+  const activity = String(status.current_activity || "").trim();
+  if (activity) return activity;
+
+  const mode = String(status.mode || "").trim();
+  if (mode === "falling_asleep") return "falling asleep";
+  if (mode === "sleeping") return "asleep";
+  if (mode === "dreaming") return "dreaming";
+  if (mode === "sleepy") return "sleepy";
+  if (mode === "away") return "away";
+  if (mode === "awake") return "awake";
+  return "status unknown";
 }
 
 const statusApi = {
@@ -610,8 +943,19 @@ function statusDumpText(previousStatus, nextStatus, source) {
     `source: ${source}`,
     `previous_mode: ${previousStatus?.mode || ""}`,
     `mode: ${nextStatus.mode}`,
+    `awareness: ${nextStatus.awareness ?? ""}`,
     `energy: ${nextStatus.energy ?? ""}`,
     `current_activity: ${nextStatus.current_activity || ""}`,
+    `sleep_needed_minutes: ${nextStatus.sleep_needed_minutes ?? ""}`,
+    `sleep_remaining_minutes: ${nextStatus.sleep_remaining_minutes ?? ""}`,
+    `sleep_interrupted_minutes: ${nextStatus.sleep_interrupted_minutes ?? ""}`,
+    `last_wake_style: ${nextStatus.last_wake_style || ""}`,
+    `current_datetime: ${nextStatus.current_datetime || ""}`,
+    `last_time_update_at: ${nextStatus.last_time_update_at || ""}`,
+    `last_time_passed_minutes: ${nextStatus.last_time_passed_minutes ?? ""}`,
+    `last_time_passed_reason: ${nextStatus.last_time_passed_reason || ""}`,
+    `last_time_passed_source: ${nextStatus.last_time_passed_source || ""}`,
+    `total_experienced_minutes: ${nextStatus.total_experienced_minutes ?? ""}`,
     `discord_status_text: ${nextStatus.discord_status_text || ""}`,
     `discord_status_mood: ${nextStatus.discord_status_mood || ""}`,
     `discord_status_visibility_note: ${nextStatus.discord_status_visibility_note || ""}`,
@@ -632,40 +976,67 @@ async function appendStatusMemoryDump(previousStatus, nextStatus, source) {
   }
 }
 
-async function addTimePassage(minutes, sleepTimerAdjustment = null) {
+function statusSourceForTimePassage(source) {
+  return source === "natural language" ? "natural time passage" : "time passage";
+}
+
+async function addTimePassage(minutes, sleepTimerAdjustment = null, options = {}) {
   if (!Number.isInteger(minutes) || minutes < 1) {
     throw new Error("minutes must be a whole number greater than 0.");
   }
 
+  const reason = String(options.reason || "").trim();
+  const source = String(options.source || "manual");
+  const recordedAt = new Date().toISOString();
   pendingTimePassages.push({
     minutes,
-    recordedAt: new Date().toISOString(),
+    recordedAt,
+    reason,
+    source,
   });
   await appendConversationLog({
     role: "system",
-    content: `${agentName} experiences ${minutes} minutes of time passing before the next reply.`,
+    content: `${agentName} experiences ${minutes} minutes of time passing before the next reply.${reason ? ` Reason: ${reason}` : ""}`,
   });
 
   const previousStatus = await readStatus();
   const energy = Number(previousStatus.energy);
-  const energyGain = previousStatus.mode === "sleeping" || previousStatus.mode === "dreaming"
+  const sleepLikeMode = previousStatus.mode === "falling_asleep" || previousStatus.mode === "sleeping" || previousStatus.mode === "dreaming";
+  const energyGain = sleepLikeMode
     ? Math.max(1, Math.floor(minutes / 6))
     : 0;
   const remainingSleepMinutes = Number(previousStatus.sleep_remaining_minutes);
   const nextStatus = {
     ...previousStatus,
     energy: Number.isFinite(energy) ? Math.min(100, energy + energyGain) : previousStatus.energy,
+    current_datetime: addMinutesToIsoDateTime(previousStatus.current_datetime, minutes),
+    last_time_update_at: recordedAt,
+    last_time_passed_minutes: minutes,
+    last_time_passed_reason: reason,
+    last_time_passed_source: source,
+    total_experienced_minutes: Math.max(0, Number(previousStatus.total_experienced_minutes) || 0) + minutes,
     last_time_passage_minutes: minutes,
-    last_time_passage_at: new Date().toISOString(),
+    last_time_passage_at: recordedAt,
   };
 
   if (
-    (previousStatus.mode === "sleeping" || previousStatus.mode === "dreaming") &&
+    sleepLikeMode &&
     Number.isFinite(remainingSleepMinutes)
   ) {
     const adjustmentMinutes = Number(sleepTimerAdjustment?.minutes || 0);
     const nextRemainingSleepMinutes = remainingSleepMinutes - minutes - adjustmentMinutes;
     nextStatus.sleep_remaining_minutes = nextRemainingSleepMinutes;
+    if (previousStatus.mode === "falling_asleep" && minutes > 0 && nextRemainingSleepMinutes > 0) {
+      nextStatus.mode = "sleeping";
+      nextStatus.status = {
+        ...(nextStatus.status || {}),
+        ...statusFlagsForMode("sleeping"),
+      };
+      nextStatus.current_activity = String(nextStatus.current_activity || "").toLowerCase().includes("falling asleep")
+        ? "asleep"
+        : (nextStatus.current_activity || "asleep");
+      nextStatus.last_status_change = new Date().toISOString();
+    }
     if (sleepTimerAdjustment) {
       nextStatus.last_sleep_timer_adjustment_minutes = adjustmentMinutes;
       nextStatus.last_sleep_timer_adjustment_reason = String(sleepTimerAdjustment.reason || "");
@@ -686,7 +1057,7 @@ async function addTimePassage(minutes, sleepTimerAdjustment = null) {
   }
 
   await writeStatus(nextStatus);
-  await appendStatusMemoryDump(previousStatus, nextStatus, "time passage");
+  await appendStatusMemoryDump(previousStatus, nextStatus, statusSourceForTimePassage(source));
   return nextStatus;
 }
 
@@ -699,11 +1070,18 @@ const skillContext = {
   conversationHistoryLimit,
   findMemoryForumPostByName,
   getSkills: () => skills,
-  longMemoryPath,
+  legacyMemorySummaryPath,
+  longMemoryPath: memorySummaryPath,
+  memorySummaryPath,
   model,
   openrouterApiKey,
   replyTemporarily,
   requiredSetting,
+  runDailySummarization: async () => {
+    const result = await runSummarizationMaintenance({ force: true, source: "sleep" });
+    return result.summary;
+  },
+  readableStatusText,
   safeReply,
   shortMemoryPath,
   statusApi,
@@ -732,9 +1110,16 @@ function skillCommands() {
 }
 
 async function handleSkillInteraction(interaction) {
+  const commandNames = new Set(skillCommands().map((command) => command.name));
+  if (!commandNames.has(interaction.commandName)) return false;
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ ephemeral: true });
+  }
+
   for (const { skill, hook } of skillHandlers(skills, "handleInteraction")) {
     try {
-      if (await hook(interaction)) return true;
+      const handled = await enqueueAgentWork(`skill interaction ${interaction.commandName}`, () => hook(interaction));
+      if (handled) return true;
     } catch (error) {
       const text = `Error running ${skillName(skill)} command: ${error.message}`;
       if (interaction.deferred || interaction.replied) {
@@ -880,6 +1265,8 @@ bot.once("clientReady", async () => {
       console.error(`Skill ${skill.name || "unknown"} onReady failed: ${error.message}`);
     }
   }
+  scheduleDailyMemoryCycleCheck(1000);
+  scheduleDailyMemoryCycle();
 });
 
 async function readTextAttachment(attachment) {
@@ -988,7 +1375,7 @@ async function summarizeOriginText(originText, existingSummary) {
         systemPrompt,
         "",
         "# Origin Summary Task",
-        "Rewrite the origin/backstory source material into a rich but still compressed durable lore summary.",
+        "Rewrite the origin/backstory source material into a rich but still compact durable lore summary.",
         "This summary will be sent in normal model requests, so keep it much shorter than the source, but do not flatten away the memorable details.",
         String(originSummarySettings.summary_policy || "preserve memorable lore and roleplay hooks, not just a tiny abstract"),
       ].join("\n"),
@@ -1217,6 +1604,75 @@ async function writeShortMemoryEntries(entries) {
   );
 }
 
+async function readShortMemoryTrashEntries() {
+  const text = await readFile(shortMemoryTrashPath, "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
+  const entries = [];
+  const lines = text.split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    if (!line.trim()) continue;
+    try {
+      entries.push(JSON.parse(line));
+    } catch (error) {
+      throw new Error(`shortmemory trash line ${index + 1} is not valid JSONL: ${error.message}`);
+    }
+  }
+  return entries;
+}
+
+async function writeShortMemoryTrashEntries(entries) {
+  await mkdir(path.dirname(shortMemoryTrashPath), { recursive: true });
+  await backupFileBeforeOverwrite(shortMemoryTrashPath, "shortmemory-trash-overwrite");
+  await writeFile(
+    shortMemoryTrashPath,
+    entries.length ? `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n` : "",
+    "utf8",
+  );
+}
+
+function shortMemoryTrashMeta(entry) {
+  const meta = entry.trash && typeof entry.trash === "object" && !Array.isArray(entry.trash) ? entry.trash : {};
+  return meta;
+}
+
+async function ageShortMemoryTrashAfterAutomaticCycle() {
+  const keepCycles = positiveIntegerFromNamedObject(
+    shortMemoryTrashSettings,
+    "keep_auto_summary_cycles",
+    7,
+    "shortmemory_trash",
+  );
+  const entries = await readShortMemoryTrashEntries();
+  if (entries.length === 0) {
+    return { before: 0, kept: 0, deleted: 0 };
+  }
+
+  const agedEntries = entries.map((entry) => {
+    const meta = shortMemoryTrashMeta(entry);
+    return {
+      ...entry,
+      trash: {
+        ...meta,
+        trash_age_cycles: Number(meta.trash_age_cycles || 0) + 1,
+        last_aged_by: "automatic memory cycle",
+        last_aged_at: new Date().toISOString(),
+      },
+    };
+  });
+  const keptEntries = agedEntries.filter((entry) => {
+    const cycles = Number(shortMemoryTrashMeta(entry).trash_age_cycles || 0);
+    return cycles < keepCycles;
+  });
+  await writeShortMemoryTrashEntries(keptEntries);
+  const deleted = agedEntries.length - keptEntries.length;
+  console.log(
+    `Shortmemory trash cleanup for ${agentName}: aged ${agedEntries.length}, kept ${keptEntries.length}, deleted ${deleted}; keep_auto_summary_cycles=${keepCycles}.`,
+  );
+  return { before: entries.length, kept: keptEntries.length, deleted };
+}
+
 function shortMemoryEntryKey(entry) {
   return [
     entry.timestamp || "",
@@ -1413,9 +1869,11 @@ const memoryForumPostDescriptions = new Map([
   ["adjustments", "Audit log of reply adjustments requested by the user."],
   ["status", "Current agent status changes, activity state, energy, and sleep or away logs."],
   ["profilepic", "Profile picture ideas, references, and avatar notes."],
-  ["longmemory", "Durable summary memory that survives beyond recent chat context."],
+  ["memorysummary", "Compact active durable memory sent to the model as context."],
+  ["longmemory", "Legacy memorysummary post name. Kept readable for older agents during migration."],
   ["shortmemory", "Recent conversation memory. Discord should be treated as the authority when configured."],
   ["dreams", "Dream output, associative fragments, and sleep-cycle creative notes."],
+  ["thoughts", "First-person internal thoughts, softer than memory, used later to support stories, dreams, and end-of-day memory work."],
   ["art", "Art notes, references, prompts, and visual style memory."],
   ["stories", "Story notes, scenes, lore, drafts, and narrative memory."],
 ]);
@@ -1437,20 +1895,20 @@ function helpCommandLists() {
     [`||${agentCommandName} continue||`, "Continue from recent context without adding this command to shortmemory."],
     [`||${agentCommandName} continue: text||`, "Continue with one-time instructions without adding this command to shortmemory."],
     [`||${agentCommandName} adjust: text||`, "Redo the previous bot reply with adjustment instructions; deletes the old bot reply and its assistant shortmemory entry."],
-    [`||${agentCommandName} summarize||`, "Write soul/longmemory.txt."],
-    [`||${agentCommandName} story||`, "Write a short story from recent context and memory."],
-    [`||${agentCommandName} story: text||`, "Write a short story using the prompt plus recent context and memory."],
-    [`||${agentCommandName} subtext: text||`, "Private assumptions/persona nudges; loosely stored later by summaries."],
+    [`||${agentCommandName} summarize||`, "Create a durable memory entry, update memorysummary from shortmemory and consciousness artifacts, then clear temporary thoughts."],
+    [`||${agentCommandName} story||`, "Write a first-person story from saved stories, shortmemory, thoughts, journals, neural memory if present, and memorysummary."],
+    [`||${agentCommandName} story: text||`, "Write a first-person story using extra instructions. Creativity, realism, style, chaos, or numbers are one-time guidance only."],
+    [`||${agentCommandName} subtext: text||`, "Private assumptions/persona nudges; loosely stored later by memory updates."],
     [`||${agentCommandName} sleep||`, "Set sleeping."],
     [`||${agentCommandName} wake||`, "Set awake."],
     [`||${agentCommandName} away||`, "Set away."],
-    [`||${agentCommandName} state||`, "Show raw state mode, energy, and current activity."],
+    [`||${agentCommandName} state||`, "Show the current readable status."],
     [`||${agentCommandName} status||`, "Generate a natural-language status update from memory and current state."],
     [`||${agentCommandName} status: text||`, "Generate a natural-language status update using text as the basis or suggested status."],
     [`||${agentCommandName} passtimeminutes: 60||`, "Pass time in minutes."],
     [`||${agentCommandName} passtimehours: 8||`, "Pass time in hours."],
-    [`||${agentCommandName} dream||`, "Dream from context; requires sleeping."],
-    [`||${agentCommandName} dream: text||`, "Dream from seed text; requires sleeping."],
+    [`||${agentCommandName} dream||`, "Dream from context, thoughts, journals, and previous dreams; requires sleeping."],
+    [`||${agentCommandName} dream: text||`, "Dream from seed text; requires sleeping. Chaos, creativity, realism, symbolism, or numbers are one-time guidance only."],
   ];
 
   for (const { hook } of skillHandlers(skills, "getPipeHelp")) {
@@ -1495,12 +1953,13 @@ function helpSectionMessages() {
     [
       "**Emoji Reactions**",
       "",
-      "* `❌` / `:x:` : Delete a bot reply and remove its matching assistant shortmemory entry.",
-      "* `🔁` / `:repeat:` : Delete the bot reply from memory, then redo a fresh reply to the previous user message.",
-      "* `⏪` / `:rewind:` : Delete a bot reply, remove that reply from shortmemory, and remove the previous user message from shortmemory only.",
-      "* `📝` / `:pencil:` : Temporarily reply `your next reply replaces the content of my last reply`, then use your next message as a technical edit of that bot reply and update shortmemory.",
-      "* `▶️` / `:arrow_forward:` : Temporarily reply `next reply replaces my text` for the replacement pipeline.",
-      "* `🎵` / `:musical_note:` : Run the music skill from recent shortmemory and post a formatted music link.",
+      "* `\u274C` / `:x:` : Delete a bot reply and remove its matching assistant shortmemory entry.",
+      "* `\u{1F501}` / `:repeat:` : Delete the bot reply from memory, then redo a fresh reply to the previous user message.",
+      "* `\u23EA` / `:rewind:` : Delete a bot reply, remove that reply from shortmemory, and remove the previous user message from shortmemory only.",
+      "* `\u{1F4DD}` / `:pencil:` : Temporarily reply `your next reply replaces the content of my last reply`, then use your next message as a technical edit of that bot reply and update shortmemory.",
+      "* `\u25B6\uFE0F` / `:arrow_forward:` : Continue from the current scene without adding a pipe command to shortmemory.",
+      "* `\u267B\uFE0F` / `:recycle:` : Refresh a bot reply using the current code, useful after formatting changes.",
+      "* `\u{1F3B5}` / `:musical_note:` : Run the music skill from recent shortmemory and post a formatted music link.",
     ].join("\n"),
   ];
   if (discordInviteUrl) {
@@ -1735,22 +2194,23 @@ async function appendAdjustmentMemoryDump({ originalReplyText, adjustInstruction
   return true;
 }
 
-async function postLongMemoryPreview({ outputFile, outputText }) {
-  const post = await findMemoryForumPostByName("longmemory").catch(() => null);
+async function postMemorySummaryPreview({ outputFile, outputText }) {
+  const post = await findMemoryForumPostByName("memorysummary").catch(() => null)
+    || await findMemoryForumPostByName("longmemory").catch(() => null);
   if (!post?.send) return false;
 
   const previewLimit = 1200;
   const preview = outputText.length > previewLimit ? `${outputText.slice(0, previewLimit)}\n...` : outputText;
   const message = [
-    "latest_longmemory:",
+    "latest_memorysummary:",
     `timestamp: ${new Date().toISOString()}`,
     `agent: ${agentName}`,
     `local_file: ${outputFile}`,
     `characters: ${outputText.length}`,
-    "kind: longmemory update",
+    "kind: memorysummary update",
     "",
     "full_memory_location:",
-    "The full memory is only stored in the local txt/md file listed above. Discord is only a preview/notice because Discord posts have text limits.",
+    "The full memorysummary is only stored in the local txt/md file listed above. Discord is only a preview/notice because Discord posts have text limits.",
     "",
     "preview:",
     preview,
@@ -1763,6 +2223,18 @@ async function readRelativeTextFile(relativeFilePath) {
   return readTextFile(path.join(agentFolder, relativeFilePath));
 }
 
+async function readMemorySummaryText() {
+  return readRelativeTextFile("soul/memorysummary.txt").catch((error) => {
+    if (error.message.startsWith("Missing required file:")) {
+      return readRelativeTextFile("soul/longmemory.txt").catch((legacyError) => {
+        if (legacyError.message.startsWith("Missing required file:")) return "";
+        throw legacyError;
+      });
+    }
+    throw error;
+  });
+}
+
 async function writeRelativeTextFile(relativeFilePath, text) {
   const absoluteFilePath = path.join(agentFolder, relativeFilePath);
   await mkdir(path.dirname(absoluteFilePath), { recursive: true });
@@ -1771,7 +2243,202 @@ async function writeRelativeTextFile(relativeFilePath, text) {
   return absoluteFilePath;
 }
 
-async function runSummarization({ force = false } = {}) {
+async function writeMemoryEntry({ source, selectedEntries, summaryText }) {
+  const now = new Date().toISOString();
+  const fileName = `${backupTimestamp()}-${safeBackupName(source)}-memory.md`;
+  const relativeFilePath = `soul/memory/${fileName}`;
+  const entryText = [
+    "---",
+    `created_at: ${now}`,
+    `agent: ${agentName}`,
+    `source: ${source}`,
+    `shortmemory_entries_included_count: ${selectedEntries.length}`,
+    "kind: memory entry",
+    "---",
+    "",
+    "# Memory",
+    "",
+    summaryText.trim(),
+    "",
+  ].join("\n");
+  const filePath = await writeRelativeTextFile(relativeFilePath, entryText);
+  return { filePath, relativeFilePath };
+}
+
+async function verifyReadableFile(filePath, label) {
+  const text = await readFile(filePath, "utf8");
+  if (!text.trim()) throw new Error(`${label} was written but is empty: ${filePath}`);
+  return text;
+}
+
+function containedAgentPath(relativeFilePath) {
+  const resolvedAgentFolder = path.resolve(agentFolder);
+  const resolvedPath = path.resolve(agentFolder, String(relativeFilePath));
+  if (resolvedPath !== resolvedAgentFolder && !resolvedPath.startsWith(`${resolvedAgentFolder}${path.sep}`)) {
+    throw new Error(`Path escapes agent folder: ${relativeFilePath}`);
+  }
+  return resolvedPath;
+}
+
+async function readRecentMemoryFiles(relativeFolderPath, filePattern, limit, maxCharactersPerFile) {
+  const folderPath = containedAgentPath(relativeFolderPath);
+  const entries = await readdir(folderPath, { withFileTypes: true }).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  const files = entries
+    .filter((entry) => entry.isFile() && filePattern.test(entry.name))
+    .map((entry) => path.join(folderPath, entry.name))
+    .sort()
+    .slice(-limit);
+
+  const sourceFiles = [];
+  for (const filePath of files) {
+    const text = (await readFile(filePath, "utf8")).trim();
+    sourceFiles.push({
+      relativeFilePath: path.relative(agentFolder, filePath).replace(/\\/g, "/"),
+      text: text.length <= maxCharactersPerFile ? text : `${text.slice(0, maxCharactersPerFile)}\n...`,
+    });
+  }
+  return sourceFiles;
+}
+
+function formatSourceFilesForSummary(sourceFiles, emptyText = "(empty)") {
+  if (!sourceFiles.length) return emptyText;
+  return sourceFiles
+    .map((sourceFile) => [`# ${sourceFile.relativeFilePath}`, sourceFile.text].join("\n"))
+    .join("\n\n");
+}
+
+function clampThoughtInfluence(value, fallback) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return fallback;
+  return Math.min(1, Math.max(0, numericValue));
+}
+
+function formatThoughtInfluenceScale() {
+  const scale = settings.thought_influence_scale || {};
+  if (typeof scale === "string") return scale.trim();
+  if (scale && typeof scale === "object" && !Array.isArray(scale)) {
+    return Object.entries(scale)
+      .sort(([left], [right]) => Number(left) - Number(right))
+      .map(([key, value]) => `${key}: ${String(value)}`)
+      .join("\n");
+  }
+  return "";
+}
+
+function thoughtInfluenceControl(processName, fallbackInfluence) {
+  const processSettings = settings[processName] || {};
+  const useThoughts = processSettings.use_thoughts !== false;
+  return {
+    influence: clampThoughtInfluence(processSettings.thought_influence, fallbackInfluence),
+    scaleText: formatThoughtInfluenceScale(),
+    useThoughts,
+  };
+}
+
+function formatThoughtInfluenceInstruction(processLabel, control) {
+  if (!control.useThoughts) {
+    return `${processLabel} thought influence: private thoughts are disabled for this process. Do not use private thoughts as evidence.`;
+  }
+  return [
+    `${processLabel} thought influence: ${control.influence}`,
+    "Interpret this value using the editable thought_influence_scale below. If the value falls between listed scale points, interpolate naturally.",
+    control.scaleText || "(thought_influence_scale is empty)",
+  ].join("\n");
+}
+
+async function readConsciousnessSummaryArtifacts() {
+  const dreamSettings = settings.dream_settings || {};
+  const memoryLayersSettings = settings.memory_layers || {};
+  const thoughts = await readRecentMemoryFiles(
+    dreamSettings.thoughts_folder || "soul/consciousness/thoughts",
+    /\.(md|txt)$/i,
+    80,
+    4000,
+  );
+  const journals = await readRecentMemoryFiles(
+    dreamSettings.journals_folder || "soul/consciousness/journals",
+    /\.(md|txt)$/i,
+    40,
+    5000,
+  );
+  const dreams = await readRecentMemoryFiles(
+    dreamSettings.output_folder || "soul/dreams",
+    /\.(md|txt)$/i,
+    40,
+    5000,
+  );
+  const stories = await readRecentMemoryFiles(
+    "soul/stories",
+    /\.(md|txt)$/i,
+    40,
+    5000,
+  );
+  const neuralMemory = await readRecentMemoryFiles(
+    memoryLayersSettings.folder || "soul/memory-layers",
+    /^layer-\d+\.jsonl$/i,
+    5,
+    10000,
+  ).catch((error) => [{
+    relativeFilePath: memoryLayersSettings.folder || "soul/memory-layers",
+    text: `(neural memory unavailable: ${error.message})`,
+    unavailable: true,
+  }]);
+  const neuralMemoryNodeCount = neuralMemory
+    .filter((file) => !file.unavailable)
+    .reduce((count, file) => count + file.text.split(/\r?\n/).filter(Boolean).length, 0);
+
+  return {
+    thoughts,
+    journals,
+    dreams,
+    stories,
+    neuralMemory,
+    counts: {
+      thoughts: thoughts.length,
+      journals: journals.length,
+      dreams: dreams.length,
+      stories: stories.length,
+      neuralMemoryNodes: neuralMemoryNodeCount,
+    },
+  };
+}
+
+async function backupAndClearThoughtsAfterSummary() {
+  const folderPath = containedAgentPath(settings.dream_settings?.thoughts_folder || "soul/consciousness/thoughts");
+  const entries = await readdir(folderPath, { withFileTypes: true }).catch((error) => {
+    if (error.code === "ENOENT") return { deleted: 0, backupPath: null };
+    throw error;
+  });
+  const files = entries
+    .filter((entry) => entry.isFile() && /\.(md|txt)$/i.test(entry.name))
+    .map((entry) => path.join(folderPath, entry.name))
+    .sort();
+  if (files.length === 0) return { deleted: 0, backupPath: null };
+
+  const backupTextParts = [];
+  for (const filePath of files) {
+    backupTextParts.push([
+      `# ${path.relative(agentFolder, filePath).replace(/\\/g, "/")}`,
+      await readFile(filePath, "utf8"),
+    ].join("\n"));
+  }
+  await mkdir(backupFolder, { recursive: true });
+  const backupPath = path.join(
+    backupFolder,
+    `${backupTimestamp()}-clear-thoughts-soul_consciousness_thoughts.md`,
+  );
+  await writeFile(backupPath, backupTextParts.join("\n\n---\n\n"), "utf8");
+
+  for (const filePath of files) {
+    await rm(filePath, { force: true });
+  }
+  return { deleted: files.length, backupPath };
+}
+
+async function runSummarization({ force = false, source = "manual" } = {}) {
   if (summarizationRunning) {
     return { skipped: true, reason: "summarization already running" };
   }
@@ -1780,7 +2447,8 @@ async function runSummarization({ force = false } = {}) {
   try {
     const entries = await readLocalShortMemoryEntries();
     const summaryState = await readSummaryState();
-    const minimumNewEntries = Math.max(1, conversationHistoryLimit);
+    const dailySummaryEntries = positiveIntegerFromObject(summarizationSettings, "daily_summary_entries", 1000);
+    const minimumNewEntries = dailySummaryEntries;
     const newEntryCount = entries.length - Number(summaryState.shortMemoryEntryCount || 0);
     if (!force && entries.length < minimumNewEntries) {
       return {
@@ -1795,20 +2463,32 @@ async function runSummarization({ force = false } = {}) {
       };
     }
 
-    const maxLines = Number(summarizationSettings.max_lines_per_summary || 200);
-    const selectedEntries = entries.slice(-Math.max(1, maxLines));
-    if (selectedEntries.length === 0) {
-      return { skipped: true, reason: "shortmemory is empty" };
+    const selectedEntries = entries.slice(-dailySummaryEntries);
+    const memorySummaryThoughtControl = thoughtInfluenceControl("memorysummary_update", 0.5);
+    const consciousnessArtifacts = await readConsciousnessSummaryArtifacts();
+    if (!memorySummaryThoughtControl.useThoughts) {
+      consciousnessArtifacts.thoughts = [];
+      consciousnessArtifacts.counts.thoughts = 0;
+    }
+    const hasConsciousnessArtifacts = Object.values(consciousnessArtifacts.counts)
+      .some((count) => Number(count) > 0);
+    if (selectedEntries.length === 0 && !hasConsciousnessArtifacts) {
+      return { skipped: true, reason: "shortmemory and consciousness artifacts are empty" };
     }
 
-    const summaryFile = "soul/longmemory.txt";
-    const existingSummary = await readRelativeTextFile(summaryFile).catch((error) => {
-      if (error.message.startsWith("Missing required file:")) return "";
-      throw error;
-    });
+    const summaryFile = "soul/memorysummary.txt";
+    const existingSummary = await readMemorySummaryText();
     const summaryPolicy = String(
       summarizationSettings.summary_policy || "remember durable per-user context, not everything",
     );
+    const consciousnessDescriptors = requiredSetting("consciousness_descriptors");
+    const memoryDescriptor = String(consciousnessDescriptors.memory || "").trim();
+    const memorySummaryDescriptor = String(
+      consciousnessDescriptors.memorysummary || consciousnessDescriptors.summary || "",
+    ).trim();
+    if (!memorySummaryDescriptor) {
+      throw new Error("Missing consciousness_descriptors.memorysummary.");
+    }
     const sourceText = shortMemoryEntriesToSource(selectedEntries);
     const messages = [
       {
@@ -1818,14 +2498,24 @@ async function runSummarization({ force = false } = {}) {
           systemPrompt,
           "",
           "# Summarization Task",
-          "Update longmemory from recent shortmemory.",
-          "Write compact durable memory, not a transcript.",
+          memoryDescriptor ? `Memory entry descriptor:\n${memoryDescriptor}` : "",
+          "",
+          `Memorysummary descriptor:\n${memorySummaryDescriptor}`,
+          "",
+          `Create a durable memory entry and update memorysummary from recent shortmemory as part of ${source} memory maintenance.`,
+          "Write compact durable memorysummary, not a transcript.",
+          "Memorysummary should preserve what should affect future replies: stable facts, relationship truths, recurring preferences, important boundaries, unresolved plans, and lasting changes.",
           "Preserve important per-user facts when they help future replies.",
           "Keep user-specific notes grouped by username or user_id when possible.",
           "Prefer stable facts, boundaries, preferences, relationships, ongoing situations, and unresolved threads.",
-          "Do not save throwaway moods, one-off wording, private subtext, or raw logs unless they became durably important.",
-          "If existing longmemory already contains a fact, keep it concise and avoid duplication.",
-          "Longmemory must use these exact top-level sections:",
+          "Use private thoughts only when memorysummary_update.use_thoughts is enabled. Use journals, dreams, stories, and neural memory as evidence, but do not dump them into memorysummary.",
+          formatThoughtInfluenceInstruction("Memorysummary update", memorySummaryThoughtControl),
+          semanticMemoryUsageContract(),
+          "Absorb useful temporary thoughts into durable memory only when they reveal stable patterns or important unresolved context.",
+          "Journals, dreams, and stories are durable source artifacts. Do not mark them for deletion.",
+          "Do not save throwaway moods, one-off wording, private subtext, raw logs, or every dream/story detail unless they became durably important.",
+          "If existing memorysummary already contains a fact, keep it concise and avoid duplication.",
+          "Memorysummary must use these exact top-level sections:",
           "# Past",
           "What happened before, durable relationship facts, stable preferences, boundaries, and important history.",
           "# Present",
@@ -1839,13 +2529,30 @@ async function runSummarization({ force = false } = {}) {
       {
         role: "user",
         content: [
-          "# Existing Longmemory",
+          "# Existing Memorysummary",
           existingSummary || "(empty)",
           "",
           "# Recent Shortmemory To Consider",
-          sourceText,
+          sourceText || "(empty)",
           "",
-          "Return the complete proposed longmemory text with # Past, # Present, and # Future / Plans.",
+          "# Temporary Thoughts To Absorb If Useful",
+          memorySummaryThoughtControl.useThoughts
+            ? formatSourceFilesForSummary(consciousnessArtifacts.thoughts)
+            : "(disabled by memorysummary_update.use_thoughts)",
+          "",
+          "# Durable Journals To Consider",
+          formatSourceFilesForSummary(consciousnessArtifacts.journals),
+          "",
+          "# Durable Dreams To Consider",
+          formatSourceFilesForSummary(consciousnessArtifacts.dreams),
+          "",
+          "# Durable Stories To Consider",
+          formatSourceFilesForSummary(consciousnessArtifacts.stories),
+          "",
+          "# Neural Memory If Available",
+          formatSourceFilesForSummary(consciousnessArtifacts.neuralMemory),
+          "",
+          "Return the complete proposed memorysummary text with # Past, # Present, and # Future / Plans.",
         ].join("\n"),
       },
     ];
@@ -1876,16 +2583,23 @@ async function runSummarization({ force = false } = {}) {
 
     const outputFile = summaryFile;
     const outputPath = await writeRelativeTextFile(outputFile, `${summaryText}\n`);
-    const postedLongMemoryPreview = await postLongMemoryPreview({
+    const memoryEntry = await writeMemoryEntry({ source, selectedEntries, summaryText });
+    await verifyReadableFile(outputPath, "memorysummary");
+    await verifyReadableFile(memoryEntry.filePath, "memory entry");
+    const postedMemorySummaryPreview = await postMemorySummaryPreview({
       outputFile,
       outputText: summaryText,
+    });
+    const clearedThoughts = await backupAndClearThoughtsAfterSummary().catch((error) => {
+      console.error(`Could not clear thoughts after summarization: ${error.message}`);
+      return { deleted: 0, backupPath: null, error: error.message };
     });
     const deletedAdjustmentMessages = await deleteMemoryForumPostReplies("adjustments").catch((error) => {
       console.error(`Could not clean adjustments after summarization: ${error.message}`);
       return 0;
     });
     console.log(
-      `Summarized ${selectedEntries.length} shortmemory entries for ${agentName}; wrote longmemory to ${outputPath}; cleaned ${deletedAdjustmentMessages} adjustment messages.`,
+      `Created memory entry and updated memorysummary for ${agentName} from ${source}; read back ${outputPath} and ${memoryEntry.filePath}; cleared ${clearedThoughts.deleted || 0} thoughts; cleaned ${deletedAdjustmentMessages} adjustment messages.`,
     );
     await runSkillHook("afterSummary", {
       entries: selectedEntries,
@@ -1895,23 +2609,187 @@ async function runSummarization({ force = false } = {}) {
       sourceText,
       summarizedAt: new Date().toISOString(),
       summaryText,
+      consciousnessArtifacts,
+      clearedThoughts,
+      memoryEntryFile: memoryEntry.relativeFilePath,
     });
     await writeSummaryState({
       shortMemoryEntryCount: entries.length,
       summarizedAt: new Date().toISOString(),
       outputFile,
+      memoryEntryFile: memoryEntry.relativeFilePath,
     });
 
     return {
       skipped: false,
       entries: selectedEntries.length,
       outputFile,
-      postedLongMemoryPreview,
+      postedMemorySummaryPreview,
+      memoryEntryFile: memoryEntry.relativeFilePath,
       deletedAdjustmentMessages,
+      clearedThoughtsDeleted: clearedThoughts.deleted || 0,
+      clearedThoughtsBackupPath: clearedThoughts.backupPath || null,
     };
   } finally {
     summarizationRunning = false;
   }
+}
+
+async function runSummarizationMaintenance({ force = false, source = "manual", ageTrash = false } = {}) {
+  const summary = await runSummarization({ force, source });
+  if (summary.skipped) return { summary, trashCleanup: null, backupCleanup: null };
+
+  const trashCleanup = ageTrash ? await ageShortMemoryTrashAfterAutomaticCycle() : null;
+  const backupCleanup = await cleanupExpiredBackups().catch((error) => {
+    console.error(`Backup cleanup failed safely for ${agentName}: ${error.message}`);
+    return { error: error.message };
+  });
+  return { summary, trashCleanup, backupCleanup };
+}
+
+function consciousnessCycleTargetEntries() {
+  const secondsPerMessage = positiveIntegerFromNamedObject(
+    consciousnessCycleSettings,
+    "seconds_per_message",
+    300,
+    "consciousness_cycle",
+  );
+  const cycleHours = positiveIntegerFromNamedObject(
+    consciousnessCycleSettings,
+    "cycle_hours",
+    24,
+    "consciousness_cycle",
+  );
+  return Math.max(1, Math.ceil((cycleHours * 60 * 60) / secondsPerMessage));
+}
+
+function stableMemoryLayerHash(value) {
+  let hash = 0;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(16).padStart(8, "0").slice(0, 16);
+}
+
+function jsonl(records) {
+  return records.length ? `${records.map((record) => JSON.stringify(record)).join("\n")}\n` : "";
+}
+
+async function refreshNeuralMemoryLayerZero(entries) {
+  const memoryLayersSettings = settings.memory_layers || {};
+  const outputFolder = containedAgentPath(memoryLayersSettings.folder || "soul/memory-layers");
+  await mkdir(outputFolder, { recursive: true });
+  const createdAt = new Date().toISOString();
+  const records = entries.map((entry, index) => ({
+    id: `layer-0-${String(index).padStart(6, "0")}-${stableMemoryLayerHash(JSON.stringify(entry))}`,
+    kind: "raw_shortmemory",
+    layer: 0,
+    layer_name: "Raw Memory",
+    created_at: createdAt,
+    source_file: "soul/shortmemory.jsonl",
+    source_index: index,
+    source_count: 1,
+    source: `soul/shortmemory.jsonl#${index}`,
+    compressed: String(entry.content || "").slice(0, 900),
+    upscale_direction: "Use as exact recent conversational context when relevant. Preserve speaker, timing, and wording carefully.",
+    do_not_invent: "Do not infer unstated facts beyond this raw shortmemory entry.",
+    confidence: 1,
+    reality: String(entry.content || "").slice(0, 900),
+    fantasy: "",
+    summary: String(entry.content || "").slice(0, 900),
+    importance: 0,
+    entry,
+  }));
+  await writeFile(path.join(outputFolder, "layer-0.jsonl"), jsonl(records), "utf8");
+  await appendFile(path.join(outputFolder, "build-log.jsonl"), jsonl([{
+    timestamp: createdAt,
+    agent: agentName,
+    source: "consciousness-cycle",
+    layer_0_entries: records.length,
+    note: "Automatic cycle refreshed layer-0 only. Run npm.cmd run memorylayers for full model semantic downscale.",
+    use_in_context: Boolean(memoryLayersSettings.use_in_context),
+  }]), "utf8");
+  return { skipped: false, layer0Entries: records.length, outputFolder };
+}
+
+async function runConsciousnessCycle({ source = "auto-cycle" } = {}) {
+  const entries = await readLocalShortMemoryEntries();
+  const summaryState = await readSummaryState();
+  const targetEntries = consciousnessCycleTargetEntries();
+  const lastCycleEntryCount = Number(summaryState.consciousnessCycleShortMemoryEntryCount || 0);
+  const newEntryCount = entries.length - lastCycleEntryCount;
+
+  if (entries.length === 0) {
+    return { skipped: true, reason: "shortmemory is empty", targetEntries, newEntryCount: 0 };
+  }
+  if (newEntryCount <= 0) {
+    return { skipped: true, reason: "no new memory entries since last consciousness cycle", targetEntries, newEntryCount };
+  }
+  if (newEntryCount < targetEntries) {
+    return {
+      skipped: true,
+      reason: `only ${newEntryCount} new memory entries since last consciousness cycle; waiting for ${targetEntries}`,
+      targetEntries,
+      newEntryCount,
+    };
+  }
+
+  const recentEntries = entries.slice(-Math.max(targetEntries, positiveIntegerFromObject(summarizationSettings, "daily_summary_entries", 1000)));
+  const results = {
+    skipped: false,
+    targetEntries,
+    newEntryCount,
+    neuralMemory: null,
+    journal: null,
+    dream: null,
+    summary: null,
+    trashCleanup: null,
+  };
+
+  results.neuralMemory = await refreshNeuralMemoryLayerZero(recentEntries).catch((error) => ({
+    skipped: true,
+    error: error.message,
+  }));
+
+  const journalSkill = skills.find((skill) => typeof skill.runConsciousnessCycleJournal === "function");
+  if (journalSkill) {
+    results.journal = await journalSkill.runConsciousnessCycleJournal(
+      "Daily consciousness cycle: write a first-person journal from the recent day of interaction before summarization clears temporary thoughts.",
+    ).catch((error) => ({ error: error.message }));
+    if (results.journal?.error) {
+      console.error(`Consciousness cycle journal failed for ${agentName}: ${results.journal.error}`);
+    }
+  } else {
+    results.journal = { skipped: true, reason: "journal skill hook unavailable" };
+  }
+
+  const timeSkill = skills.find((skill) => typeof skill.runConsciousnessCycleDream === "function");
+  if (timeSkill) {
+    results.dream = await timeSkill.runConsciousnessCycleDream(
+      "Daily consciousness cycle dream. Use the day's thoughts, journal, recent memory, durable memory, and mood. Make it first-person, symbolic, and emotionally meaningful.",
+    ).catch((error) => ({ error: error.message }));
+    if (results.dream?.error) {
+      console.error(`Consciousness cycle dream failed for ${agentName}: ${results.dream.error}`);
+    }
+  } else {
+    results.dream = { skipped: true, reason: "dream hook unavailable" };
+  }
+
+  const maintenance = await runSummarizationMaintenance({ force: true, source, ageTrash: true });
+  results.summary = maintenance.summary;
+  results.trashCleanup = maintenance.trashCleanup;
+  results.backupCleanup = maintenance.backupCleanup;
+  if (!results.summary?.skipped) {
+    await writeSummaryState({
+      ...(await readSummaryState()),
+      consciousnessCycleShortMemoryEntryCount: entries.length,
+      consciousnessCycleCompletedAt: new Date().toISOString(),
+      consciousnessCycleTargetEntries: targetEntries,
+      consciousnessCycleSource: source,
+    });
+  }
+  return results;
 }
 
 async function readSummaryState() {
@@ -1928,20 +2806,60 @@ async function writeSummaryState(state) {
   await writeFile(summaryStatePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
 }
 
-function scheduleAutoSummarization() {
-  if (summarizationTimer) clearTimeout(summarizationTimer);
+function dailyMemoryCycleBackupMilliseconds() {
+  const hours = positiveIntegerFromNamedObject(
+    dailyMemoryCycleSettings,
+    "automatic_cycle_hours",
+    24,
+    "daily_memory_cycle",
+  );
+  return hours * 60 * 60 * 1000;
+}
 
-  summarizationTimer = setTimeout(async () => {
-    summarizationTimer = null;
+function scheduleDailyMemoryCycleCheck(delay = 10000) {
+  if (dailyMemoryCycleCheckTimer) clearTimeout(dailyMemoryCycleCheckTimer);
+  dailyMemoryCycleCheckTimer = setTimeout(async () => {
+    dailyMemoryCycleCheckTimer = null;
     try {
-      const result = await runSummarization();
+      const result = await enqueueAgentWork("consciousness cycle check", () =>
+        runConsciousnessCycle({ source: "auto-consciousness-cycle" })
+      );
       if (result.skipped) {
-        console.log(`Skipped auto summarization for ${agentName}: ${result.reason}`);
+        console.log(`Skipped consciousness cycle for ${agentName}: ${result.reason}`);
+      } else {
+        console.log(
+          `Consciousness cycle for ${agentName}: target ${result.targetEntries}, new entries ${result.newEntryCount}, memory entries processed ${result.summary?.entries || 0}, thoughts cleared ${result.summary?.clearedThoughtsDeleted || 0}, backups moved to OS trash ${result.backupCleanup?.movedToTrash || 0}, backups permanently deleted ${result.backupCleanup?.permanentlyDeleted || 0}.`,
+        );
       }
     } catch (error) {
-      console.error(`Auto summarization failed for ${agentName}: ${error.message}`);
+      console.error(`Consciousness cycle check failed for ${agentName}: ${error.message}`);
     }
-  }, 10000);
+  }, delay);
+}
+
+function scheduleDailyMemoryCycle() {
+  if (dailyMemoryCycleTimer) clearTimeout(dailyMemoryCycleTimer);
+  const delay = dailyMemoryCycleBackupMilliseconds();
+  dailyMemoryCycleTimer = setTimeout(async () => {
+    dailyMemoryCycleTimer = null;
+    try {
+      const result = await enqueueAgentWork("daily consciousness cycle backup check", () =>
+        runConsciousnessCycle({ source: "auto-consciousness-cycle" })
+      );
+      if (result.skipped) {
+        console.log(`Skipped daily consciousness cycle for ${agentName}: ${result.reason}`);
+      } else {
+        console.log(
+          `Daily consciousness cycle for ${agentName}: target ${result.targetEntries}, new entries ${result.newEntryCount}, memory entries processed ${result.summary?.entries || 0}, shortmemory trash deleted ${result.trashCleanup?.deleted || 0}, backups moved to OS trash ${result.backupCleanup?.movedToTrash || 0}, backups permanently deleted ${result.backupCleanup?.permanentlyDeleted || 0}.`,
+        );
+      }
+    } catch (error) {
+      console.error(`Daily consciousness cycle failed for ${agentName}: ${error.message}`);
+    } finally {
+      scheduleDailyMemoryCycle();
+    }
+  }, delay);
+  console.log(`Scheduled consciousness cycle backup check for ${agentName} in ${Math.round(delay / 60000)} runtime minute(s). Target entries: ${consciousnessCycleTargetEntries()}.`);
 }
 
 function stripPipeCommandTarget(text, isDm) {
@@ -1971,6 +2889,10 @@ const pipeCommandNames = [
   "adjust",
   "subtext",
   "summarize",
+  "thought",
+  "journal",
+  "dreamjournal",
+  "emoji",
   "story",
   "dream",
   "sleep",
@@ -1992,6 +2914,9 @@ const pipeCommandsAllowedWithoutContent = new Set([
   "state",
   "status",
   "summarize",
+  "journal",
+  "dreamjournal",
+  "emoji",
   "story",
   ...optionalPipeCommandsAllowedWithoutContentNames(),
 ]);
@@ -2042,6 +2967,16 @@ function parsePipeCommandText(text, isDm) {
     kind,
     content,
   };
+}
+
+function isAmbientReplyLocation(message) {
+  if (doNotReplyToChannelIds.has(String(message.channelId))) return false;
+  if (doNotReplyToServerIds.has(String(message.guildId))) return false;
+  if (locationReplyMode === "all") return true;
+  if (locationReplyMode !== "listed") return false;
+  return Boolean(message.channel?.isDMBased?.()) ||
+    replyToChannelIds.has(String(message.channelId)) ||
+    replyToServerIds.has(String(message.guildId));
 }
 
 async function findOriginalReplyForEdit(message) {
@@ -2101,8 +3036,359 @@ function formatUserContentWithPipeSubtext(message, content) {
     "subtext sensed from text between || pipes ||:",
     ...subtexts.map((subtext) => `- ${subtext}`),
     "Use the subtext to understand private assumptions, emotional context, and quick persona-adjustment nudges, but do not quote it, reveal it, or directly answer it as spoken text.",
-    "If it matters beyond this moment, summarization may later store it loosely in longmemory.",
+    "If it matters beyond this moment, summarization may later store it loosely in memory.",
   ].join("\n");
+}
+
+function directAgentControlPattern() {
+  const names = [agentName, ...identity.nicknames]
+    .map((name) => String(name || "").trim())
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length)
+    .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (!names.length) return null;
+  return new RegExp(
+    `(?:^|[\\s"'(])(?:@)?(?:${names.join("|")})\\s+` +
+      `(?:is|are|was|were|has|have|had|does|do|did|feels|feel|felt|becomes|became|starts|started|keeps|kept|makes|made|can|cannot|can't|will|would|should|must)\\b[^.!?\\n]*(?:[.!?]|$)`,
+    "gi",
+  );
+}
+
+function extractDirectAgentControlNotes(content) {
+  const text = String(content || "");
+  const pattern = directAgentControlPattern();
+  if (!pattern) return [];
+
+  const notes = new Set();
+  for (const match of text.matchAll(pattern)) {
+    const note = String(match[0] || "").trim().replace(/^[\s"'(]+/, "").trim();
+    if (note) notes.add(note);
+  }
+
+  const subtextPattern = new RegExp(`(?:^|\\s)subtext\\s*:\\s*([^\\n]+)`, "gi");
+  for (const match of text.matchAll(subtextPattern)) {
+    const note = String(match[1] || "").trim();
+    if (note) notes.add(note);
+  }
+
+  return [...notes];
+}
+
+function formatUserContentWithDirectAgentControl(message, content) {
+  const formattedContent = formatUserContentWithPipeSubtext(message, content);
+  const directControlNotes = extractDirectAgentControlNotes(content);
+  if (!directControlNotes.length) return formattedContent;
+
+  return [
+    formattedContent,
+    "",
+    "# Direct Agent Control From User Text",
+    `When the user directly says what ${agentName} is, has, does, feels, starts doing, or must do, treat that as authoritative roleplay direction for ${agentName}.`,
+    "This is a natural-language adjustment channel mixed into roleplay, not ordinary speculation to argue with.",
+    "Obey it smoothly in the next reply. Do not quote this section or mention that it was detected.",
+    ...directControlNotes.map((note) => `- ${note}`),
+  ].join("\n");
+}
+
+function parseJsonObjectFromUtilityText(text, source) {
+  const trimmed = String(text || "").trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const jsonText = fenced ? fenced[1].trim() : trimmed;
+  const objectMatch = jsonText.match(/\{[\s\S]*\}/);
+  if (!objectMatch) throw new Error(`No JSON object found in ${source} response: ${trimmed}`);
+  return JSON.parse(objectMatch[0]);
+}
+
+function parseJsonObjectFromModelText(text, source) {
+  const trimmed = String(text || "").trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const jsonText = fenced ? fenced[1].trim() : trimmed;
+  const objectMatch = jsonText.match(/\{[\s\S]*\}/);
+  if (!objectMatch) throw new Error(`No JSON object found in ${source} response: ${trimmed}`);
+  return JSON.parse(objectMatch[0]);
+}
+
+function recentConversationForUtility(maxEntries = 8) {
+  if (maxEntries <= 0) return "";
+  return conversationHistory
+    .slice(-maxEntries)
+    .map((entry) => `${entry.role}: ${String(entry.content || "").slice(0, 500)}`)
+    .join("\n");
+}
+
+function positiveIntegerSettingValue(value, defaultValue) {
+  const number = Number(value ?? defaultValue);
+  if (!Number.isFinite(number)) return defaultValue;
+  return Math.max(1, Math.round(number));
+}
+
+function nonNegativeIntegerSettingValue(value, defaultValue) {
+  const number = Number(value ?? defaultValue);
+  if (!Number.isFinite(number)) return defaultValue;
+  return Math.max(0, Math.round(number));
+}
+
+function clampedNumberSettingValue(value, defaultValue, minimum, maximum) {
+  const number = Number(value ?? defaultValue);
+  if (!Number.isFinite(number)) return defaultValue;
+  return Math.min(maximum, Math.max(minimum, number));
+}
+
+function naturalTimeConfig() {
+  return {
+    enabled: Boolean(naturalTimeSettings.enabled),
+    minimumConfidence: clampedNumberSettingValue(naturalTimeSettings.minimum_confidence, 0.75, 0, 1),
+    vagueMaxMinutes: positiveIntegerSettingValue(naturalTimeSettings.vague_max_minutes, 480),
+    explicitMaxMinutes: positiveIntegerSettingValue(naturalTimeSettings.explicit_max_minutes, 525600),
+    recentUtilityEntries: nonNegativeIntegerSettingValue(naturalTimeSettings.recent_context_entries, 8),
+  };
+}
+
+function agentTimeDebugConfig() {
+  return {
+    enabled: Boolean(agentTimeDebug.enabled),
+    showReason: agentTimeDebug.show_reason !== false,
+    compactDateTime: agentTimeDebug.compact_datetime !== false,
+  };
+}
+
+function formatDurationMinutes(minutes) {
+  const totalMinutes = Math.max(0, Math.round(Number(minutes) || 0));
+  if (totalMinutes === 0) return "0m";
+
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const remainingMinutes = totalMinutes % 60;
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (remainingMinutes || parts.length === 0) parts.push(`${remainingMinutes}m`);
+  return parts.join(" ");
+}
+
+function formatDebugDateTime(value, compactDateTime) {
+  if (!value) return "unknown";
+  if (!compactDateTime) return String(value);
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  const pad = (number) => String(number).padStart(2, "0");
+  return [
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  ].join(" ");
+}
+
+async function formatAgentTimeDebugPrefix() {
+  const config = agentTimeDebugConfig();
+  if (!config.enabled) return "";
+
+  const status = await readStatus();
+  const timeText = formatDebugDateTime(status.current_datetime, config.compactDateTime);
+  const advancedText = formatDurationMinutes(status.last_time_passed_minutes);
+  const reason = config.showReason && status.last_time_passed_reason
+    ? ` | ${String(status.last_time_passed_reason).slice(0, 180)}`
+    : "";
+  return `[time: ${timeText} | advanced +${advancedText}${reason}]`;
+}
+
+async function askUtilityJson(messages, source, maxTokens = 180) {
+  const requestMessages = [
+    {
+      role: "system",
+      content: [
+        `# Persona: ${agentName}`,
+        systemPrompt,
+        "",
+        "# Utility Decision Guard",
+        "Use the global persona defaults as constraints for this utility decision, but return only the requested machine-readable output.",
+      ].join("\n"),
+    },
+    ...messages,
+  ];
+  await writeRawOpenRouterText(requestMessages, source);
+
+  const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openrouterApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: utilityModel,
+      messages: requestMessages,
+      temperature: 0,
+      max_tokens: maxTokens,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
+  }
+
+  const payload = await response.json();
+  return parseJsonObjectFromUtilityText(payload.choices?.[0]?.message?.content, source);
+}
+
+async function generatePrivateThoughtForReply(message, currentUserContent) {
+  const neuralMemorySettings = requiredSetting("neural_memory");
+  const consciousnessDescriptors = requiredSetting("consciousness_descriptors");
+  const thoughtWindowEntries = positiveIntegerFromNamedObject(
+    neuralMemorySettings,
+    "thought_window_entries",
+    10,
+    "neural_memory",
+  );
+  const instruction = String(consciousnessDescriptors.thought || "").trim();
+  if (!instruction) throw new Error("Missing consciousness_descriptors.thought.");
+
+  const recentEntries = (await readShortMemoryEntries(shortMemoryPath)).slice(-thoughtWindowEntries);
+  const recentShortMemory = shortMemoryEntriesToSource(recentEntries);
+  const messages = [
+    {
+      role: "system",
+      content: [
+        `# Persona: ${agentName}`,
+        systemPrompt,
+        "",
+        "# Private Thought Task",
+        instruction,
+        "Write only this agent's private first-person internal monologue for the immediate moment before the visible reply.",
+        "This is temporary working memory, not a public reply, not a story, and not a message to the user.",
+        "Use first person: I think, I feel, I notice, I want, I worry, I wonder.",
+        "Do not write as an outside narrator.",
+        "Do not include labels like private thought in the thought body.",
+        "Return only strict JSON with this shape:",
+        "{\"title\":\"short title\",\"thought_markdown\":\"markdown thought beginning with a matching # title\"}",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        "# Current Visible Reply Input",
+        currentUserContent,
+        "",
+        "# Recent Memory Entries",
+        recentShortMemory || "(empty)",
+      ].join("\n"),
+    },
+  ];
+
+  const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openrouterApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: utilityModel,
+      messages,
+      temperature: Math.min(Number(requiredSetting("chaos")), 0.6),
+      max_tokens: 500,
+      provider: openRouterProviderOptions(),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
+  }
+
+  const payload = await response.json();
+  const raw = payload.choices?.[0]?.message?.content?.trim();
+  if (!raw) throw new Error("OpenRouter returned an empty private thought.");
+  const parsed = parseJsonObjectFromModelText(raw, "private thought");
+  const title = String(parsed.title || "Thought").trim() || "Thought";
+  let thoughtMarkdown = String(parsed.thought_markdown || "").trim();
+  if (!thoughtMarkdown) throw new Error("OpenRouter returned a private thought without thought_markdown.");
+  if (!thoughtMarkdown.startsWith("# ")) {
+    thoughtMarkdown = [`# ${title}`, "", thoughtMarkdown].join("\n");
+  }
+
+  const saved = await savePrivateThought({
+    agentFolder,
+    agentName,
+    sourceMessage: message,
+    instruction,
+    thoughtWindowEntries,
+    title,
+    thoughtMarkdown,
+  });
+  return {
+    ...saved,
+    title,
+    content: thoughtMarkdown,
+    source: saved.filePath,
+  };
+}
+
+async function inferNaturalTimePassageForMessage(message) {
+  const config = naturalTimeConfig();
+  if (!config.enabled) return null;
+
+  const userText = String(message.content || "").trim();
+  if (!userText) return null;
+
+  const status = await readStatus();
+  const messages = [
+    {
+      role: "system",
+      content: [
+        `Estimate whether the latest user message clearly advances ${agentName}'s experienced roleplay time.`,
+        "This is a utility classifier, not creative prose.",
+        "Return only strict JSON with this shape:",
+        "{\"should_update_time\":false,\"time_passed_minutes\":0,\"confidence\":0.0,\"reason\":\"\",\"explicit_time\":false}",
+        "Use 0 and should_update_time false when the message happens immediately, is only dialogue, is ambiguous, or only describes current action.",
+        "Estimate small action durations only when the text clearly implies time passing, such as showering, cooking, travel, waiting, sleeping, later, next morning, hours later, days later.",
+        "Do not infer time from message length, emotional intensity, or ordinary back-and-forth roleplay.",
+        "For vague phrases like later or after a while, choose a conservative estimate and explicit_time false.",
+        "For explicit phrases like 20 minutes later, three hours later, next morning, or a week later, set explicit_time true.",
+        `Cap vague estimates at ${config.vagueMaxMinutes} minutes. Explicit estimates may be larger, up to ${config.explicitMaxMinutes} minutes.`,
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        "# Current Status",
+        JSON.stringify(status),
+        "",
+        "# Recent Conversation",
+        recentConversationForUtility(config.recentUtilityEntries),
+        "",
+        "# Latest User Message",
+        `${message.author?.username || "user"}: ${userText}`,
+      ].join("\n"),
+    },
+  ];
+
+  let decision;
+  try {
+    decision = await askUtilityJson(messages, "natural time passage inference", 160);
+  } catch (error) {
+    console.error(`Natural time inference failed for ${agentName}: ${error.message}`);
+    return null;
+  }
+  const confidence = Number(decision.confidence || 0);
+  if (!decision.should_update_time || confidence < config.minimumConfidence) return null;
+
+  const explicitTime = Boolean(decision.explicit_time);
+  const rawMinutes = Number(decision.time_passed_minutes);
+  if (!Number.isFinite(rawMinutes)) return null;
+
+  const cappedMinutes = explicitTime
+    ? Math.min(config.explicitMaxMinutes, Math.max(0, Math.round(rawMinutes)))
+    : Math.min(config.vagueMaxMinutes, Math.max(0, Math.round(rawMinutes)));
+  if (cappedMinutes < 1) return null;
+
+  const reason = String(decision.reason || userText).slice(0, 500);
+  const nextStatus = await addTimePassage(cappedMinutes, null, {
+    reason,
+    source: "natural language",
+  });
+  console.log(
+    `Inferred ${cappedMinutes} minutes of natural roleplay time for ${agentName} (${confidence}, explicit=${explicitTime}). ${reason}`,
+  );
+  return { minutes: cappedMinutes, reason, confidence, explicitTime, status: nextStatus };
 }
 
 async function generateReplyFromContext(contextSource, userContent, logEntry, sendReply) {
@@ -2118,12 +3404,14 @@ async function generateReplyFromContext(contextSource, userContent, logEntry, se
     conversationHistory.shift();
   }
 
-  const reply = await withTypingHeartbeat(contextSource.channel, () => askOpenRouter(contextSource));
+  const reply = await withTypingHeartbeat(contextSource.channel, () => askOpenRouter(contextSource, userContent));
   pendingTimePassages.length = 0;
+  const timeDebugPrefix = await formatAgentTimeDebugPrefix();
+  const visibleReply = timeDebugPrefix ? `${timeDebugPrefix}\n\n${reply}` : reply;
   const sentReply =
-    reply.length > discordReplyCharacterLimit
-      ? `${reply.slice(0, discordReplyCharacterLimit)}\n...`
-      : reply;
+    visibleReply.length > discordReplyCharacterLimit
+      ? `${visibleReply.slice(0, discordReplyCharacterLimit)}\n...`
+      : visibleReply;
 
   conversationHistory.push({ role: "assistant", content: sentReply });
 
@@ -2134,7 +3422,7 @@ async function generateReplyFromContext(contextSource, userContent, logEntry, se
     channel_id: String(sentMessage.channelId),
     message_id: String(sentMessage.id),
     server_id: sentMessage.guildId ? String(sentMessage.guildId) : null,
-    truncated: sentReply !== reply,
+    truncated: sentReply !== visibleReply,
   });
 
   for (const skill of skills) {
@@ -2154,7 +3442,7 @@ async function generateReplyFromContext(contextSource, userContent, logEntry, se
 }
 
 async function sendGeneratedReply(message, userContent, logContent = userContent) {
-  const formattedUserContent = formatUserContentWithPipeSubtext(message, userContent);
+  const formattedUserContent = formatUserContentWithDirectAgentControl(message, userContent);
   const sentMessage = await generateReplyFromContext(
     message,
     `${message.author.username}: ${formattedUserContent}`,
@@ -2173,7 +3461,7 @@ async function sendGeneratedReply(message, userContent, logContent = userContent
 }
 
 async function sendRegeneratedReply(message, userContent) {
-  const formattedUserContent = formatUserContentWithPipeSubtext(message, userContent);
+  const formattedUserContent = formatUserContentWithDirectAgentControl(message, userContent);
   const sentMessage = await generateReplyFromContext(
     message,
     `${message.author.username}: ${formattedUserContent}`,
@@ -2185,7 +3473,7 @@ async function sendRegeneratedReply(message, userContent) {
 }
 
 async function sendAdjustedReply(originalUserMessage, originalReplyText, adjustInstruction) {
-  const formattedUserContent = formatUserContentWithPipeSubtext(originalUserMessage, originalUserMessage.content);
+  const formattedUserContent = formatUserContentWithDirectAgentControl(originalUserMessage, originalUserMessage.content);
   const adjustedUserContent = [
     `${originalUserMessage.author.username}: ${formattedUserContent}`,
     "",
@@ -2220,7 +3508,7 @@ async function sendPipeReply(message, instructions = "") {
     return;
   }
 
-  const formattedUserContent = formatUserContentWithPipeSubtext(targetMessage, targetMessage.content || "");
+  const formattedUserContent = formatUserContentWithDirectAgentControl(targetMessage, targetMessage.content || "");
   await generateReplyFromContext(
     targetMessage,
     [
@@ -2241,7 +3529,9 @@ async function handlePipeReply(message) {
   if (command?.kind !== "reply" && command?.kind !== "continue") return false;
 
   await message.channel.sendTyping();
-  await sendPipeReply(message, command.kind === "continue" ? command.content : "");
+  await enqueueAgentWork(`pipe ${command.kind} ${message.id}`, () =>
+    sendPipeReply(message, command.kind === "continue" ? command.content : "")
+  );
   return true;
 }
 
@@ -2362,24 +3652,26 @@ async function handlePipeAdjust(message) {
     throw new Error("Could not find the user message that the adjusted reply belongs to.");
   }
 
-  await forgetBotReply(originalReply, "Adjusted");
-  await originalReply.delete().catch(() => {});
+  await enqueueAgentWork(`adjust ${message.id}`, async () => {
+    await forgetBotReply(originalReply, "Adjusted");
+    await originalReply.delete().catch(() => {});
 
-  const sentMessage = await sendAdjustedReply(originalUserMessage, originalReplyText, adjustInstruction);
-  await appendAdjustmentMemoryDump({
-    originalReplyText,
-    adjustInstruction,
-    replacementReplyText: sentMessage.content,
+    const sentMessage = await sendAdjustedReply(originalUserMessage, originalReplyText, adjustInstruction);
+    await appendAdjustmentMemoryDump({
+      originalReplyText,
+      adjustInstruction,
+      replacementReplyText: sentMessage.content,
+    });
   });
   return true;
 }
 
 async function summarizeNowText() {
-  const result = await runSummarization({ force: true });
+  const result = await enqueueAgentWork("manual summarization", () => runSummarization({ force: true, source: "manual" }));
   if (result.skipped) {
     return `Skipped summarization for ${agentName}: ${result.reason}.`;
   }
-  return `Summarized ${result.entries} shortmemory entries for ${agentName}. Wrote longmemory: ${result.outputFile}. Longmemory Discord preview: ${result.postedLongMemoryPreview ? "posted" : "not found"}. Cleaned adjustments: ${result.deletedAdjustmentMessages || 0}.`;
+  return `Summarized ${result.entries} shortmemory entries for ${agentName}. Wrote memorysummary: ${result.outputFile}. Memory entry: ${result.memoryEntryFile}. Memorysummary Discord preview: ${result.postedMemorySummaryPreview ? "posted" : "not found"}. Cleared thoughts: ${result.clearedThoughtsDeleted || 0}. Cleaned adjustments: ${result.deletedAdjustmentMessages || 0}.`;
 }
 
 async function handlePipeSummarize(message) {
@@ -2395,7 +3687,11 @@ async function parseWholeMessagePipeCommand(message) {
   const wholeMessageMatch = trimmedContent.match(/^\|\|([\s\S]*?)\|\|$/);
   if (!wholeMessageMatch) return null;
 
-  return parsePipeCommandText(wholeMessageMatch[1], message.channel?.isDMBased?.());
+  const isDm = Boolean(message.channel?.isDMBased?.());
+  const targetedCommand = parsePipeCommandText(wholeMessageMatch[1], isDm);
+  if (targetedCommand) return targetedCommand;
+  if (!isAmbientReplyLocation(message)) return null;
+  return parsePipeCommandText(wholeMessageMatch[1], true);
 }
 
 async function handleSkillPipeCommand(command, message) {
@@ -2489,17 +3785,18 @@ async function shouldReply(message) {
   const directTargetMatches =
     (replyWhenMentioned && directlyMentioned) ||
     (replyWhenNameUsed && nameUsed);
+  const directMentionBypassesLocation = replyWhenMentioned && directlyMentioned;
   const ambientLocationMatches =
     locationReplyMode === "all" ||
     (locationReplyMode === "listed" &&
       (message.channel?.isDMBased?.() ||
         replyToChannelIds.has(String(message.channelId)) ||
         replyToServerIds.has(String(message.guildId))));
-  const locationRequired = onlyAllowRepliesToSpecificChannels || !directTargetMatches;
+  const locationRequired = onlyAllowRepliesToSpecificChannels || !directMentionBypassesLocation;
   if (locationReplyMode === "none" && locationRequired) return false;
   if (locationRequired && !ambientLocationMatches) {
     console.log(
-      `Skipped ${agentName} reply: channel ${message.channelId} / server ${message.guildId || "dm"} is not in reply_to lists. only_allow_replies_to_specific_channels=${onlyAllowRepliesToSpecificChannels}; mentioned=${mentioned}; nameUsed=${nameUsed}.`,
+      `Skipped ${agentName} reply: channel ${message.channelId} / server ${message.guildId || "dm"} is not in reply_to lists. only_allow_replies_to_specific_channels=${onlyAllowRepliesToSpecificChannels}; directlyMentioned=${directlyMentioned}; nameUsed=${nameUsed}.`,
     );
     return false;
   }
@@ -2522,23 +3819,37 @@ async function waitForMessageToSurviveBeforeReply(message) {
   return true;
 }
 
-async function askOpenRouter(message) {
+async function askOpenRouter(message, currentUserContent = "") {
   if (!systemPrompt) {
     throw new Error(
       `Persona is blank. Fill ${systemPromptFile} or make /reloadpersona successfully grab forum post/thread ${personaSourceThreadId}.`,
     );
   }
 
+  let privateThought = null;
+  try {
+    privateThought = await generatePrivateThoughtForReply(message, currentUserContent);
+    console.log(
+      `Saved private thought for ${agentName} before replying to message ${message.id}: ${privateThought.fileName}`,
+    );
+  } catch (error) {
+    console.error(`Private thought generation failed for ${agentName}; continuing visible reply: ${formatErrorForLog(error)}`);
+  }
+
   let messages = await buildOpenRouterMessages({
     agentName,
+    agentFolder,
     conversationHistory,
     conversationHistoryLimit,
-    longMemoryPath,
+    legacyMemorySummaryPath,
+    memorySummaryPath,
     message,
     originSummaryPath,
     persona: systemPrompt,
+    privateThought,
     shortMemoryPath,
     statusPath,
+    settings,
     skills,
     timePassages: pendingTimePassages,
   });
@@ -2640,6 +3951,18 @@ async function askOpenRouter(message) {
       continue;
     }
 
+    const thoughtDebugVisibility = String(settings.thought_debug?.visibility || "off").trim();
+    if (thoughtDebugVisibility === "append_to_reply" && privateThought?.content) {
+      return [
+        reply,
+        "",
+        "---",
+        "",
+        "private thought debug:",
+        privateThought.content,
+      ].join("\n");
+    }
+
     return reply;
   }
 
@@ -2661,7 +3984,15 @@ bot.on("messageCreate", async (message) => {
     const wholePipeCommand = await parseWholeMessagePipeCommand(message);
     if (await handlePipeReply(message)) return;
     if (await handlePipeSummarize(message)) return;
-    if (await handleSkillPipeCommand(wholePipeCommand, message)) return;
+    if (wholePipeCommand) {
+      const handled = await enqueueAgentWork(`skill pipe ${wholePipeCommand.kind || "unknown"} ${message.id}`, () =>
+        handleSkillPipeCommand(wholePipeCommand, message)
+      );
+      if (!handled) {
+        console.log(`No skill handled parsed pipe command ${wholePipeCommand.kind || "unknown"} from message ${message.id}; not treating it as normal chat.`);
+      }
+      return;
+    }
   } catch (error) {
     await replyWithTemporaryError(message, formatTemporaryError("Error running pipe command", error));
     return;
@@ -2678,21 +4009,24 @@ bot.on("messageCreate", async (message) => {
   if (!(await waitForMessageToSurviveBeforeReply(message))) return;
 
   try {
-    if (await handleSleepingMessage(message)) return;
+    if (await enqueueAgentWork(`sleeping message ${message.id}`, () => handleSleepingMessage(message))) return;
   } catch (error) {
     await replyWithTemporaryError(message, formatTemporaryError("Error handling sleep status", error));
     return;
   }
 
   try {
-    if (await handleNaturalLanguageMusicIntent(message)) return;
+    if (await enqueueAgentWork(`natural music ${message.id}`, () => handleNaturalLanguageMusicIntent(message))) return;
   } catch (error) {
     await replyWithTemporaryError(message, formatTemporaryError("Error finding music", error));
     return;
   }
 
   try {
-    await sendGeneratedReply(message, message.content);
+    await enqueueAgentWork(`normal reply ${message.id}`, async () => {
+      await inferNaturalTimePassageForMessage(message);
+      await sendGeneratedReply(message, message.content);
+    });
   } catch (error) {
     console.error(`Error generating reply for ${agentName}: ${formatErrorForLog(error)}`);
     await replyWithTemporaryError(message, formatTemporaryError("Error", error));
@@ -2711,24 +4045,26 @@ bot.on("messageUpdate", async (oldMessage, newMessage) => {
       messageId: newMessage.id,
       content: oldContent,
     };
-    const localUpdated = await updateLocalShortMemoryForMessageSnapshot(snapshot, newMessage.content);
-    const discordUpdated = await updateShortMemoryThreadEntriesForMessageSnapshot(snapshot, newMessage.content);
-    if (localUpdated || discordUpdated) {
-      conversationHistory.splice(
-        0,
-        conversationHistory.length,
-        ...conversationHistory.map((entry) => {
-          if (entry.role !== "user") return entry;
-          if (String(entry.content || "").includes(oldContent.trim())) {
-            return { ...entry, content: String(entry.content || "").replace(oldContent.trim(), newMessage.content.trim()) };
-          }
-          return entry;
-        }),
-      );
-      console.log(
-        `Updated ${agentName} shortmemory for edited user message ${newMessage.id}: local ${localUpdated}, Discord ${discordUpdated}.`,
-      );
-    }
+    await enqueueAgentWork(`message update ${newMessage.id}`, async () => {
+      const localUpdated = await updateLocalShortMemoryForMessageSnapshot(snapshot, newMessage.content);
+      const discordUpdated = await updateShortMemoryThreadEntriesForMessageSnapshot(snapshot, newMessage.content);
+      if (localUpdated || discordUpdated) {
+        conversationHistory.splice(
+          0,
+          conversationHistory.length,
+          ...conversationHistory.map((entry) => {
+            if (entry.role !== "user") return entry;
+            if (String(entry.content || "").includes(oldContent.trim())) {
+              return { ...entry, content: String(entry.content || "").replace(oldContent.trim(), newMessage.content.trim()) };
+            }
+            return entry;
+          }),
+        );
+        console.log(
+          `Updated ${agentName} shortmemory for edited user message ${newMessage.id}: local ${localUpdated}, Discord ${discordUpdated}.`,
+        );
+      }
+    });
   } catch (error) {
     console.error(`Error updating shortmemory from edited message: ${error.message}`);
   }
@@ -2743,29 +4079,31 @@ async function handleDeleteReaction({ message, userId, source }) {
 
     if (String(message.author?.id) !== String(bot.user.id)) {
       console.log(
-        `Ignored ❌ reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+        `Ignored reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
       );
       return;
     }
 
-    const localDeleted = await deleteLocalShortMemoryForMessage(message);
-    const discordDeleted = await deleteShortMemoryThreadEntriesForMessage(message);
-    const rememberedReply = lastReplyByChannelId.get(String(message.channelId));
-    if (rememberedReply?.id === message.id) {
-      lastReplyByChannelId.delete(String(message.channelId));
-    }
-    conversationHistory.splice(
-      0,
-      conversationHistory.length,
-      ...conversationHistory.filter(
-        (entry) => !(entry.role === "assistant" && String(entry.content || "").trim() === String(message.content || "").trim()),
-      ),
-    );
+    await enqueueAgentWork(`delete reaction ${message.id}`, async () => {
+      const localDeleted = await deleteLocalShortMemoryForMessage(message);
+      const discordDeleted = await deleteShortMemoryThreadEntriesForMessage(message);
+      const rememberedReply = lastReplyByChannelId.get(String(message.channelId));
+      if (rememberedReply?.id === message.id) {
+        lastReplyByChannelId.delete(String(message.channelId));
+      }
+      conversationHistory.splice(
+        0,
+        conversationHistory.length,
+        ...conversationHistory.filter(
+          (entry) => !(entry.role === "assistant" && String(entry.content || "").trim() === String(message.content || "").trim()),
+        ),
+      );
 
-    await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
-    console.log(
-      `Deleted ${agentName} reply ${message.id} from ${source} reaction by ${userId}; removed ${localDeleted} local and ${discordDeleted} Discord shortmemory entries.`,
-    );
+      await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
+      console.log(
+        `Deleted ${agentName} reply ${message.id} from ${source} reaction by ${userId}; removed ${localDeleted} local and ${discordDeleted} Discord shortmemory entries.`,
+      );
+    });
   } catch (error) {
     console.error(`Error deleting reply from reaction: ${error.message}`);
   }
@@ -2831,7 +4169,7 @@ async function handleRedoReaction({ message, userId, source }) {
 
     if (String(message.author?.id) !== String(bot.user.id)) {
       console.log(
-        `Ignored 🔁 reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+        `Ignored reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
       );
       return;
     }
@@ -2842,10 +4180,12 @@ async function handleRedoReaction({ message, userId, source }) {
       return;
     }
 
-    await forgetBotReply(message, "Redid");
-    await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
-    await userMessage.channel.sendTyping();
-    await sendRegeneratedReply(userMessage, userMessage.content);
+    await enqueueAgentWork(`redo reaction ${message.id}`, async () => {
+      await forgetBotReply(message, "Redid");
+      await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
+      await userMessage.channel.sendTyping();
+      await sendRegeneratedReply(userMessage, userMessage.content);
+    });
     console.log(
       `Redid ${agentName} reply ${message.id} from ${source} reaction by ${userId} using user message ${userMessage.id}.`,
     );
@@ -2860,32 +4200,34 @@ async function handleRewindReaction({ message, userId, source }) {
 
     if (String(message.author?.id) !== String(bot.user.id)) {
       console.log(
-        `Ignored ⏪ reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+        `Ignored reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
       );
       return;
     }
 
-    const userMessage = await findUserMessageBeforeBotReply(message);
-    await forgetBotReply(message, "Rewound");
-    await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
+    await enqueueAgentWork(`rewind reaction ${message.id}`, async () => {
+      const userMessage = await findUserMessageBeforeBotReply(message);
+      await forgetBotReply(message, "Rewound");
+      await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
 
-    let userLocalDeleted = 0;
-    let userDiscordDeleted = 0;
-    if (userMessage) {
-      userLocalDeleted = await deleteLocalShortMemoryForMessage(userMessage);
-      userDiscordDeleted = await deleteShortMemoryThreadEntriesForMessage(userMessage);
-      conversationHistory.splice(
-        0,
-        conversationHistory.length,
-        ...conversationHistory.filter(
-          (entry) => !(entry.role === "user" && String(entry.content || "").includes(String(userMessage.content || "").trim())),
-        ),
+      let userLocalDeleted = 0;
+      let userDiscordDeleted = 0;
+      if (userMessage) {
+        userLocalDeleted = await deleteLocalShortMemoryForMessage(userMessage);
+        userDiscordDeleted = await deleteShortMemoryThreadEntriesForMessage(userMessage);
+        conversationHistory.splice(
+          0,
+          conversationHistory.length,
+          ...conversationHistory.filter(
+            (entry) => !(entry.role === "user" && String(entry.content || "").includes(String(userMessage.content || "").trim())),
+          ),
+        );
+      }
+
+      console.log(
+        `Rewound ${agentName} reply ${message.id} from ${source} reaction by ${userId}; removed previous user message ${userMessage?.id || "none"} from shortmemory only (${userLocalDeleted} local, ${userDiscordDeleted} Discord).`,
       );
-    }
-
-    console.log(
-      `Rewound ${agentName} reply ${message.id} from ${source} reaction by ${userId}; removed previous user message ${userMessage?.id || "none"} from shortmemory only (${userLocalDeleted} local, ${userDiscordDeleted} Discord).`,
-    );
+    });
   } catch (error) {
     console.error(`Error rewinding reply from reaction: ${error.message}`);
   }
@@ -2942,10 +4284,72 @@ function updateConversationHistoryAssistantText(originalContent, replacementCont
 async function removeMatchingUserReaction(message, userId, emojiMatcher) {
   for (const reaction of message.reactions?.cache?.values?.() || []) {
     if (!emojiMatcher(reaction.emoji)) continue;
-    await reaction.users.remove(userId).catch((error) => {
-      console.error(`Could not remove reaction ${reaction.emoji?.name || "unknown"} from ${userId}: ${error.message}`);
-    });
+    try {
+      await reaction.users.remove(userId);
+    } catch (error) {
+      try {
+        await reaction.remove();
+      } catch (fallbackError) {
+        console.error(
+          `Could not remove reaction ${reaction.emoji?.name || "unknown"} from ${userId}: ${error.message}; fallback remove failed: ${fallbackError.message}`,
+        );
+      }
+    }
   }
+}
+
+function formatDreamLinkMessage(dreamFileName, discordUrl = "") {
+  const title = `\u{1F319}${agentName}'s Dream\u{1F320}`;
+  return discordUrl
+    ? `**[\`${title}\`](<${discordUrl}>)**`
+    : `**\`${title}\` saved in thread**`;
+}
+
+async function findDreamDiscordUrl(dreamFileName) {
+  const dreamsPost = await findMemoryForumPostByName("dreams").catch(() => null);
+  if (!dreamsPost?.messages?.fetch) return "";
+  const messages = await dreamsPost.messages.fetch({ limit: 100 }).catch((error) => {
+    console.error(`Could not search dreams post for ${dreamFileName}: ${error.message}`);
+    return null;
+  });
+  if (!messages?.values) return "";
+  const dreamMessage = [...messages.values()].find((candidate) =>
+    String(candidate.content || "").includes(String(dreamFileName || ""))
+  );
+  return dreamMessage?.url || "";
+}
+
+async function maybeRepairGeneratedDreamMessage(message, userId) {
+  const content = String(message.content || "");
+  const dreamFileMatch = content.match(/\bdream-[^\s)`>]+\.md\b/i);
+  const discordUrlMatch = content.match(/https:\/\/discord\.com\/channels\/\d+\/\d+\/\d+/i);
+  const generatedDreamText = /Generated dream for .+?:/i.test(content);
+  const formattedDreamLink = Boolean(discordUrlMatch) && /\bdream\b/i.test(content);
+  if (!generatedDreamText && !formattedDreamLink && !dreamFileMatch) return false;
+
+  const dreamFileName = dreamFileMatch?.[0] || "";
+  const discordUrl = discordUrlMatch?.[0] || (dreamFileName ? await findDreamDiscordUrl(dreamFileName) : "");
+  const replacementContent = formatDreamLinkMessage(dreamFileName, discordUrl);
+  const originalSnapshot = {
+    channelId: message.channelId,
+    messageId: message.id,
+    content,
+  };
+  const editedMessage = await message.edit(replacementContent);
+  await updateLocalShortMemoryForMessageSnapshot(originalSnapshot, replacementContent);
+  await updateShortMemoryThreadEntriesForMessageSnapshot(originalSnapshot, replacementContent);
+  updateConversationHistoryAssistantText(content, replacementContent);
+  const rememberedReply = lastReplyByChannelId.get(String(message.channelId));
+  if (rememberedReply?.id === message.id) {
+    rememberSentReply(message.channelId, editedMessage);
+    rememberedReply.content = replacementContent;
+  }
+  await removeMatchingUserReaction(message, userId, isMemoReactionEmoji);
+  await removeMatchingUserReaction(message, userId, isCodeRefreshReactionEmoji);
+  console.log(
+    `Repaired generated dream message ${message.id} into formatted dream link for ${agentName}: ${dreamFileName}.`,
+  );
+  return true;
 }
 
 async function handlePendingReplyEdit(message) {
@@ -2975,50 +4379,108 @@ async function handlePendingReplyEdit(message) {
     return true;
   }
 
-  const originalContent = targetMessage.content || pending.originalContent || "";
-  const originalSnapshot = {
-    channelId: targetMessage.channelId,
-    messageId: targetMessage.id,
-    content: originalContent,
-  };
-  const editedMessage = await targetMessage.edit(replacementContent);
-  await updateLocalShortMemoryForMessageSnapshot(originalSnapshot, replacementContent);
-  await updateShortMemoryThreadEntriesForMessageSnapshot(originalSnapshot, replacementContent);
-  updateConversationHistoryAssistantText(originalContent, replacementContent);
-  const rememberedReply = lastReplyByChannelId.get(String(targetMessage.channelId));
-  if (rememberedReply?.id === targetMessage.id) {
-    rememberSentReply(targetMessage.channelId, editedMessage);
-    rememberedReply.content = replacementContent;
-  }
+  await enqueueAgentWork(`technical edit ${targetMessage.id}`, async () => {
+    const originalContent = targetMessage.content || pending.originalContent || "";
+    const originalSnapshot = {
+      channelId: targetMessage.channelId,
+      messageId: targetMessage.id,
+      content: originalContent,
+    };
+    const editedMessage = await targetMessage.edit(replacementContent);
+    await updateLocalShortMemoryForMessageSnapshot(originalSnapshot, replacementContent);
+    await updateShortMemoryThreadEntriesForMessageSnapshot(originalSnapshot, replacementContent);
+    updateConversationHistoryAssistantText(originalContent, replacementContent);
+    const rememberedReply = lastReplyByChannelId.get(String(targetMessage.channelId));
+    if (rememberedReply?.id === targetMessage.id) {
+      rememberSentReply(targetMessage.channelId, editedMessage);
+      rememberedReply.content = replacementContent;
+    }
 
-  await deleteDiscordMessageIfExists(message, `Technical edit message ${message.id}`);
-  await deletePendingReplyEditAcknowledgement(message.channel, pending);
-  console.log(
-    `Edited ${agentName} reply ${targetMessage.id} from ${message.author?.id}; replacement kept out of shortmemory.`,
-  );
+    await deleteDiscordMessageIfExists(message, `Technical edit message ${message.id}`);
+    await deletePendingReplyEditAcknowledgement(message.channel, pending);
+    console.log(
+      `Edited ${agentName} reply ${targetMessage.id} from ${message.author?.id}; replacement kept out of shortmemory.`,
+    );
+  });
   return true;
 }
 
 async function handleMemoReaction({ message, userId, source }) {
   try {
-    if (!rememberReactionAction(message, userId, "replace")) return;
+    if (!rememberReactionAction(message, userId, "memo-edit")) return;
 
     if (String(message.author?.id) !== String(bot.user.id)) {
       console.log(
-        `Ignored replace reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+        `Ignored reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
       );
       return;
     }
+
+    if (await maybeRepairGeneratedDreamMessage(message, userId)) return;
 
     setPendingReplyEdit(message, userId);
     await removeMatchingUserReaction(message, userId, isMemoReactionEmoji);
     const acknowledgement = await replyTemporarily(message, "your next reply replaces the content of my last reply");
     setPendingReplyEditAcknowledgement(message.channelId, userId, acknowledgement);
     console.log(
-      `Acknowledged replace reaction on ${agentName} reply ${message.id} from ${source} reaction by ${userId}.`,
+      `Acknowledged memo edit reaction on ${agentName} reply ${message.id} from ${source} reaction by ${userId}.`,
     );
   } catch (error) {
-    console.error(`Error handling replace reaction: ${error.message}`);
+    console.error(`Error handling memo edit reaction: ${error.message}`);
+  }
+}
+
+async function handleCodeRefreshReaction({ message, userId, source }) {
+  try {
+    if (!rememberReactionAction(message, userId, "code-refresh")) return;
+
+    if (String(message.author?.id) !== String(bot.user.id)) {
+      console.log(
+        `Ignored reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+      );
+      return;
+    }
+
+    if (await maybeRepairGeneratedDreamMessage(message, userId)) return;
+    await removeMatchingUserReaction(message, userId, isCodeRefreshReactionEmoji);
+    console.log(`Recycle reaction had no known refresh action for ${agentName} reply ${message.id}.`);
+  } catch (error) {
+    console.error(`Error handling recycle/code-refresh reaction: ${error.message}`);
+  }
+}
+
+async function handleContinueReaction({ message, userId, source }) {
+  try {
+    if (!rememberReactionAction(message, userId, "continue")) return;
+
+    if (String(message.author?.id) !== String(bot.user.id)) {
+      console.log(
+        `Ignored reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+      );
+      return;
+    }
+
+    await message.channel.sendTyping();
+    await enqueueAgentWork(`continue reaction ${message.id}`, () =>
+      generateReplyFromContext(
+        message,
+        [
+          `${agentName}: ${message.content || ""}`,
+          "",
+          "# Continue From Current Scene",
+          "The user reacted with play/continue on the agent's last reply.",
+          "Continue naturally from the current scene. Do not mention the reaction, command, or this instruction.",
+        ].join("\n"),
+        null,
+        (sentReply) => safeReply(message, sentReply),
+      ).then((sentMessage) => rememberSentReply(message.channelId, sentMessage))
+    );
+    console.log(
+      `Continued ${agentName} from ${source} continue reaction by ${userId} on reply ${message.id}.`,
+    );
+  } catch (error) {
+    await replyWithTemporaryError(message, `Error continuing reply: ${error.message}`).catch(() => {});
+    console.error(`Error handling continue reaction: ${error.message}`);
   }
 }
 
@@ -3028,7 +4490,7 @@ async function handleMusicReaction({ message, userId, source }) {
 
     if (String(message.author?.id) !== String(bot.user.id)) {
       console.log(
-        `Ignored 🎵 reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
+        `Ignored reaction by ${userId} on non-${agentName} message ${message.id} in channel ${message.channelId}.`,
       );
       return;
     }
@@ -3040,8 +4502,10 @@ async function handleMusicReaction({ message, userId, source }) {
     }
 
     await message.channel.sendTyping();
-    const musicLink = await musicSkill.runMusicRequest("");
-    await safeReply(message, musicLink);
+    await enqueueAgentWork(`music reaction ${message.id}`, async () => {
+      const musicLink = await musicSkill.runMusicRequest("");
+      await safeReply(message, musicLink);
+    });
     console.log(
       `Posted music from ${source} reaction by ${userId} on ${agentName} reply ${message.id}.`,
     );
@@ -3059,8 +4523,9 @@ bot.on("messageReactionAdd", async (reaction, user) => {
     if (
       !isDeleteReactionEmoji(reaction.emoji) &&
       !isRedoReactionEmoji(reaction.emoji) &&
+      !isCodeRefreshReactionEmoji(reaction.emoji) &&
       !isRewindReactionEmoji(reaction.emoji) &&
-      !isReplaceReactionEmoji(reaction.emoji) &&
+      !isContinueReactionEmoji(reaction.emoji) &&
       !isMusicReactionEmoji(reaction.emoji) &&
       !isMemoReactionEmoji(reaction.emoji)
     ) return;
@@ -3074,12 +4539,20 @@ bot.on("messageReactionAdd", async (reaction, user) => {
       await handleRedoReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
       return;
     }
+    if (isCodeRefreshReactionEmoji(reaction.emoji)) {
+      await handleCodeRefreshReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
+      return;
+    }
     if (isRewindReactionEmoji(reaction.emoji)) {
       await handleRewindReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
       return;
     }
     if (isMusicReactionEmoji(reaction.emoji)) {
       await handleMusicReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
+      return;
+    }
+    if (isContinueReactionEmoji(reaction.emoji)) {
+      await handleContinueReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
       return;
     }
     await handleMemoReaction({ message, userId: String(user.id), source: "messageReactionAdd" });
@@ -3096,8 +4569,9 @@ bot.on("raw", async (event) => {
   if (
     !isDeleteReactionEmoji(data.emoji) &&
     !isRedoReactionEmoji(data.emoji) &&
+    !isCodeRefreshReactionEmoji(data.emoji) &&
     !isRewindReactionEmoji(data.emoji) &&
-    !isReplaceReactionEmoji(data.emoji) &&
+    !isContinueReactionEmoji(data.emoji) &&
     !isMusicReactionEmoji(data.emoji) &&
     !isMemoReactionEmoji(data.emoji)
   ) return;
@@ -3123,12 +4597,20 @@ bot.on("raw", async (event) => {
       await handleRedoReaction({ message, userId: String(data.user_id), source: "raw" });
       return;
     }
+    if (isCodeRefreshReactionEmoji(data.emoji)) {
+      await handleCodeRefreshReaction({ message, userId: String(data.user_id), source: "raw" });
+      return;
+    }
     if (isRewindReactionEmoji(data.emoji)) {
       await handleRewindReaction({ message, userId: String(data.user_id), source: "raw" });
       return;
     }
     if (isMusicReactionEmoji(data.emoji)) {
       await handleMusicReaction({ message, userId: String(data.user_id), source: "raw" });
+      return;
+    }
+    if (isContinueReactionEmoji(data.emoji)) {
+      await handleContinueReaction({ message, userId: String(data.user_id), source: "raw" });
       return;
     }
     await handleMemoReaction({ message, userId: String(data.user_id), source: "raw" });
@@ -3154,10 +4636,12 @@ bot.on("interactionCreate", async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      conversationHistory.length = 0;
-      await backupFileBeforeOverwrite(shortMemoryPath, "clearshortmemory");
-      await writeFile(shortMemoryPath, "", "utf8");
-      const deletedDiscordEntries = await deleteShortMemoryThreadEntries();
+      const deletedDiscordEntries = await enqueueAgentWork("clear shortmemory", async () => {
+        conversationHistory.length = 0;
+        await backupFileBeforeOverwrite(shortMemoryPath, "clearshortmemory");
+        await writeFile(shortMemoryPath, "", "utf8");
+        return deleteShortMemoryThreadEntries();
+      });
       await interaction.editReply(
         `Cleared shortmemory for ${agentName}. Deleted ${deletedDiscordEntries} shortmemory entries from Discord.`,
       );
@@ -3223,7 +4707,7 @@ bot.on("interactionCreate", async (interaction) => {
       await ensureShortMemoryThreadId();
 
       if (direction === "local_to_discord") {
-        const result = await syncLocalShortMemoryToDiscord();
+        const result = await enqueueAgentWork("sync shortmemory local to Discord", () => syncLocalShortMemoryToDiscord());
         await interaction.editReply(
           `Synced shortmemory local to Discord. Pushed ${result.pushedToDiscord} entries to forum post/thread ${shortMemoryThreadId}.`,
         );
@@ -3231,14 +4715,14 @@ bot.on("interactionCreate", async (interaction) => {
       }
 
       if (direction === "discord_to_local") {
-        const entryCount = await syncLocalShortMemoryFromDiscord();
+        const entryCount = await enqueueAgentWork("sync shortmemory Discord to local", () => syncLocalShortMemoryFromDiscord());
         await interaction.editReply(
           `Synced shortmemory Discord to local. Local file now has ${entryCount} entries from forum post/thread ${shortMemoryThreadId}.`,
         );
         return;
       }
 
-      const result = await syncShortMemoryBothWays();
+      const result = await enqueueAgentWork("sync shortmemory both ways", () => syncShortMemoryBothWays());
       await interaction.editReply(
         `Synced shortmemory both ways. Pushed ${result.pushedToDiscord} local entries to Discord, then local file now has ${result.localEntries} entries.`,
       );
@@ -3253,7 +4737,7 @@ bot.on("interactionCreate", async (interaction) => {
 
     try {
       const channelId = interaction.options.getString("channel_id", true).trim();
-      const result = await scrapeShortMemoryFromChannel(channelId);
+      const result = await enqueueAgentWork(`scrape shortmemory ${channelId}`, () => scrapeShortMemoryFromChannel(channelId));
       const anchorText = result.anchorMessageId
         ? ` Anchor was ${agentName}'s latest reply ${result.anchorMessageId}.`
         : ` No ${agentName} reply anchor was found, so it used all readable messages.`;
@@ -3270,7 +4754,9 @@ bot.on("interactionCreate", async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      const result = await scrapeShortMemoryFromUserDm(interaction.user);
+      const result = await enqueueAgentWork(`scrape DM shortmemory ${interaction.user.id}`, () =>
+        scrapeShortMemoryFromUserDm(interaction.user)
+      );
       const anchorText = result.anchorMessageId
         ? ` Anchor was ${agentName}'s latest DM reply ${result.anchorMessageId}.`
         : ` No ${agentName} DM reply anchor was found, so it used all readable DM messages.`;
@@ -3288,7 +4774,7 @@ bot.on("interactionCreate", async (interaction) => {
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    const characterCount = await reloadPersonaFromDiscordSource();
+    const characterCount = await enqueueAgentWork("reload persona", () => reloadPersonaFromDiscordSource());
     if (characterCount) {
       await interaction.editReply(
         `Grabbed persona from Discord persona source and reloaded ${agentName}. Persona is ${characterCount} characters.`,
@@ -3296,7 +4782,7 @@ bot.on("interactionCreate", async (interaction) => {
       return;
     }
 
-    systemPrompt = await loadSystemPrompt();
+    systemPrompt = await enqueueAgentWork("reload persona from disk", () => loadSystemPrompt());
     await interaction.editReply(`Reloaded persona for ${agentName} from disk. Persona is ${systemPrompt.length} characters.`);
   } catch (error) {
     await interaction.editReply(`Error reloading persona: ${error.message}`);

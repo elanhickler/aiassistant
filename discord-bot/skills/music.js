@@ -2,12 +2,14 @@ import { readShortMemoryEntries } from "../memory.js";
 
 export function createMusicSkill(context) {
   const {
+    agentName,
     bot,
     model,
     openrouterApiKey,
     requiredSetting,
     safeReply,
     shortMemoryPath,
+    systemPrompt,
     writeRawOpenRouterText,
   } = context;
   const musicSkillSettings = requiredSetting("music_skill");
@@ -59,6 +61,10 @@ export function createMusicSkill(context) {
       {
         role: "system",
         content: [
+          `# Persona: ${agentName}`,
+          typeof systemPrompt === "function" ? systemPrompt() : "",
+          "",
+          "# Music Intent Task",
           "Find the most recent music request or music-related desire in the text.",
           "If the request is for a specific song, return known_song with artist and title when possible.",
           "If the request is only a mood, scene, genre, playlist, mix, or vibe, return vibe with one concise search_query.",
@@ -118,6 +124,10 @@ export function createMusicSkill(context) {
       {
         role: "system",
         content: [
+          `# Persona: ${agentName}`,
+          typeof systemPrompt === "function" ? systemPrompt() : "",
+          "",
+          "# Music Natural Intent Task",
           "Decide whether the latest user message is asking the bot to post or find music now.",
           "Return true for direct natural requests like 'music', 'play something', 'find a song', 'queue something up', 'send me a music link', or '@agent music'.",
           "Return true when context makes a short request like 'yes, show me' clearly refer to music.",

@@ -1,0 +1,2 @@
+{"timestamp":"2026-06-14T10:00:00.000Z","role":"user","username":"Jace","user_id":"fixture-user-1","channel_id":"fixture-channel-1","content":"I bring you a cup of tea and tell you I am nervous about the storm outside."}
+{"timestamp":"2026-06-14T10:01:00.000Z","role":"assistant","username":"FixtureAgent","user_id":"fixture-agent-1","channel_id":"fixture-channel-1","content":"I cup the tea in both hands and stay close, admitting the thunder makes me tense too, but your kindness helps me feel steadier."}

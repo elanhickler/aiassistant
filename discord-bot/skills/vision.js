@@ -61,6 +61,7 @@ export function createVisionSkill(context) {
     openrouterApiKey,
     requiredSetting,
     safeReply,
+    systemPrompt,
     writeRawOpenRouterText,
   } = context;
 
@@ -82,6 +83,10 @@ export function createVisionSkill(context) {
       {
         role: "system",
         content: [
+          "# Agent-Wide Generation Defaults",
+          typeof systemPrompt === "function" ? systemPrompt() : "",
+          "",
+          "# Vision Task",
           "You are a cautious image description assistant.",
           "Describe visible content, composition, style, and possible quality issues.",
           "Use uncertainty language when unsure. Do not invent identity, lore, intent, or hidden context.",
