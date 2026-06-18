@@ -54,9 +54,63 @@ export function createMusicSkill(context) {
     return (await readShortMemoryEntries(shortMemoryPath)).slice(-limit);
   }
 
+  function stripJsonFences(text) {
+    return String(text || "")
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```$/i, "")
+      .trim();
+  }
+
+  function extractJsonObject(text) {
+    const stripped = stripJsonFences(text);
+    if (!stripped) return null;
+
+    try {
+      return JSON.parse(stripped);
+    } catch {
+      const objectMatch = stripped.match(/\{[\s\S]*\}/);
+      if (!objectMatch) return null;
+      try {
+        return JSON.parse(objectMatch[0]);
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  function fallbackMusicSearchQuery(text) {
+    const latestUserMatch = String(text || "").match(/# Latest User Message\s*\n([\s\S]*)$/i);
+    const source = latestUserMatch ? latestUserMatch[1] : text;
+    const cleaned = String(source || "")
+      .replace(/\|\|[\s\S]*?\|\|/g, " ")
+      .replace(/\bemoji\b/gi, " ")
+      .replace(/https?:\/\/\S+/g, " ")
+      .replace(/[^\p{L}\p{N}\s'’-]+/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const musicPhraseMatch = cleaned.match(/(?:music|song|track|lofi|lo-fi|playlist|vibe|cuddling|soft|chill)[\p{L}\p{N}\s'’-]{0,120}/iu);
+    const phrase = (musicPhraseMatch?.[0] || cleaned).trim();
+    const words = phrase.split(/\s+/).filter(Boolean).slice(0, 12);
+    const query = words.join(" ").trim();
+    return query || "soft chill lofi cuddling music";
+  }
+
   async function inferMusicIntent(sourceText, { useRecentContext = true } = {}) {
     const text = sourceText || (useRecentContext ? await recentShortMemoryText() : "");
-    if (!text) throw new Error("shortmemory has no recent conversation to infer music from.");
+    if (!text) {
+      const fallbackQuery = fallbackMusicSearchQuery(sourceText);
+      console.warn(
+        `Music intent for ${agentName} had no recent context; using fallback search query: ${fallbackQuery}`,
+      );
+      return {
+        mode: "vibe",
+        artist: "",
+        title: "",
+        searchQuery: fallbackQuery,
+      };
+    }
     const messages = [
       {
         role: "system",
@@ -103,12 +157,46 @@ export function createMusicSkill(context) {
 
     const payload = await response.json();
     const raw = payload.choices?.[0]?.message?.content?.trim();
-    if (!raw) throw new Error("Could not infer a music request from context.");
+    if (!raw) {
+      const fallbackQuery = fallbackMusicSearchQuery(text);
+      console.warn(
+        `Music intent for ${agentName} returned an empty reply; using fallback search query: ${fallbackQuery}`,
+      );
+      return {
+        mode: "vibe",
+        artist: "",
+        title: "",
+        searchQuery: fallbackQuery,
+      };
+    }
 
-    const jsonText = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-    const intent = JSON.parse(jsonText);
+    const intent = extractJsonObject(raw);
+    if (!intent) {
+      const fallbackQuery = fallbackMusicSearchQuery(text);
+      console.warn(
+        `Music intent for ${agentName} was not strict JSON; using fallback search query: ${fallbackQuery}`,
+      );
+      return {
+        mode: "vibe",
+        artist: "",
+        title: "",
+        searchQuery: fallbackQuery,
+      };
+    }
+
     const searchQuery = String(intent.search_query || "").trim();
-    if (!searchQuery) throw new Error("Could not infer a music search query.");
+    if (!searchQuery) {
+      const fallbackQuery = fallbackMusicSearchQuery(text);
+      console.warn(
+        `Music intent for ${agentName} returned no search query; using fallback search query: ${fallbackQuery}`,
+      );
+      return {
+        mode: "vibe",
+        artist: "",
+        title: "",
+        searchQuery: fallbackQuery,
+      };
+    }
 
     return {
       mode: intent.mode === "known_song" ? "known_song" : "vibe",
@@ -169,8 +257,11 @@ export function createMusicSkill(context) {
     const payload = await response.json();
     const raw = payload.choices?.[0]?.message?.content?.trim();
     if (!raw) return false;
-    const jsonText = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-    const decision = JSON.parse(jsonText);
+    const decision = extractJsonObject(raw);
+    if (!decision) {
+      console.warn(`Music natural intent for ${agentName} was not strict JSON; ignoring music intent.`);
+      return false;
+    }
     return Boolean(decision.should_post_music);
   }
 

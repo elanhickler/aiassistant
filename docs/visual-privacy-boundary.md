@@ -17,7 +17,7 @@ Never send these outside the local process by default:
 * secret files or secret values.
 * local absolute paths.
 * raw `shortmemory.jsonl`.
-* full `memorysummary.txt`.
+* full `memorysum.txt`.
 * full `raw.txt`.
 * full persona or settings files.
 * hidden subtext as direct quotes.

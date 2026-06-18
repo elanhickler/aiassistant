@@ -5,6 +5,10 @@ export function consciousnessThoughtsFolder(agentFolder) {
   return path.join(agentFolder, "soul", "consciousness", "thoughts");
 }
 
+export function consciousnessFeelingsFolder(agentFolder) {
+  return path.join(agentFolder, "soul", "consciousness", "feelings");
+}
+
 export function consciousnessJournalsFolder(agentFolder) {
   return path.join(agentFolder, "soul", "consciousness", "journals");
 }
@@ -37,6 +41,13 @@ function normalizeThoughtMarkdown(title, thoughtMarkdown) {
   if (!text) throw new Error("Cannot save an empty thought.");
   if (text.startsWith("# ")) return text;
   return [`# ${String(title || "Thought").trim() || "Thought"}`, "", text].join("\n");
+}
+
+function normalizeFeelingMarkdown(title, feelingMarkdown) {
+  const text = String(feelingMarkdown || "").trim();
+  if (!text) throw new Error("Cannot save an empty feeling.");
+  if (text.startsWith("# ")) return text;
+  return [`# ${String(title || "Feeling").trim() || "Feeling"}`, "", text].join("\n");
 }
 
 function normalizeJournalMarkdown(title, journalMarkdown) {
@@ -103,6 +114,41 @@ export async function savePrivateThought({
     frontMatterLine("source_channel_id", sourceMessage?.channelId || sourceMessage?.channel?.id || ""),
     frontMatterLine("instruction", instruction),
     frontMatterLine("thought_window_entries", thoughtWindowEntries),
+    "---",
+    "",
+    markdown,
+    "",
+  ].join("\n");
+
+  await writeFile(filePath, fileText, "utf8");
+  return { createdAt, fileName, filePath };
+}
+
+export async function savePrivateFeeling({
+  agentFolder,
+  agentName,
+  sourceMessage,
+  instruction,
+  recentMemoryWindowEntries,
+  title,
+  feelingMarkdown,
+}) {
+  const createdAt = new Date().toISOString();
+  const folderPath = consciousnessFeelingsFolder(agentFolder);
+  await mkdir(folderPath, { recursive: true });
+
+  const safeTitle = String(title || "Feeling").trim() || "Feeling";
+  const fileName = `${timestampForConsciousnessFileName()}-${safeConsciousnessFileName(safeTitle)}.md`;
+  const filePath = path.join(folderPath, fileName);
+  const markdown = normalizeFeelingMarkdown(safeTitle, feelingMarkdown);
+  const fileText = [
+    "---",
+    frontMatterLine("created_at", createdAt),
+    frontMatterLine("agent", agentName),
+    frontMatterLine("source_message_id", sourceMessage?.id || ""),
+    frontMatterLine("source_channel_id", sourceMessage?.channelId || sourceMessage?.channel?.id || ""),
+    frontMatterLine("instruction", instruction),
+    frontMatterLine("recent_memory_window_entries", recentMemoryWindowEntries),
     "---",
     "",
     markdown,
@@ -188,6 +234,30 @@ export async function readRecentPrivateThoughts(agentFolder, limit = 5, maxChara
     ].join("\n"));
   }
   return thoughts.join("\n\n");
+}
+
+export async function readRecentPrivateFeelings(agentFolder, limit = 5, maxCharactersPerFeeling = 4000) {
+  const folderPath = consciousnessFeelingsFolder(agentFolder);
+  const entries = await readdir(folderPath, { withFileTypes: true }).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+
+  const files = entries
+    .filter((entry) => entry.isFile() && /\.md$/i.test(entry.name))
+    .map((entry) => path.join(folderPath, entry.name))
+    .sort()
+    .slice(-limit);
+
+  const feelings = [];
+  for (const filePath of files) {
+    const text = (await readFile(filePath, "utf8")).trim();
+    feelings.push([
+      `# ${path.basename(filePath)}`,
+      text.length <= maxCharactersPerFeeling ? text : `${text.slice(0, maxCharactersPerFeeling)}\n...`,
+    ].join("\n"));
+  }
+  return feelings.join("\n\n");
 }
 
 export async function readRecentJournals(agentFolder, limit = 5, maxCharactersPerJournal = 6000) {

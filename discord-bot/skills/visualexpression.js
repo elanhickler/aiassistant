@@ -233,7 +233,7 @@ export function createVisualExpressionSkill(context) {
         message_id: String(message.id || ""),
         channel_id: String(message.channelId || ""),
         shortmemory_ids: [],
-        memorysummary_sections: [],
+        memorysum_sections: [],
         story_files: [],
         dream_files: [],
         reference_ids: [],

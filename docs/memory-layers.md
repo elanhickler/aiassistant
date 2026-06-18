@@ -24,7 +24,7 @@ Memory Layers = visual semantic downscale experiment
 to:
 
 ```text
-Neural Memory / Consciousness Loop = private thoughts, daily journals, dreams, memory entries, memorysummary, and a large memory graph
+Neural Memory / Consciousness Loop = private thoughts, daily journals, dreams, memory entries, memorysum, and a large memory graph
 ```
 
 Keep the existing Memory Layers page, layer rows, memory nodes, inspector, Debug Downscale, Debug Upscale Context, and manual builder. They become the interface for inspecting and debugging `neural_memory`.
@@ -32,13 +32,13 @@ Keep the existing Memory Layers page, layer rows, memory nodes, inspector, Debug
 Current active memory remains:
 
 * `soul/shortmemory.jsonl` : recent detailed memory.
-* `soul/memorysummary.txt` : compact active durable memory sent to the model.
+* `soul/memorysum.txt` : compact active durable memory sent to the model.
 * `soul/consciousness/thoughts/` : temporary private first-person thoughts.
 * `soul/consciousness/journals/` : durable first-person emotional journals.
 * `soul/stories/` : story material.
 * `soul/dreams/` : dream material.
 
-Memory Layers should not replace shortmemory or memorysummary until the system is proven useful in real use.
+Memory Layers should not replace shortmemory or memorysum until the system is proven useful in real use.
 
 ## Consciousness Loop Model
 
@@ -50,7 +50,7 @@ thoughts = private first-person internal monologue generated every reply
 neural_memory = large semantic downscale system / memory layer graph
 journal = durable first-person emotional daily reflection
 dream = mandatory daily first-person symbolic/emotional artifact
-memorysummary = compact active durable memory update
+memorysum = compact active durable memory update
 ```
 
 The core loop should eventually work like this:
@@ -58,11 +58,11 @@ The core loop should eventually work like this:
 * every visible reply also creates a private thought.
 * thoughts are saved silently and are not spoken unless a later reply naturally chooses similar material.
 * thoughts are temporary.
-* daily cycle generates a journal, dream, optional dreamjournal, memory entry, and memorysummary update.
+* daily cycle generates a journal, dream, optional dreamjournal, memory entry, and memorysum update.
 * daily memory work absorbs useful temporary thoughts into durable memory.
 * daily cleanup backs up and clears temporary thoughts only after journal, dream, and memory work has succeeded enough for absorption.
 * journals, dreams, and dream journals are durable.
-* memory updates create entries and update `soul/memorysummary.txt`.
+* memory updates create entries and update `soul/memorysum.txt`.
 * `neural_memory` downscales larger windows into graph nodes for pattern, scene meaning, emotional subtext, and future relevance.
 
 The current core runtime milestone is now:
@@ -103,7 +103,7 @@ The current system uses `consciousness_descriptors` as the main artifact-definit
 * dreamjournal.
 * story.
 * memory.
-* memorysummary.
+* memorysum.
 * neural_memory.
 
 Editable scales are separate setting descriptors, but they are not a second artifact-definition system. For example, `thought_influence_scale` defines how a numeric thought influence value should be interpreted by the model. Do not create a separate thought-usage descriptor section.
@@ -113,7 +113,7 @@ Processes that may read private thoughts use simple controls:
 * `use_thoughts` : whether the process may read thoughts at all.
 * `thought_influence` : a 0.0 through 1.0 value interpreted through `thought_influence_scale`.
 
-The current processes are `journal`, `dream`, `story`, and `memorysummary_update`. If `use_thoughts` is false, the process should not include thoughts and should ignore `thought_influence`.
+The current processes are `journal`, `dream`, `story`, and `memorysum_update`. If `use_thoughts` is false, the process should not include thoughts and should ignore `thought_influence`.
 
 Use descriptors for durable behavior such as:
 
@@ -124,7 +124,7 @@ Use descriptors for durable behavior such as:
 * how to write a dream.
 * how to interpret an existing dream in a dream journal.
 * how to write a story.
-* how to create memory entries and update memorysummary.
+* how to create memory entries and update memorysum.
 
 Do not treat seed sliders or global creativity/chaos knobs as the main current interface. Chaos, creativity, realism, symbolism, and similar values belong in one-time natural-language instructions, such as `||@agent dream: chaos 0.8, assume 0 to 1, make it symbolic||`, not in mandatory global settings.
 
@@ -138,7 +138,7 @@ Useful routing remains:
 
 Shortmemory is the vivid recent record.
 
-Memorysummary is the compact active durable memory record.
+Memorysum is the compact active durable memory record.
 
 Thoughts are private first-person internal monologue. They are generated before generated visible replies and saved silently under `soul/consciousness/thoughts/`. They are temporary and can help stories because stories often need motive, voice, and perspective.
 
@@ -155,7 +155,7 @@ thoughts -> stories
 journals -> dreams
 ```
 
-Thoughts are temporary concrete or interpretive reflections. They can help stories understand motive, perspective, and immediate meaning. Thoughts must be cleared after the daily journal/dream/memory cycle once they have been absorbed into memory entries, memorysummary, stories, journals, dreams, or other durable memory.
+Thoughts are temporary concrete or interpretive reflections. They can help stories understand motive, perspective, and immediate meaning. Thoughts must be cleared after the daily journal/dream/memory cycle once they have been absorbed into memory entries, memorysum, stories, journals, dreams, or other durable memory.
 
 Journals are durable emotional reflections. They can help dreams understand recurring feelings, fears, wishes, symbols, and unresolved emotional arcs. Journals should not be cleaned by ordinary summarize/cleanup.
 
@@ -187,6 +187,7 @@ soul/memory-layers/
   layer-3.jsonl
   layer-4.jsonl
   build-log.jsonl
+  graph.json
 ```
 
 These files are autogenerated.
@@ -199,8 +200,68 @@ Layer meanings:
 * `layer-1.jsonl` : scene-level interpretation. Can read thoughts.
 * `layer-2.jsonl` : story/session memory nodes. Can read stories.
 * `layer-3.jsonl` : emotional arcs. Can read journals and dreams.
-* `layer-4.jsonl` : durable truths. Can read memorysummary.
+* `layer-4.jsonl` : durable truths. Can read memorysum.
 * `build-log.jsonl` : semantic downscale run records.
+* `graph.json` : visual sidecar for Yculth or any local neuron-style memory viewer.
+
+`graph.json` is generated from the layer JSONL files. It is not model context and does not affect replies. It gives the interface a compact shape to animate:
+
+* `rows` : one horizontal row per memory layer.
+* `nodes` : memory nodes with `compressed`, `upscale_direction`, `do_not_invent`, `confidence`, `source`, and `visual`.
+* `graph_run` : generated-at time, saved/preview node counts, edge counts, animation count, and per-layer timestamp ranges for the viewer's run card.
+* `edges` : links from lower-layer source nodes into higher-layer downscaled nodes.
+* `preview_edges` : temporary preview-only links used by the animation before a real saved node exists.
+* `preview_animations` : simple ordered animation hints such as pulse lower nodes, connect upward, glow upward, and show a preview node.
+* `interaction_model` : plain-language UI guidance for click-to-inspect, debug downscale, and debug upscale context.
+
+Each node's `visual` field uses normalized coordinates:
+
+```jsonc
+{
+  "x": 0.5,
+  "y": 1.0,
+  "radius": 8,
+  "color": "#7dd3fc",
+  "opacity": 1,
+  "pulse": false
+}
+```
+
+The UI should treat these as layout hints, not locked pixels. A viewer can map `x` and `y` into its available graph rectangle and scale `radius` for the current zoom. Preview-only nodes have `preview_only: true`; they teach the downscale motion without becoming saved memory.
+
+The first animation should teach one idea: small memories downscale upward into broader meaning. It should stay calm, readable, and non-destructive.
+
+A standalone prototype viewer lives at:
+
+```text
+docs/memory-layer-viewer.html
+```
+
+Open it in a browser, then load or drag in:
+
+```text
+agents/<Agent>/soul/memory-layers/graph.json
+```
+
+When served from the repository root, it can also load a graph with a query parameter:
+
+```text
+http://127.0.0.1:8765/docs/memory-layer-viewer.html?graph=/agents/Trish/soul/memory-layers/graph.json
+```
+
+This prototype is intentionally static and local. It lets us test the neuron-like rows, click-to-inspect behavior, and Debug Downscale animation before the same behavior is absorbed into Yculth.
+
+Viewer controls:
+
+* graph file picker : load a local `graph.json`.
+* animation selector : choose which downscale path to preview.
+* `Debug Downscale` : play the selected pulse/connect/glow/preview animation.
+* `Live` : poll the graph URL every two seconds when the graph was loaded from `?graph=`.
+* `Fit` : redraw the graph into the current browser size.
+* `Copy Debug Upscale Context` : copy a prompt-ready text preview for the selected node.
+* event stream : shows graph loads, selected nodes, live refreshes, and Debug Downscale animation steps.
+* graph validation : show missing fields, duplicate IDs, or broken edges before trusting the graph.
+* keyboard navigation : left/right move across a layer; up/down move to the nearest node in the next layer; PageUp/PageDown jump through nodes; Home/End jump to first/last node.
 
 Generated memory nodes should prefer these semantic downscale / text upscale fields:
 
@@ -230,10 +291,10 @@ Default source routing:
 Layer 1 : Scene Impressions can read thoughts
 Layer 2 : Story Memory Nodes can read stories
 Layer 3 : Emotional Arcs can read journals, dreams, and dream journals
-Layer 4 : Durable Truths can read memorysummary
+Layer 4 : Durable Truths can read memorysum
 ```
 
-Memory Layers must not delete existing shortmemory or memorysummary.
+Memory Layers must not delete existing shortmemory or memorysum.
 
 Memory Layers must not delete thoughts or journals directly. Thought cleanup belongs to the successful daily journal/dream/memory cycle, where useful temporary thought material can be absorbed before thoughts are backed up and cleared. Journals are durable and should not be removed by ordinary cleanup.
 
@@ -248,15 +309,15 @@ There is no automatic migration from old memory into neural memory yet.
 Current memory files keep their jobs:
 
 * `soul/shortmemory.jsonl` remains the raw recent conversation source.
-* `soul/memorysummary.txt` remains compact active durable memory until neural memory is proven better in real use.
-* neural memory can read old shortmemory and memorysummary as source material.
+* `soul/memorysum.txt` remains compact active durable memory until neural memory is proven better in real use.
+* neural memory can read old shortmemory and memorysum as source material.
 * old memories do not need to be deleted.
 * old memories should not be blindly dumped into persona.
 * `soul/persona.md` should stay identity, personality, voice, preferences, boundaries, and behavior guidance. Persona is not a memory landfill.
 
 Temporary manual migration path:
 
-1. Keep old `soul/shortmemory.jsonl` and `soul/memorysummary.txt` where they are.
+1. Keep old `soul/shortmemory.jsonl` and `soul/memorysum.txt` where they are.
 2. Preserve backups before any cleanup or rewrite.
 3. Run the neural memory builder manually with `npm.cmd run memorylayers -- --agent <AgentName> --force`.
 4. Inspect generated downscale files under `soul/memory-layers/`.
@@ -264,7 +325,7 @@ Temporary manual migration path:
 6. Optionally set `neural_memory.mode` to `debug` and inspect `agents/<Agent>/regenerated/neural-memory-debug/latest-report.md`.
 7. Only enable neural memory in replies after inspection shows the memory nodes are useful and safe.
 
-New agents do not need old memory files. If `shortmemory` or `memorysummary` is empty or missing during early setup, start from persona plus new conversation. The system should build memory gradually as interaction happens. Missing old memory is not an error.
+New agents do not need old memory files. If `shortmemory` or `memorysum` is empty or missing during early setup, start from persona plus new conversation. The system should build memory gradually as interaction happens. Missing old memory is not an error.
 
 ## Manual Builder
 
@@ -281,6 +342,13 @@ cd C:\Users\argit\Documents\_PROGRAMMING\aiassistant\discord-bot
 npm.cmd run layerinspect -- --agent Stardust
 ```
 
+To refresh only `graph.json` from existing layer files without calling OpenRouter:
+
+```powershell
+cd C:\Users\argit\Documents\_PROGRAMMING\aiassistant\discord-bot
+npm.cmd run layergraph -- --agent Stardust
+```
+
 To generate sidecar Memory Layers files, enable `memory_layers.enabled` or pass `--force` for one manual build:
 
 ```powershell
@@ -290,7 +358,7 @@ npm.cmd run memorylayers -- --agent Stardust --force
 
 The builder reads `memory_layers.layer_0_source`, usually `soul/shortmemory.jsonl`, and writes only inside `memory_layers.folder`, usually `soul/memory-layers`.
 
-Layer 1 interprets shortmemory clusters using the current descriptor model and asks the utility model for explicit `compressed`, `upscale_direction`, `do_not_invent`, `confidence`, and `source` fields. Higher layers are conservative semantic downscales derived from lower-layer memory nodes. The inspection command prints sample compact-node text, upscale direction, and do-not-invent boundaries for debugging.
+Layer 1 interprets shortmemory clusters using the current descriptor model and asks the utility model for explicit `compressed`, `upscale_direction`, `do_not_invent`, `confidence`, and `source` fields. Higher layers are conservative semantic downscales derived from lower-layer memory nodes. The inspection command prints sample compact-node text, upscale direction, and do-not-invent boundaries for debugging. The build command also writes `graph.json`; the graph command can refresh only that visual sidecar from existing layer files.
 
 The builder is manual. Normal bot startup should not create or update Memory Layers files.
 
@@ -336,7 +404,7 @@ Later visual direction:
 
 * animated layer graph.
 * neuron-like dots and connections.
-* visible clusters for thoughts, journals, stories, dreams, memory entries, memorysummary, and durable continuity.
+* visible clusters for thoughts, journals, stories, dreams, memory entries, memorysum, and durable continuity.
 * selected node inspector.
 * gentle animation showing memories downscaling or moving between layers.
 
@@ -359,7 +427,7 @@ The implementation order should be:
 * save automatic thoughts silently under `soul/consciousness/thoughts/`.
 * make thoughts inspectable in Yculth.
 * add durable daily journal generation.
-* make the daily cycle generate journal, dream, optional dreamjournal, memory entry, memorysummary update, then clear temporary thoughts.
+* make the daily cycle generate journal, dream, optional dreamjournal, memory entry, memorysum update, then clear temporary thoughts.
 * make the neural memory builder read shortmemory plus thoughts first.
 * only later, allow reply context to include `neural_memory`.
 
@@ -372,10 +440,10 @@ For now:
 * do not hook Memory Layers into normal replies.
 * do not hook Neural Memory into normal replies.
 * do not enable neural memory in replies by default.
-* keep thought clearing tied to successful memory absorption, with journals, dreams, stories, memory entries, and memorysummary preserved.
+* keep thought clearing tied to successful memory absorption, with journals, dreams, stories, memory entries, and memorysum preserved.
 * do not replace `shortmemory.jsonl`.
-* do not replace `memorysummary.txt`.
+* do not replace `memorysum.txt`.
 * do not delete current memory files.
 * do not make Memory Layers authoritative.
 
-The current shortmemory and memorysummary behavior remains active until Memory Layers are proven useful.
+The current shortmemory and memorysum behavior remains active until Memory Layers are proven useful.

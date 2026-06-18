@@ -5,10 +5,13 @@ import { semanticMemoryUsageContract } from "../semantic-memory.js";
 async function readDreamSourceFile(agentFolder, sourceFile) {
   const filePath = path.join(agentFolder, sourceFile);
   const text = await readFile(filePath, "utf8").catch((error) => {
-    if (error.code === "ENOENT" && sourceFile === "soul/memorysummary.txt") {
-      return readFile(path.join(agentFolder, "soul/longmemory.txt"), "utf8").catch((legacyError) => {
-        if (legacyError.code === "ENOENT") return "";
-        throw legacyError;
+    if (error.code === "ENOENT" && sourceFile === "soul/memorysum.txt") {
+      return readFile(path.join(agentFolder, "soul/memorysummary.txt"), "utf8").catch((legacyMemorySumError) => {
+        if (legacyMemorySumError.code !== "ENOENT") throw legacyMemorySumError;
+        return readFile(path.join(agentFolder, "soul/longmemory.txt"), "utf8").catch((legacyError) => {
+          if (legacyError.code === "ENOENT") return "";
+          throw legacyError;
+        });
       });
     }
     if (error.code === "ENOENT") throw new Error(`Missing dream source file: ${sourceFile}`);
@@ -23,6 +26,45 @@ async function readDreamSourceFile(agentFolder, sourceFile) {
 function limitText(text, maxCharacters) {
   if (text.length <= maxCharacters) return text;
   return `${text.slice(0, maxCharacters)}\n...`;
+}
+
+function clampNumber(value, minimum, maximum, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(maximum, Math.max(minimum, number));
+}
+
+function sleepStartEnergy(status) {
+  const explicitStartEnergy = Number(status.sleep_start_energy);
+  if (Number.isFinite(explicitStartEnergy)) return clampNumber(explicitStartEnergy, 0, 100, 30);
+  const currentEnergy = Number(status.energy);
+  return Number.isFinite(currentEnergy) ? Math.min(30, Math.max(0, currentEnergy)) : 30;
+}
+
+function energyFromSleepProgress(status, remainingSleepMinutes) {
+  const neededMinutes = Number(status.sleep_needed_minutes || status.sleep_planned_minutes);
+  if (!Number.isFinite(neededMinutes) || neededMinutes <= 0 || !Number.isFinite(remainingSleepMinutes)) {
+    return status.energy;
+  }
+  if (remainingSleepMinutes <= 0) return 100;
+  const progress = clampNumber((neededMinutes - remainingSleepMinutes) / neededMinutes, 0, 1, 0);
+  const startEnergy = sleepStartEnergy(status);
+  return Math.round(startEnergy + ((100 - startEnergy) * progress));
+}
+
+async function withFetchTimeout(milliseconds, task) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), milliseconds);
+  try {
+    return await task(controller.signal);
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`OpenRouter request timed out after ${Math.round(milliseconds / 1000)} seconds.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function timestampForFilename() {
@@ -89,6 +131,30 @@ export function createTimeSkill(context) {
         .join("\n");
     }
     return "";
+  }
+
+  function formatKeyValueScale(value) {
+    if (typeof value === "string") return value.trim();
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return Object.entries(value)
+        .sort(([left], [right]) => Number(left) - Number(right))
+        .map(([key, description]) => `${key}: ${String(description)}`)
+        .join("\n");
+    }
+    return "";
+  }
+
+  function statusDescriptorText() {
+    const descriptors = optionalSetting("status_descriptors", {});
+    if (!descriptors || typeof descriptors !== "object") return "";
+    const modeText = formatKeyValueScale(descriptors.mode);
+    const energyText = formatKeyValueScale(descriptors.energy);
+    const interactionText = String(descriptors.mode_energy_interaction || "").trim();
+    return [
+      modeText ? "# Mode Descriptors\n" + modeText : "",
+      energyText ? "# Energy Descriptors\n" + energyText : "",
+      interactionText ? "# Mode And Energy Interaction\n" + interactionText : "",
+    ].filter(Boolean).join("\n\n");
   }
 
   function thoughtInfluenceControl(processName, fallbackInfluence) {
@@ -247,7 +313,7 @@ export function createTimeSkill(context) {
         role: "system",
         content: [
           `Summarize ${agentName}'s dream history for future dream generation.`,
-          "This is not memorysummary and not factual waking memory.",
+          "This is not memorysum and not factual waking memory.",
           "Keep recurring symbols, emotional patterns, fears, wishes, transformations, settings, characters, and unresolved dream motifs.",
           "Keep it compact but rich enough to influence future dreams.",
           "Write Markdown only. Use first person only when describing the agent's inner dream patterns.",
@@ -268,8 +334,9 @@ export function createTimeSkill(context) {
       },
     ];
     await writeRawOpenRouterText?.(messages, "dream summary");
-    const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+    const response = await withFetchTimeout(30000, (signal) => fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
       method: "POST",
+      signal,
       headers: {
         Authorization: `Bearer ${openrouterApiKey}`,
         "Content-Type": "application/json",
@@ -280,7 +347,7 @@ export function createTimeSkill(context) {
         temperature: 0.35,
         max_tokens: 700,
       }),
-    });
+    }));
     if (!response.ok) {
       throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
     }
@@ -394,7 +461,7 @@ export function createTimeSkill(context) {
             semanticMemoryUsageContract(),
             "Treat any user mention of chaos, creativity, realism, symbolism, or numeric style values as temporary natural-language guidance only.",
             "Dreams may be symbolic, emotional, strange, sweet, uneasy, or beautiful.",
-            "Do not claim the dream is factual memory. Do not update memorysummary. Do not explain the mechanism.",
+            "Do not claim the dream is factual memory. Do not update memorysum. Do not explain the mechanism.",
             `Keep the dream under ${maxWords} words.`,
           ].join("\n"),
         },
@@ -514,7 +581,25 @@ export function createTimeSkill(context) {
     }
 
     if (command.kind === "wake") {
-      const status = await statusApi.setMode("awake", command.content);
+      const beforeStatus = await statusApi.get();
+      const status = await statusApi.update({
+        mode: "awake",
+        status: {
+          awake: true,
+          sleepy: false,
+          falling_asleep: false,
+          sleeping: false,
+          dreaming: false,
+          away: false,
+        },
+        current_activity: command.content || "awake",
+        last_status_change: new Date().toISOString(),
+        sleep_remaining_minutes: 0,
+        woke_minutes_ago: 0,
+        awareness: 1,
+        energy: energyFromSleepProgress(beforeStatus, 0),
+        last_wake_style: "manual",
+      });
       await safeReply(message, `${agentName} is now ${status.mode}${status.current_activity ? `: ${status.current_activity}` : ""}`);
       return true;
     }
@@ -553,8 +638,9 @@ export function createTimeSkill(context) {
   async function askUtilityJson(messages, source, maxTokens = 180) {
     await writeRawOpenRouterText?.(messages, source);
 
-    const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+    const response = await withFetchTimeout(30000, (signal) => fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
       method: "POST",
+      signal,
       headers: {
         Authorization: `Bearer ${openrouterApiKey}`,
         "Content-Type": "application/json",
@@ -565,7 +651,7 @@ export function createTimeSkill(context) {
         temperature: 0,
         max_tokens: maxTokens,
       }),
-    });
+    }));
 
     if (!response.ok) {
       throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
@@ -573,6 +659,94 @@ export function createTimeSkill(context) {
 
     const payload = await response.json();
     return parseJsonObject(payload.choices?.[0]?.message?.content);
+  }
+
+  async function askShortSleepMessage({ incomingMessage, status, nextStatus, decision, action, reason }) {
+    const settings = optionalSetting("sleeping_message_response", {});
+    const instruction = String(
+      settings.instruction
+      || "send a short message describing my current appearance of sleep and any sounds or subtle movements",
+    ).trim();
+    const maxTokens = Math.max(20, Math.min(300, Number(settings.max_tokens) || 120));
+    const messages = [
+      {
+        role: "system",
+        content: [
+          systemPrompt,
+          "",
+          `You are ${agentName}.`,
+          "The agent is asleep or falling asleep and should not give a normal waking reply.",
+          "Write only the short visible sleep-state message.",
+          "Do not answer the user's question directly.",
+          "Do not imply full awareness unless the status says the agent woke.",
+          "Do not mention internal status fields, JSON, classifiers, or sleep timers.",
+          "Keep it brief, usually one to three sentences.",
+          statusDescriptorText(),
+          instruction,
+        ].filter(Boolean).join("\n"),
+      },
+      {
+        role: "user",
+        content: [
+          "# Current Sleep Status Before Message",
+          JSON.stringify(status),
+          "",
+          "# Sleep Status After Handling Message",
+          JSON.stringify(nextStatus),
+          "",
+          "# Sleep Handler Decision",
+          JSON.stringify({
+            action,
+            adjustment_minutes: decision.adjustment_minutes,
+            awareness_delta: decision.awareness_delta,
+            wake_style: decision.wake_style,
+            reason,
+          }),
+          "",
+          "# Incoming Message",
+          `author: ${incomingMessage.author?.username || ""}`,
+          `channel_id: ${incomingMessage.channelId || ""}`,
+          "",
+          incomingMessage.content || "",
+        ].join("\n"),
+      },
+    ];
+
+    await writeRawOpenRouterText?.(messages, "sleeping visible status message");
+    const response = await withFetchTimeout(30000, (signal) => fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+      method: "POST",
+      signal,
+      headers: {
+        Authorization: `Bearer ${openrouterApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.45,
+        max_tokens: maxTokens,
+      }),
+    }));
+    if (!response.ok) {
+      throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
+    }
+    const payload = await response.json();
+    const content = payload.choices?.[0]?.message?.content?.trim();
+    if (!content) throw new Error("OpenRouter returned an empty sleeping status message.");
+    return content;
+  }
+
+  async function maybeSendSleepingHandledMessage({ message, status, nextStatus, decision, action, reason }) {
+    const settings = optionalSetting("sleeping_message_response", {});
+    const forceVisibleMessage = Boolean(message.__aiassistantForceSleepVisibleMessage);
+    if (settings.enabled === false) return;
+    if (action === "ignore" && settings.respond_to_ignore !== true && !forceVisibleMessage) return;
+    try {
+      const content = await askShortSleepMessage({ incomingMessage: message, status, nextStatus, decision, action, reason });
+      await safeReply(message, content);
+    } catch (error) {
+      console.error(`Sleeping status message failed for ${agentName}: ${error.message}`);
+    }
   }
 
   function firstEmojiOrFallback(value, fallback) {
@@ -666,11 +840,15 @@ export function createTimeSkill(context) {
   async function startSleepTimer({ userContent, assistantReply, statusReason }) {
     const estimate = await estimateSleepDurationMinutes({ userContent, assistantReply, statusReason });
     const sleepStartedAt = new Date().toISOString();
+    const beforeStatus = await statusApi.get();
+    const startEnergy = sleepStartEnergy(beforeStatus);
     await statusApi.update({
       sleep_started_at: sleepStartedAt,
       sleep_planned_minutes: estimate.minutes,
       sleep_needed_minutes: estimate.minutes,
       sleep_remaining_minutes: estimate.minutes,
+      sleep_start_energy: startEnergy,
+      energy: startEnergy,
       sleep_interrupted_minutes: 0,
       awareness: 0,
       woke_minutes_ago: null,
@@ -686,11 +864,15 @@ export function createTimeSkill(context) {
   async function startDefaultSleepTimer(statusReason) {
     const minutes = 480;
     const sleepStartedAt = new Date().toISOString();
+    const beforeStatus = await statusApi.get();
+    const startEnergy = sleepStartEnergy(beforeStatus);
     await statusApi.update({
       sleep_started_at: sleepStartedAt,
       sleep_planned_minutes: minutes,
       sleep_needed_minutes: minutes,
       sleep_remaining_minutes: minutes,
+      sleep_start_energy: startEnergy,
+      energy: startEnergy,
       sleep_interrupted_minutes: 0,
       awareness: 0,
       woke_minutes_ago: null,
@@ -764,6 +946,8 @@ export function createTimeSkill(context) {
     const interruptedDelta = Math.max(0, Math.min(Math.max(0, adjustmentMinutes), Math.max(0, remainingSleepMinutes)));
     const nextStatus = {
       sleep_remaining_minutes: nextRemainingSleepMinutes,
+      sleep_start_energy: sleepStartEnergy(status),
+      energy: energyFromSleepProgress(status, nextRemainingSleepMinutes),
       sleep_interrupted_minutes: currentInterruptedMinutes + interruptedDelta,
       awareness: nextAwareness,
       last_sleep_timer_adjustment_minutes: adjustmentMinutes,
@@ -785,6 +969,7 @@ export function createTimeSkill(context) {
         },
         woke_minutes_ago: wokeMinutesAgo,
         awareness: gentleWake ? Math.max(0.55, nextAwareness) : 1,
+        energy: energyFromSleepProgress(status, nextRemainingSleepMinutes),
         current_activity: gentleWake
           ? (wokeMinutesAgo > 0 ? `sleepily woke up ${wokeMinutesAgo} minutes ago` : "sleepily waking up")
           : startledWake
@@ -819,6 +1004,7 @@ export function createTimeSkill(context) {
           "Use wake_style soft when the agent is gently nudged awake and should wake sleepy but conscious.",
           "Use wake_style startled when the agent is woken suddenly, loudly, urgently, or roughly.",
           "The main model will use awareness, energy, sleep_remaining_minutes, and sleep_interrupted_minutes to decide how sleepy the visible response should be.",
+          statusDescriptorText(),
           "should_reply should be true when the agent wakes enough to answer naturally, including when a soft adjustment reduces sleep_remaining_minutes to zero.",
           "Return only strict JSON: {\"action\":\"ignore\",\"adjustment_minutes\":0,\"awareness_delta\":0.0,\"should_reply\":false,\"wake_style\":\"natural\",\"wake_activity\":\"\",\"reason\":\"\"}",
         ].join("\n"),
@@ -838,7 +1024,21 @@ export function createTimeSkill(context) {
       },
     ];
 
-    const decision = await askUtilityJson(messages, "sleeping message decision", 180);
+    let decision;
+    try {
+      decision = await askUtilityJson(messages, "sleeping message decision", 180);
+    } catch (error) {
+      console.error(`Sleeping message decision failed for ${agentName}; using safe fallback: ${error.message}`);
+      decision = {
+        action: "adjust_sleep",
+        adjustment_minutes: 0,
+        awareness_delta: 0,
+        should_reply: false,
+        wake_style: "soft",
+        wake_activity: "",
+        reason: "sleeping message classifier failed; keeping current sleep state",
+      };
+    }
     const action = String(decision.action || "ignore").toLowerCase();
     const reason = String(decision.reason || decision.wake_activity || "").slice(0, 500);
     const remainingSleepMinutes = Number(status.sleep_remaining_minutes);
@@ -851,6 +1051,14 @@ export function createTimeSkill(context) {
       : (Number.isFinite(rawAdjustment) ? Math.max(-240, Math.min(999, Math.round(rawAdjustment))) : 0);
 
     if (action === "ignore" || adjustmentMinutes === 0) {
+      await maybeSendSleepingHandledMessage({
+        message,
+        status,
+        nextStatus: status,
+        decision,
+        action,
+        reason,
+      });
       return { handled: true, continueNormalReply: false };
     }
 
@@ -859,6 +1067,14 @@ export function createTimeSkill(context) {
       return { handled: false, continueNormalReply: true };
     }
 
+    await maybeSendSleepingHandledMessage({
+      message,
+      status,
+      nextStatus,
+      decision,
+      action,
+      reason,
+    });
     return { handled: true, continueNormalReply: false };
   }
 
@@ -939,6 +1155,7 @@ export function createTimeSkill(context) {
           "Dreaming means the character is asleep and actively dreaming.",
           "Awake means the character clearly wakes up or resumes waking activity.",
           "Away means the character should not reply right now unless a later clear context changes status.",
+          statusDescriptorText(),
           "Infer away when the character clearly leaves, goes offline, becomes unavailable, or should not reply for now.",
           "Do not infer sleep only because someone says tired, dream, bed, night, milk, horny, comfy, or cuddle.",
           "JSON shape: {\"next_mode\":\"keep\",\"confidence\":0.0,\"current_activity\":\"\",\"reason\":\"\"}",

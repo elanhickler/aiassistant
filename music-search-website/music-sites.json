@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "discord_format": "[`🎵📽️`:`{label}`](<{url}>)",
+  "discord_format": "[`music`:`{label}`](<{url}>)",
   "known_song_sites": [
     {
       "id": "spotify",
@@ -31,6 +31,12 @@
       "label": "SoundCloud",
       "enabled_key": "soundcloud_enabled",
       "url_template": "https://soundcloud.com/search?q={query}"
+    },
+    {
+      "id": "youtube",
+      "label": "YouTube",
+      "enabled_key": "youtube_enabled",
+      "url_template": "https://www.youtube.com/results?search_query={query}"
     }
   ],
   "vibe_sites": [

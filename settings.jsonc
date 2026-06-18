@@ -24,6 +24,54 @@
     "enabled_skills": [
         "discordstatusupdate"
     ],
+    // descrip: Local/web visitor chat settings. This exposes only a slim chat API/page when the web chat server is explicitly started; it does not expose Yculth admin tools.
+    // default: enabled for local Tek testing only
+    "web_chat": {
+        // descrip: Enables the web chat API when discord-bot/web-chat.js is running.
+        // range: true or false.
+        // default: true for local testing
+        "enabled": true,
+        // descrip: Agents that visitors are allowed to chat with through the web chat API.
+        // default: Tek only for the first controlled test
+        "allowed_agents": [
+            "Tek"
+        ],
+        // descrip: Agent used when a visitor does not explicitly choose one.
+        // default: "Tek"
+        "default_agent": "Tek",
+        // descrip: Human-facing title shown on the local visitor chat page.
+        // default: "Tek"
+        "display_title": "Tek, Pigmy Lizardfolk",
+        // descrip: Host for the local web chat server.
+        // default: "127.0.0.1"
+        "host": "127.0.0.1",
+        // descrip: Port for the local web chat server.
+        // range: 1 to 65535.
+        // default: 8787
+        "port": 8787,
+        // descrip: If true, visitor conversations use isolated visitor memory under web-chat/visitors instead of the agent's Discord shortmemory.
+        // default: true
+        "separate_visitor_memory": true,
+        // descrip: Optional invite code. If blank, no invite code is required. Use before exposing beyond localhost.
+        // default: ""
+        "invite_code": "",
+        // descrip: Maximum visitor message length accepted by the web chat API.
+        // range: 1 or higher.
+        // default: 2000
+        "max_message_length": 2000,
+        // descrip: Maximum generated reply length returned to the browser.
+        // range: 1 or higher.
+        // default: 4000
+        "max_reply_characters": 4000,
+        // descrip: Number of recent visitor memory entries sent as raw chat context.
+        // range: 1 or higher.
+        // default: 100
+        "visitor_context_entries": 100,
+        // descrip: Show a clear AI disclosure in the visitor chat UI.
+        // range: true or false.
+        // default: true
+        "show_ai_disclosure": true
+    },
     // descrip: Pipe command aliases for skills and command names. The key is the canonical command, the list contains extra names users may type. Agent settings can override this locally.
     // default: image can also be called imagegen
     "skill_aliases": {
@@ -34,7 +82,7 @@
     // descrip: Persona file to load from each agent folder.
     // default: "soul/persona.md"
     "system_prompt_file": "soul/persona.md",
-    // descrip: Repo-level generation defaults applied to every agent model request, including replies, thoughts, dreams, journals, stories, memorysummary updates, status updates, and text transformation. This file does not overwrite agent persona files.
+    // descrip: Repo-level generation defaults applied to every agent model request, including replies, thoughts, dreams, journals, stories, memorysum updates, status updates, and text transformation. This file does not overwrite agent persona files.
     // default: "global-persona.md"
     "global_persona_file": "global-persona.md",
     // descrip: Discord forum post/thread ID used by /reloadpersona. Per-agent override recommended.
@@ -66,7 +114,7 @@
         "adjustments",
         "status",
         "profilepic",
-        "memorysummary",
+        "memorysum",
         "shortmemory",
         "dreams",
         "thoughts",
@@ -574,13 +622,13 @@
         // default: true
         "compact_datetime": true
     },
-    // descrip: Summarization settings control automatic memory maintenance. Summarizing creates durable memory entries and updates compact memorysummary, then clears temporary thoughts after successful memory absorption.
-    // default: soul/shortmemory.jsonl plus thoughts/journals/dreams/stories/neural memory input, soul/memorysummary.txt output, soul/memory entries
+    // descrip: Summarization settings control automatic memory maintenance. Summarizing creates durable memory entries and updates compact memorysum, then clears temporary thoughts after successful memory absorption.
+    // default: soul/shortmemory.jsonl plus thoughts/journals/dreams/stories/neural memory input, soul/memorysum.txt output, soul/memory entries
     "summarization_settings": {
-        // descrip: Memorysummary instruction. Memorysummary must keep # Past, # Present, and # Future / Plans sections. Keep durable user-specific facts when they help future replies, such as names, stable preferences, boundaries, relationships, ongoing situations, and important context. Do not save throwaway moods, one-off wording, private subtext, or raw transcripts unless they became durably important.
+        // descrip: Memorysum instruction. Memorysum must keep # Past, # Present, and # Future / Plans sections. Keep durable user-specific facts when they help future replies, such as names, stable preferences, boundaries, relationships, ongoing situations, and important context. Do not save throwaway moods, one-off wording, private subtext, or raw transcripts unless they became durably important.
         // default: remember durable per-user context, not everything
         "summary_policy": "remember durable per-user context, not everything",
-        // descrip: Maximum recent shortmemory lines to include in one daily memory run during sleep/dream memory maintenance. Older shortmemory is not read directly during that run; it should already be represented in soul/memorysummary.txt from earlier memory updates.
+        // descrip: Maximum recent shortmemory lines to include in one daily memory run during sleep/dream memory maintenance. Older shortmemory is not read directly during that run; it should already be represented in soul/memorysum.txt from earlier memory updates.
         // range: 1 or higher.
         // default: 1000
         "daily_summary_entries": 1000,
@@ -605,7 +653,7 @@
         // default: 24
         "automatic_cycle_hours": 24
     },
-    // descrip: Consciousness cycle settings estimate when about one day of meaningful interaction has accumulated. The cycle generates neural memory, journal, dream, memory entries, memorysummary, then clears temporary thoughts after the memory update succeeds.
+    // descrip: Consciousness cycle settings estimate when about one day of meaningful interaction has accumulated. The cycle generates neural memory, journal, dream, memory entries, memorysum, then clears temporary thoughts after the memory update succeeds.
     // default: one cycle after about 288 memory entries
     "consciousness_cycle": {
         // descrip: Estimated seconds between meaningful memory entries. Used to estimate how many entries roughly equal one day of interaction. For example, 300 means about one entry every 5 minutes.
@@ -659,18 +707,21 @@
         // default: 100
         "write_nodes": 100
     },
-    // descrip: Consciousness descriptors define what each generated artifact is. They are human-editable model-facing instructions for thought, journal, dream, dreamjournal, story, memory, memorysummary, neural memory, and reply behavior.
-    // default: first-person private thought, durable journal/dream/story/memory artifacts, visible reply separation, and compact memorysummary updates.
+    // descrip: Consciousness descriptors define what each generated artifact is. They are human-editable model-facing instructions for thought, feeling, journal, dream, dreamjournal, story, memory, memorysum, neural memory, and reply behavior.
+    // default: first-person private thought/feeling, durable journal/dream/story/memory artifacts, visible reply separation, and compact memorysum updates.
     "consciousness_descriptors": {
         // descrip: Instruction for generating the private thought attached to a reply.
         // default: private first-person internal monologue
         "thought": "Write my private first-person internal monologue for this moment. Focus on what I am thinking or feeling right now, including anything I might not say out loud.",
+        // descrip: Instruction for generating the private emotional/body/atmosphere feeling attached to a reply.
+        // default: private first-person emotional and bodily feeling
+        "feeling": "Write my private first-person emotional and bodily feeling for this moment. Focus on mood, sensation, atmosphere, tension, comfort, fear, desire, fatigue, instinct, and what my body/emotions are doing beneath the visible reply. Do not explain mechanics.",
         // descrip: Instruction for generating the visible reply.
         // default: visible reply that does not reveal private thought unless natural
         "reply": "Write my visible reply to the user. Use persona, the current message, recent raw conversation, and any allowed memory context. Do not reveal private thought unless it naturally belongs in the reply.",
         // descrip: Instruction for downscaling memory into neural memory nodes.
         // default: dense memory nodes about patterns, meaning, subtext, and future relevance
-        "neural_memory": "Downscale a larger window of recent memory into dense semantic memory nodes that help me understand patterns, scene meaning, emotional subtext, and what may matter later. Include text-upscale guidance for how future replies, journals, dreams, stories, memory entries, or memorysummary should use those nodes without inventing unsupported details.",
+        "neural_memory": "Downscale a larger window of recent memory into dense semantic memory nodes that help me understand patterns, scene meaning, emotional subtext, and what may matter later. Include text-upscale guidance for how future replies, journals, dreams, stories, memory entries, or memorysum should use those nodes without inventing unsupported details.",
         // descrip: Instruction for writing durable emotional journal reflections.
         // default: first-person emotional reflection for dreams and memory updates
         "journal": "Write my first-person emotional reflection about what the recent cycle meant to me. Use thoughts, recent memory, neural memory, and durable memory. This journal is durable and may shape dreams and memory updates.",
@@ -686,12 +737,12 @@
         // descrip: Instruction for creating durable memory entries over time during the consciousness / memory cycle.
         // default: preserve specific durable events, patterns, and relationship developments
         "memory": "Create durable memory entries from recent shortmemory, thoughts, journals, dreams, stories, and neural memory. Preserve specific events, relationship developments, important preferences, boundaries, unresolved plans, and lasting changes without dumping transcripts.",
-        // descrip: Instruction for updating the compact active durable memorysummary used in model context.
+        // descrip: Instruction for updating the compact active durable memorysum used in model context.
         // default: compact durable memory used in future replies
-        "memorysummary": "Update memorysummary with what should affect future replies: stable facts, relationship truths, recurring preferences, important boundaries, unresolved plans, and lasting changes. Keep it compact. Absorb useful temporary thoughts, then clear thoughts only after the memory cycle succeeds.",
-        // descrip: Legacy alias for older code paths. Prefer consciousness_descriptors.memorysummary for new behavior.
-        // default: same intent as memorysummary
-        "summary": "Update memorysummary with what should affect future replies: stable facts, relationship truths, recurring preferences, important boundaries, unresolved plans, and lasting changes. Keep it compact. Absorb useful temporary thoughts, then clear thoughts only after the memory cycle succeeds."
+        "memorysum": "Update memorysum with what should affect future replies: stable facts, relationship truths, recurring preferences, important boundaries, unresolved plans, and lasting changes. Keep it compact. Absorb useful temporary thoughts, then clear thoughts only after the memory cycle succeeds.",
+        // descrip: Legacy alias for older code paths. Prefer consciousness_descriptors.memorysum for new behavior.
+        // default: same intent as memorysum
+        "summary": "Update memorysum with what should affect future replies: stable facts, relationship truths, recurring preferences, important boundaries, unresolved plans, and lasting changes. Keep it compact. Absorb useful temporary thoughts, then clear thoughts only after the memory cycle succeeds."
     },
     // descrip: Human-editable scale definition for numeric thought influence values. This defines how to interpret numbers in model prompts; it is not a separate thought-usage descriptor system.
     // range: keys should describe values from 0.0 through 1.0.
@@ -710,6 +761,25 @@
         // range: off or append_to_reply.
         // default: off
         "visibility": "off"
+    },
+    // descrip: Rich status display settings. This writes a beautiful current-state markdown display from status, recent context, private thoughts, and private feelings without exposing raw private artifacts.
+    // default: enabled, use thoughts and feelings, write soul/consciousness/status-display.md
+    "status_display": {
+        // descrip: Whether to generate the rich markdown status display.
+        // range: true or false.
+        // default: true
+        "enabled": true,
+        // descrip: Whether rich status display generation may read private thoughts and transform them into atmosphere without quoting them.
+        // range: true or false.
+        // default: true
+        "use_thoughts": true,
+        // descrip: Whether rich status display generation may read private feelings and transform them into atmosphere without quoting them.
+        // range: true or false.
+        // default: true
+        "use_feelings": true,
+        // descrip: Agent-local output file for the rich markdown status display.
+        // default: soul/consciousness/status-display.md
+        "output_file": "soul/consciousness/status-display.md"
     },
     // descrip: Journal generation controls. use_thoughts decides whether private thoughts may be read; thought_influence controls how strongly thoughts shape the journal when enabled.
     // default: use thoughts with strong emotional influence
@@ -795,14 +865,14 @@
         // default: 0.5
         "thought_influence": 0.5
     },
-    // descrip: Memorysummary update controls. use_thoughts decides whether private thoughts may be read; thought_influence controls how strongly thoughts shape durable memory when enabled.
+    // descrip: Memorysum update controls. use_thoughts decides whether private thoughts may be read; thought_influence controls how strongly thoughts shape durable memory when enabled.
     // default: use thoughts as balanced supporting evidence
-    "memorysummary_update": {
-        // descrip: Whether memorysummary updates may read private thought files.
+    "memorysum_update": {
+        // descrip: Whether memorysum updates may read private thought files.
         // range: true or false.
         // default: true
         "use_thoughts": true,
-        // descrip: How strongly private thoughts influence memorysummary updates when use_thoughts is true. The model interprets this using thought_influence_scale.
+        // descrip: How strongly private thoughts influence memorysum updates when use_thoughts is true. The model interprets this using thought_influence_scale.
         // range: 0.0 through 1.0.
         // default: 0.5
         "thought_influence": 0.5
@@ -848,7 +918,7 @@
         // default: 2200
         "max_tokens": 4000
     },
-    // descrip: Temporary Yculth Character Sheet background summary generation. This fills Past Summary, Present Summary, and Future Summary from persona, origin, memorysummary, status, and recent shortmemory.
+    // descrip: Temporary Yculth Character Sheet background summary generation. This fills Past Summary, Present Summary, and Future Summary from persona, origin, memorysum, status, and recent shortmemory.
     // default: concise practical sheet summaries
     "background_summary_settings": {
         // descrip: Natural-language instruction used when the Character Sheet star button generates past, present, and future summaries. This is intentionally flexible and temporary.
@@ -859,7 +929,20 @@
         // default: 850
         "max_tokens": 850
     },
-    // descrip: Dream settings control the dream part of the core time system. Dreams are creative artifacts and do not directly replace memorysummary.
+    // descrip: Yculth Create Character settings control how the guided sheet becomes final persona text.
+    // default: summarize the text into markdown style categories
+    "character_creation": {
+        // descrip: Natural-language instruction used by each Create Character field star button.
+        // default: concise directly usable first-person field drafts, with atomic fields kept short
+        "field_instruction": "Fill only the requested character creation field as a concise, directly usable draft. For sentence-style descriptive fields, write in first person from the character's point of view, using I, me, my, and mine. For tiny atomic fields like pronouns, species, eyes, folders, or IDs, output only the value. Do not output markdown, labels, or JSON. If you cannot infer the field reliably, make a creative best guess that fits the draft.",
+        // descrip: Natural-language instruction used by the Create Character final persona star button.
+        // default: summarize the text into markdown style categories
+        "final_persona_instruction": "summarize the text into markdown style categories",
+        // descrip: Context instruction sent with the character creation fields when building final persona text.
+        // default: create final persona.md from fields, first-person where appropriate, no JSON
+        "final_persona_input_instruction": "Create the final persona.md block from these character creation fields. Write as a durable persona document. Prefer first person for identity and personality voice. Do not output JSON."
+    },
+    // descrip: Dream settings control the dream part of the core time system. Dreams are creative artifacts and do not directly replace memorysum.
     // default: manual dream generation, write drafts into soul/dreams
     "dream_settings": {
         "enabled": true,
@@ -871,12 +954,15 @@
         },
         "output_folder": "soul/dreams",
         "source_files": [
-            "soul/memorysummary.txt",
+            "soul/memorysum.txt",
             "soul/shortmemory.jsonl"
         ],
         // descrip: Folder containing private first-person thoughts that can feed dreams and end-of-day story support. Thoughts are softer than memory and should be treated as interpretation, not fact.
         // default: "soul/consciousness/thoughts"
         "thoughts_folder": "soul/consciousness/thoughts",
+        // descrip: Folder containing private first-person feelings that can feed rich status displays and later emotional memory work. Feelings are temporary emotional/body state, not public replies.
+        // default: "soul/consciousness/feelings"
+        "feelings_folder": "soul/consciousness/feelings",
         // descrip: Folder containing durable first-person journals that can feed dreams and future memory updates. Journals are durable emotional reflections, not temporary thoughts.
         // default: "soul/consciousness/journals"
         "journals_folder": "soul/consciousness/journals",
@@ -891,6 +977,51 @@
         // descrip: If true, durable dream files may be read by memory updates as evidence. Dream files are never deleted by memory updates.
         // default: true
         "can_feed_summarization": true
+    },
+    // descrip: Controls the tiny visible message sent when an agent is sleeping and a message affects sleep but does not wake them enough for a normal reply.
+    // default: enabled, respond to sleep adjustments, keep ignored quiet chatter silent
+    "sleeping_message_response": {
+        // descrip: If true, sleeping agents can send a short sleep-state message when sleep handling consumes an incoming message without a normal reply.
+        // range: true or false.
+        // default: true
+        "enabled": true,
+        // descrip: If true, send the short sleep-state message for ignored quiet chatter too. Default false prevents spam while the agent is deeply asleep.
+        // range: true or false.
+        // default: false
+        "respond_to_ignore": false,
+        // descrip: Natural-language instruction for the short sleep-state message. It should describe visible sleep, subtle sounds, and small movements, not become a normal waking reply.
+        // default: send a short message describing my current appearance of sleep and any sounds or subtle movements
+        "instruction": "send a short message describing my current appearance of sleep and any sounds or subtle movements",
+        // descrip: Maximum tokens for the short sleep-state message.
+        // range: 1 or higher.
+        // default: 120
+        "max_tokens": 120
+    },
+    // descrip: Human-editable descriptions for status mode and energy. Mode decides whether the agent can reply; energy decides how tired, alert, vivid, or responsive the agent seems inside that mode.
+    // default: mode gates response ability, energy shapes expression
+    "status_descriptors": {
+        // descrip: Meaning of each status mode. These descriptions can be sent to models when interpreting sleep, wake, and reply tone.
+        // default: practical response-state meanings
+        "mode": {
+            "awake": "I am conscious and able to reply.",
+            "sleepy": "I am awake but sleep-heavy and only partly alert.",
+            "falling_asleep": "I am drifting into sleep and may respond drowsily.",
+            "sleeping": "I am asleep and should not normally reply directly.",
+            "dreaming": "I am asleep and dreaming.",
+            "away": "I am unavailable and should not reply."
+        },
+        // descrip: Natural-language scale for energy from 0.0 to 1.0. If the numeric energy is between scale points, interpolate naturally.
+        // default: low energy means exhausted, high energy means fully energized
+        "energy": {
+            "0.0": "Completely exhausted. Minimal movement, weak awareness, very slow responses if awake.",
+            "0.25": "Very tired. Drowsy, low energy, soft or delayed responses.",
+            "0.5": "Moderate energy. Functional but not especially lively.",
+            "0.75": "Rested. Responsive, emotionally available, alert.",
+            "1.0": "Fully energized. Bright, lively, quick, expressive."
+        },
+        // descrip: Explains how mode and energy interact. This prevents energy from incorrectly forcing awake/sleep state.
+        // default: mode decides reply ability, energy decides expression
+        "mode_energy_interaction": "Mode decides whether I can reply. Energy decides how tired, alert, vivid, or responsive I seem inside that mode. If asleep, energy changes sleep depth and wakeability. If awake, energy changes tone and alertness. High energy while sleeping means rested enough to wake soon, not already awake."
     },
     // descrip: Reply randomness; chaos here is temperature for OpenRouter. Higher values are looser, lower values are steadier.
     // range: 0 to 2.
@@ -947,7 +1078,7 @@
     // range: true or false.
     // default: true
     "reply_when_name_not_used": true,
-    // descrip: Whether the bot refuses messages that mention someone with @ unless the bot itself or one of its configured mention roles is directly @mentioned. Plain text name matches do not override an unrelated @mention.
+    // descrip: Whether the bot refuses messages that mention someone with @ unless the bot itself or one of its configured mention roles is directly @mentioned. Plain text name matches do not override an unrelated @mention. @everyone and @here never count as ambient reply invitations.
     // range: true or false.
     // default: true
     "do_not_reply_when_at_is_not_about_bot": true

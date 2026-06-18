@@ -100,6 +100,21 @@ async function readRequiredTextFile(filePath) {
   return readFile(filePath, "utf8").then((text) => text.trim());
 }
 
+async function readOptionalTextFile(filePath) {
+  return readFile(filePath, "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
+}
+
+async function readMemorySumText(agentFolder, memorySumPath) {
+  const text = await readOptionalTextFile(memorySumPath);
+  if (text.trim()) return text;
+  const legacyMemorySum = await readOptionalTextFile(path.join(agentFolder, "soul", "memorysummary.txt"));
+  if (legacyMemorySum.trim()) return legacyMemorySum;
+  return readOptionalTextFile(path.join(agentFolder, "soul", "longmemory.txt"));
+}
+
 async function readRecentMemoryFiles(agentFolder, folderSetting, filePattern, limit, maxCharactersPerFile) {
   const folderPath = path.resolve(agentFolder, String(folderSetting));
   const resolvedAgentFolder = path.resolve(agentFolder);
@@ -345,10 +360,7 @@ export function createStorySkill(context) {
     const discordReplyCharacterLimit = Number(requiredSetting("discord_reply_character_limit")) || 1900;
     const recentEntries = (await readShortMemoryEntries(shortMemoryPath)).slice(-conversationHistoryLimit);
     const recentShortMemory = shortMemoryEntriesToSource(recentEntries);
-    const existingMemorySummary = await readRequiredTextFile(longMemoryPath).catch((error) => {
-      if (error.code === "ENOENT") return "";
-      throw error;
-    });
+    const existingMemorySum = await readMemorySumText(agentFolder, longMemoryPath);
     const dreamSettings = optionalSetting("dream_settings", {});
     const memoryLayersSettings = optionalSetting("memory_layers", {});
     const storyThoughtControl = thoughtInfluenceControl("story", 0.5);
@@ -399,7 +411,7 @@ export function createStorySkill(context) {
           "",
           "Write one short story as this agent, in first person by default unless the user explicitly asks for another perspective.",
           "Treat memory as evidence, not as permission to invent.",
-          "Search the provided saved stories, recent shortmemory, thoughts when story.use_thoughts is enabled, journals, neural memory if present, and memorysummary for the scene or subject the user is asking about.",
+          "Search the provided saved stories, recent shortmemory, thoughts when story.use_thoughts is enabled, journals, neural memory if present, and memorysum for the scene or subject the user is asking about.",
           formatThoughtInfluenceInstruction("Story", storyThoughtControl),
           semanticMemoryUsageContract(),
           "Use only facts, scenes, character details, emotions, preferences, continuity, and plans that appear in that evidence.",
@@ -425,8 +437,8 @@ export function createStorySkill(context) {
           "# Relevant Saved Stories",
           formatStoriesForContext(relevantStories, 9000),
           "",
-          "# Memorysummary",
-          existingMemorySummary || "(empty)",
+          "# Memorysum",
+          existingMemorySum || "(empty)",
           "",
           "# Recent Shortmemory",
           recentShortMemory || "(empty)",
@@ -561,7 +573,7 @@ export function createStorySkill(context) {
         content: [
           "Story generation and upload are available.",
           "When the user asks to write a new story, use the story pipe command workflow.",
-          "Stories should be grounded in saved stories, shortmemory, and memorysummary instead of inventing new continuity.",
+          "Stories should be grounded in saved stories, shortmemory, and memorysum instead of inventing new continuity.",
         ].join("\n"),
       }];
 
@@ -579,7 +591,7 @@ export function createStorySkill(context) {
         content: [
           "The user appears to be asking about saved story material.",
           "Use the relevant saved story text below to answer naturally.",
-          "Also use the memorysummary and recent shortmemory context that are already included in this request.",
+          "Also use the memorysum and recent shortmemory context that are already included in this request.",
           "Do not pretend to search; you have the saved story context here.",
           "Do not add unsupported story details. If evidence is missing, say the saved memory does not show that.",
           "If the user asks what happened, summarize the story.",

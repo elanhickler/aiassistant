@@ -3,26 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Music Search Workbench</title>
-  <link rel="stylesheet" href="styles.css">
+  <title>aiassistant Music</title>
+  <link rel="stylesheet" href="styles.css?v=sandbox-engine-1">
 </head>
 <body>
   <main class="shell">
     <section class="workspace">
       <div class="topbar">
         <div>
-          <h1>Music Search Workbench</h1>
-          <p>Build human and bot-friendly music links from known songs or vibes.</p>
+          <h1>aiassistant Music</h1>
+          <p>Music search, local playback, and Asciiscope signal visuals.</p>
         </div>
-        <button id="copyConfigButton" type="button">copy config url</button>
+        <button id="copyConfigButton" type="button" data-sandbox-events="click down up enter leave">copy settings url</button>
       </div>
 
-      <div class="grid">
+      <section class="hero-grid">
+        <section class="asciiscope panel" aria-label="Asciiscope music visualizer">
+          <div class="scope-head">
+            <div>
+              <h2>Asciiscope</h2>
+              <p>audio-reactive terminal display</p>
+            </div>
+            <div id="scopeReadout" class="scope-readout">waiting for playback</div>
+          </div>
+          <pre id="asciiscopeDisplay" class="scope-display" aria-hidden="true"></pre>
+        </section>
+
+        <section class="panel now-playing">
+          <h2>Now Playing</h2>
+          <div class="cover-frame">
+            <img id="coverPreview" alt="">
+            <div id="coverPlaceholder" class="cover-placeholder">
+              <strong>associated image</strong>
+              <span>drop or choose cover art</span>
+            </div>
+          </div>
+          <div class="file-actions">
+            <label class="file-button">
+              choose audio
+              <input id="audioInput" type="file" accept="audio/*">
+            </label>
+            <label class="file-button">
+              choose image
+              <input id="imageInput" type="file" accept="image/*">
+            </label>
+          </div>
+          <audio id="audioPlayer" controls></audio>
+          <p id="audioStatus" class="status-line">No audio loaded.</p>
+        </section>
+      </section>
+
+      <section class="editor-grid">
         <section class="panel">
-          <h2>Request</h2>
+          <h2>Music Description</h2>
           <label>
-            music request
-            <textarea id="requestInput" rows="5" placeholder="dark romantic synthwave for Trish, or Grimes - Oblivion"></textarea>
+            description
+            <textarea id="requestInput" rows="8" placeholder="dark romantic synthwave for Trish, or Grimes - Oblivion"></textarea>
           </label>
           <div class="two">
             <label>
@@ -39,27 +75,52 @@
             <input id="vibeInput" type="text" placeholder="dreamy lo-fi indie pop">
           </label>
           <div class="actions">
-            <button id="knownButton" type="button">known song</button>
-            <button id="vibeButton" type="button">vibe</button>
-            <button id="autoButton" type="button">auto</button>
+            <button id="knownButton" class="mode-button" type="button" data-mode="known" data-sandbox-events="click hover down up enter leave">play</button>
+            <button id="vibeButton" class="mode-button" type="button" data-mode="vibe" data-sandbox-events="click hover down up enter leave">discover</button>
+            <button id="autoButton" class="mode-button is-active" type="button" data-mode="auto" data-sandbox-events="click hover down up enter leave">pick for me</button>
           </div>
         </section>
 
-        <section class="panel">
-          <h2>Sites</h2>
-          <div id="siteToggles" class="toggles"></div>
+        <section class="panel info-panel">
+          <h2>Music Info</h2>
+          <dl class="info-list">
+            <div>
+              <dt>title</dt>
+              <dd id="infoTitle">unknown</dd>
+            </div>
+            <div>
+              <dt>artist</dt>
+              <dd id="infoArtist">unknown</dd>
+            </div>
+            <div>
+              <dt>vibe</dt>
+              <dd id="infoVibe">waiting for description</dd>
+            </div>
+            <div>
+              <dt>audio source</dt>
+              <dd id="infoSource">none</dd>
+            </div>
+          </dl>
         </section>
-      </div>
+      </section>
 
       <section class="panel results-panel">
         <div class="section-head">
-          <h2>Links</h2>
-          <button id="copySelectedButton" type="button">copy selected</button>
+          <h2>Search Links</h2>
+          <button id="copySelectedButton" type="button" data-sandbox-events="click down up enter leave">copy all</button>
         </div>
         <div id="results" class="results"></div>
       </section>
+
+      <section class="panel sandbox-engine-panel" aria-label="Sandbox audiovisual engine">
+        <div class="section-head">
+          <h2>Sandbox Engine</h2>
+          <span id="sandboxEngineStatus" class="status-line">waiting for sandbox</span>
+        </div>
+        <iframe id="sandboxSoundEngine" title="soemdsp sandbox audiovisual engine"></iframe>
+      </section>
     </section>
   </main>
-  <script src="app.js"></script>
+  <script src="app.js?v=sandbox-engine-1"></script>
 </body>
 </html>

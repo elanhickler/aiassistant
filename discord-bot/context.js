@@ -18,17 +18,26 @@ async function readRequiredTextFile(filePath) {
 }
 
 async function readRequiredTextFileWithFallback(filePath, fallbackPath = "") {
+  const fallbackPaths = Array.isArray(fallbackPath) ? fallbackPath : [fallbackPath].filter(Boolean);
   try {
     return {
       text: await readRequiredTextFile(filePath),
       sourcePath: filePath,
     };
   } catch (error) {
-    if (!fallbackPath || !error.message.startsWith("Missing required context file:")) throw error;
-    return {
-      text: await readRequiredTextFile(fallbackPath),
-      sourcePath: fallbackPath,
-    };
+    if (!fallbackPaths.length || !error.message.startsWith("Missing required context file:")) throw error;
+    let lastError = error;
+    for (const nextFallbackPath of fallbackPaths) {
+      try {
+        return {
+          text: await readRequiredTextFile(nextFallbackPath),
+          sourcePath: nextFallbackPath,
+        };
+      } catch (fallbackError) {
+        lastError = fallbackError;
+      }
+    }
+    throw lastError;
   }
 }
 
@@ -93,11 +102,13 @@ export async function buildOpenRouterMessages({
   agentFolder,
   conversationHistory,
   conversationHistoryLimit,
-  legacyMemorySummaryPath = "",
-  memorySummaryPath,
+  legacyMemorySumPath = "",
+  legacyLongMemoryPath = "",
+  memorySumPath,
   message,
   originSummaryPath,
   persona,
+  privateFeeling = null,
   privateThought = null,
   shortMemoryPath,
   statusPath,
@@ -105,9 +116,9 @@ export async function buildOpenRouterMessages({
   skills,
   timePassages = [],
 }) {
-  const memorySummaryResult = await readRequiredTextFileWithFallback(
-    memorySummaryPath,
-    legacyMemorySummaryPath,
+  const memorySumResult = await readRequiredTextFileWithFallback(
+    memorySumPath,
+    [legacyMemorySumPath, legacyLongMemoryPath].filter(Boolean),
   );
   const originSummary = originSummaryPath ? await readOptionalTextFile(originSummaryPath) : "";
   const shortMemoryText = await readRequiredTextFile(shortMemoryPath);
@@ -144,10 +155,10 @@ export async function buildOpenRouterMessages({
       content: statusText,
     }),
     normalizeContextBlock({
-      title: "Memorysummary",
-      source: memorySummaryResult.sourcePath,
+      title: "Memorysum",
+      source: memorySumResult.sourcePath,
       priority: 80,
-      content: memorySummaryResult.text,
+      content: memorySumResult.text,
     }),
     normalizeContextBlock({
       title: "Origin Summary",
@@ -180,6 +191,12 @@ export async function buildOpenRouterMessages({
       priority: 65,
       content: formatPrivateThought(privateThought),
     }),
+    normalizeContextBlock({
+      title: "Private Feeling",
+      source: privateFeeling?.source || "soul/consciousness/feelings",
+      priority: 64,
+      content: formatPrivateFeeling(privateFeeling),
+    }),
     ...(await skillContextBlocks(skills, message)),
   ]
     .filter(Boolean)
@@ -211,6 +228,19 @@ function formatPrivateThought(privateThought) {
     "Do not quote, reveal, summarize, or explicitly mention the private thought unless it naturally belongs in the visible reply.",
     "",
     thought,
+  ].join("\n");
+}
+
+function formatPrivateFeeling(privateFeeling) {
+  const feeling = String(privateFeeling?.content || "").trim();
+  if (!feeling) return "";
+
+  return [
+    "This private first-person feeling was generated before the visible reply.",
+    "Use it as hidden emotional, bodily, and atmospheric self-understanding.",
+    "Do not quote, reveal, summarize, or explicitly mention the private feeling artifact unless it naturally belongs in the visible reply.",
+    "",
+    feeling,
   ].join("\n");
 }
 

@@ -23,6 +23,14 @@ async function readOptionalTextFile(filePath) {
   });
 }
 
+async function readMemorySumText(agentFolder, memorySumPath) {
+  const text = await readOptionalTextFile(memorySumPath);
+  if (text.trim()) return text;
+  const legacyMemorySum = await readOptionalTextFile(path.join(agentFolder, "soul", "memorysummary.txt"));
+  if (legacyMemorySum.trim()) return legacyMemorySum;
+  return readOptionalTextFile(path.join(agentFolder, "soul", "longmemory.txt"));
+}
+
 function sourceRangeForEntries(entries) {
   if (!entries.length) return "";
   const first = entries[0]?.timestamp || "";
@@ -167,7 +175,7 @@ export function createJournalSkill(context) {
     const readEntries = Math.max(1, Number(neuralMemorySettings.read_entries) || 100);
     const shortMemoryEntries = (await readShortMemoryEntries(shortMemoryPath)).slice(-readEntries);
     const recentShortMemory = shortMemoryEntriesToSource(shortMemoryEntries);
-    const memorySummary = await readOptionalTextFile(longMemoryPath);
+    const memorySum = await readMemorySumText(agentFolder, longMemoryPath);
     const journalThoughtControl = thoughtInfluenceControl("journal", 0.75);
     const thoughts = journalThoughtControl.useThoughts
       ? await readRecentMarkdownFiles(consciousnessThoughtsFolder(agentFolder), 40, 3000)
@@ -198,7 +206,7 @@ export function createJournalSkill(context) {
           "Write a durable first-person emotional journal entry.",
           "The journal is private local memory and must not be written as a public Discord reply.",
           "Use first person: I felt, I noticed, I wanted, I remembered, I am afraid, I hope.",
-          "Use recent shortmemory, private thoughts when journal.use_thoughts is enabled, neural memory if present, and memorysummary as evidence.",
+          "Use recent shortmemory, private thoughts when journal.use_thoughts is enabled, neural memory if present, and memorysum as evidence.",
           formatThoughtInfluenceInstruction("Journal", journalThoughtControl),
           semanticMemoryUsageContract(),
           "Do not invent hard facts when evidence is thin. It is okay to write uncertainty as uncertainty.",
@@ -212,8 +220,8 @@ export function createJournalSkill(context) {
           "# Journal Instructions",
           combinedInstruction,
           "",
-          "# Memorysummary",
-          memorySummary || "(empty)",
+          "# Memorysum",
+          memorySum || "(empty)",
           "",
           "# Recent Shortmemory",
           recentShortMemory || "(empty)",
@@ -277,7 +285,7 @@ export function createJournalSkill(context) {
     name: "journal",
     getPipeHelp({ agentCommandName }) {
       return [
-        [`||${agentCommandName} journal||`, "Write a private first-person journal entry from recent shortmemory, thoughts, neural memory if present, and memorysummary."],
+        [`||${agentCommandName} journal||`, "Write a private first-person journal entry from recent shortmemory, thoughts, neural memory if present, and memorysum."],
         [`||${agentCommandName} journal: text||`, "Write a private first-person journal entry using extra instructions."],
       ];
     },

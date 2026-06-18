@@ -16,7 +16,7 @@ Stardust is the first agent in the `aiassistant` multi-agent project.
     * `thoughts/` : First-person internal thought files. Thoughts are softer than shortmemory and can feed stories, dreams, and end-of-day memory work.
     * `emojis/` : Custom emoji assets and notes for Stardust.
     * `visual-references/` : Downloaded or manually collected visual references for future visual expression work. Keep source and attribution notes beside internet downloads.
-    * `memorysummary.txt` : Memorysummary file that summarization updates with `# Past`, `# Present`, and `# Future / Plans` sections.
+    * `memorysum.txt` : Memorysum file that summarization updates with `# Past`, `# Present`, and `# Future / Plans` sections.
     * `persona.md` : Stardust's persona; each time the bot asks OpenRouter's AI model to write a reply, it sends this Markdown text as the instruction for how Stardust should behave. This can include personality descriptors, what to say when, and conversationally written guidance.
     * `raw/` : Latest OpenRouter request split into readable text parts for checking exactly what context was sent.
     * `raw.txt` : Concatenated compatibility copy of the latest `raw/` parts.
@@ -27,7 +27,7 @@ Stardust is the first agent in the `aiassistant` multi-agent project.
 
 ## Memory And Cost
 
-OpenRouter does not have a special Memorysummary slot for this bot. Anything the bot wants the model to know must be sent as text in the request, and that text costs tokens.
+OpenRouter does not have a special Memorysum slot for this bot. Anything the bot wants the model to know must be sent as text in the request, and that text costs tokens.
 
 * `soul/persona.md` : Keep short and stable. This is sent as behavior and identity instructions.
 * `soul/raw/` : Latest OpenRouter message text split into readable parts.
@@ -42,8 +42,8 @@ OpenRouter does not have a special Memorysummary slot for this bot. Anything the
 * `music_skill.music_thread_id` : Required only when `enabled_skills` contains `music`.
 * `memory_forum_posts` : Global default list of core memory forum posts.
 * `planned_skill_settings` : Global placeholder settings for future skills. These do not do anything until the matching skill is implemented.
-* `soul/memorysummary.txt` : Keep compact and important. This is sent as hidden durable context and should contain durable facts, preferences, relationship context, ongoing project context, and plans, not raw transcripts. It uses `# Past`, `# Present`, and `# Future / Plans`.
-* `Memorysummary` Discord forum post : Receives a latest Memorysummary preview/notice after `||@stardust summarize||`. The full memory is only stored in the local txt file because Discord posts have text limits.
+* `soul/memorysum.txt` : Keep compact and important. This is sent as hidden durable context and should contain durable facts, preferences, relationship context, ongoing project context, and plans, not raw transcripts. It uses `# Past`, `# Present`, and `# Future / Plans`.
+* `Memorysum` Discord forum post : Receives a latest Memorysum preview/notice after `||@stardust summarize||`. The full memory is only stored in the local txt file because Discord posts have text limits.
 * `soul/shortmemory.jsonl` : Local shortmemory fallback/cache. Recent entries are sent as hidden context. This is useful for audit and future summarization, but when `shortmemory_thread_id` is set the Discord copy should be treated as the source of truth.
 * `soul/trash/shortmemory-trash.jsonl` : Recoverable local trash for shortmemory entries. Scheduled automatic memory cycles age this trash and delete entries after `shortmemory_trash.keep_auto_summary_cycles`.
 * `recent_context_entries` : Found in global `settings.jsonc` unless overridden; controls how much recent conversation is sent as hidden context on normal replies. Higher values remember more but cost more per reply.
@@ -64,11 +64,11 @@ OpenRouter does not have a special Memorysummary slot for this bot. Anything the
 * direct Stardust control : Natural text like `Stardust is...`, `Stardust has...`, or `Stardust does...` is treated as authoritative roleplay direction for Stardust, similar to a softer in-scene adjustment.
 * `normal text ||@stardust subtext: private text||` : Inline private subtext lets you communicate assumptions and quick persona adjustments. It is not spoken text to quote or answer directly, and it may be loosely stored later by memory updates. In DMs, `@stardust` is optional.
 * `||@stardust adjust: adjustment instructions||` : Redoes the previous Stardust reply with adjustment instructions. Stardust deletes the old reply, removes that assistant shortmemory entry, and writes a replacement reply to the original user message.
-* `||@stardust summarize||` : Summarizes recent shortmemory into `soul/memorysummary.txt`, posts a Memorysummary preview, and cleans adjustment audit messages. In DMs, `@stardust` is optional.
-* `||@stardust thought: thought prompt||` : Writes a first-person internal thought from the prompt, shortmemory, Memorysummary, and recent thoughts.
-* `||@stardust story||` : Story command that writes an evidence-grounded short story from saved stories, recent shortmemory, and Memorysummary, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@stardust` is optional.
-* `||@stardust story: story prompt||` : Story command that searches saved stories, shortmemory, and Memorysummary for the requested subject, then writes only what the evidence supports.
-* story recall : Normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and Memorysummary context, and let Stardust answer with a focused summary or explanation without inventing unsupported details.
+* `||@stardust summarize||` : Summarizes recent shortmemory into `soul/memorysum.txt`, posts a Memorysum preview, and cleans adjustment audit messages. In DMs, `@stardust` is optional.
+* `||@stardust thought: thought prompt||` : Writes a first-person internal thought from the prompt, shortmemory, Memorysum, and recent thoughts.
+* `||@stardust story||` : Story command that writes an evidence-grounded short story from saved stories, recent shortmemory, and Memorysum, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@stardust` is optional.
+* `||@stardust story: story prompt||` : Story command that searches saved stories, shortmemory, and Memorysum for the requested subject, then writes only what the evidence supports.
+* story recall : Normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and Memorysum context, and let Stardust answer with a focused summary or explanation without inventing unsupported details.
 * `||@stardust music||` : Infers the latest music request from shortmemory, posts a formatted music link, and archives it to the configured music thread. In DMs, `@stardust` is optional.
 * `||@stardust music: description or link||` : Runs the music skill with direct input.
 * `||@stardust sleep||` : Sets `soul/status.json` mode to `sleeping`.
@@ -86,4 +86,4 @@ OpenRouter does not have a special Memorysummary slot for this bot. Anything the
 * `soul/stories/` : Story output folder used by `||@stardust story||` and searched by story recall.
 * `soul/art/` and `soul/emojis/` : Not sent by default. These are placeholder content folders until future skills or targeted retrieval use them.
 
-The memory maintenance pattern is now one action: run `||@stardust summarize||`, then check `soul/memorysummary.txt`. Summarize also cleans adjustment audit messages after Memorysummary is written.
+The memory maintenance pattern is now one action: run `||@stardust summarize||`, then check `soul/memorysum.txt`. Summarize also cleans adjustment audit messages after Memorysum is written.

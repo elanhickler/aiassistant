@@ -145,6 +145,14 @@ export function createDreamJournalSkill(context) {
     });
   }
 
+  async function readMemorySumText() {
+    const text = await readOptionalTextFile(longMemoryPath);
+    if (text.trim()) return text;
+    const legacyMemorySum = await readOptionalTextFile(path.join(agentFolder, "soul", "memorysummary.txt"));
+    if (legacyMemorySum.trim()) return legacyMemorySum;
+    return readOptionalTextFile(path.join(agentFolder, "soul", "longmemory.txt"));
+  }
+
   async function dreamFileFromSavedDream(savedDream) {
     if (!savedDream?.filePath) return null;
     const text = await readFile(savedDream.filePath, "utf8");
@@ -180,7 +188,7 @@ export function createDreamJournalSkill(context) {
     const memoryLayersSettings = optionalSetting("memory_layers", {});
     const shortMemoryLimit = positiveInteger(readLimits.shortmemory_entries, 100);
     const shortMemoryEntries = (await readShortMemoryEntries(shortMemoryPath)).slice(-shortMemoryLimit);
-    const memorySummary = await readOptionalTextFile(longMemoryPath);
+    const memorySum = await readMemorySumText();
     const originSummary = positiveInteger(readLimits.origin_summary_entries, 1) > 0
       ? await readOptionalTextFile(path.join(agentFolder, "soul/origin_summary.md"))
       : "";
@@ -222,7 +230,7 @@ export function createDreamJournalSkill(context) {
       dreamJournals,
       journals,
       memoryEntries,
-      memorySummary,
+      memorySum,
       neuralMemory,
       originSummary,
       readLimits,
@@ -313,8 +321,8 @@ export function createDreamJournalSkill(context) {
           `file: ${interpretedDream.fileName}`,
           interpretedDream.text,
           "",
-          "# Memorysummary",
-          contextInfo.memorySummary || "(empty)",
+          "# Memorysum",
+          contextInfo.memorySum || "(empty)",
           "",
           "# Recent Durable Memory Entries",
           formatSourceFiles(contextInfo.memoryEntries),

@@ -181,6 +181,252 @@ function primaryMemoryText(record) {
   return record.compressed || record.summary || record.content || record.reality || record.fantasy || record.entry?.content || "";
 }
 
+function recordTimestamp(record) {
+  return record.entry?.timestamp || record.timestamp || record.created_at || "";
+}
+
+function timestampRange(records) {
+  const timestamps = records
+    .map(recordTimestamp)
+    .filter(Boolean)
+    .sort();
+  return {
+    start: timestamps[0] || "",
+    end: timestamps[timestamps.length - 1] || "",
+  };
+}
+
+function layerStatsFromRows(rows, nodes) {
+  const nodesByLayer = new Map();
+  for (const node of nodes) {
+    const layer = Number(node.layer) || 0;
+    const existing = nodesByLayer.get(layer) || [];
+    existing.push(node);
+    nodesByLayer.set(layer, existing);
+  }
+
+  return rows.map((row) => {
+    const layerNodes = nodesByLayer.get(row.layer) || [];
+    const savedNodes = layerNodes.filter((node) => !node.preview_only);
+    const previewNodes = layerNodes.filter((node) => node.preview_only);
+    const timestamps = timestampRange(savedNodes);
+    return {
+      layer: row.layer,
+      layer_name: row.layer_name,
+      saved_nodes: savedNodes.length,
+      preview_nodes: previewNodes.length,
+      timestamp_start: timestamps.start,
+      timestamp_end: timestamps.end,
+    };
+  });
+}
+
+function graphNodeFromRecord(record, fallbackLayer, index) {
+  const layer = Number.isInteger(Number(record.layer)) ? Number(record.layer) : fallbackLayer;
+  const id = String(record.id || `layer-${layer}-${String(index).padStart(6, "0")}`);
+  const sourceIds = Array.isArray(record.source_ids)
+    ? record.source_ids.map(String)
+    : [];
+  const compressed = String(primaryMemoryText(record) || "").trim();
+  return {
+    id,
+    layer,
+    layer_name: String(record.layer_name || layerName(layer)),
+    kind: String(record.kind || record.type || (layer === 0 ? "raw_shortmemory" : "semantic_downscale")),
+    label: compressed ? limitText(compressed, 90) : id,
+    compressed,
+    upscale_direction: String(record.upscale_direction || "").trim(),
+    do_not_invent: String(record.do_not_invent || "").trim(),
+    confidence: clampConfidence(record.confidence, layer === 0 ? 1 : 0.5),
+    importance: Number.isFinite(Number(record.importance)) ? Number(record.importance) : 0,
+    source: String(record.source || record.source_file || "").trim(),
+    source_ids: sourceIds,
+    source_count: Number.isFinite(Number(record.source_count)) ? Number(record.source_count) : Math.max(1, sourceIds.length),
+    timestamp: recordTimestamp(record),
+    preview_only: false,
+  };
+}
+
+const layerPalette = [
+  "#7dd3fc",
+  "#86efac",
+  "#facc15",
+  "#f0abfc",
+  "#fda4af",
+];
+
+function layerColor(layer) {
+  return layerPalette[layer % layerPalette.length];
+}
+
+function graphNodeRadius(node) {
+  const base = 6 + Number(node.layer || 0) * 2.5;
+  const importance = Math.max(0, Math.min(1, Number(node.importance) || 0));
+  return Number((base + importance * 5).toFixed(2));
+}
+
+function graphNodeX(index, count) {
+  if (count <= 1) return 0.5;
+  return Number(((index + 1) / (count + 1)).toFixed(4));
+}
+
+function graphNodeY(layer, maxLayers) {
+  if (maxLayers <= 1) return 0.5;
+  return Number((1 - (layer / (maxLayers - 1))).toFixed(4));
+}
+
+function addLayoutHintsToGraph(graph) {
+  const nodeCountsByLayer = new Map(graph.rows.map((row) => [row.layer, row.node_ids.length]));
+  const nodeIndexByLayer = new Map();
+  for (const node of graph.nodes) {
+    const layer = Number(node.layer) || 0;
+    const index = nodeIndexByLayer.get(layer) || 0;
+    const count = nodeCountsByLayer.get(layer) || 1;
+    node.visual = {
+      x: graphNodeX(index, count),
+      y: graphNodeY(layer, graph.max_layers),
+      radius: graphNodeRadius(node),
+      color: layerColor(layer),
+      opacity: node.preview_only ? 0.72 : 1,
+      pulse: Boolean(node.preview_only),
+    };
+    nodeIndexByLayer.set(layer, index + 1);
+  }
+  return graph;
+}
+
+function previewNodeForLayer({ layer, sourceIds, sourceNodes }) {
+  const compressed = sourceNodes
+    .map((node) => node.compressed)
+    .filter(Boolean)
+    .join(" ");
+  return {
+    id: `preview-layer-${layer}-${stableHash(sourceIds.join("|") || String(layer))}`,
+    layer,
+    layer_name: layerName(layer),
+    kind: "preview_semantic_downscale",
+    label: `Preview ${layerName(layer)}`,
+    compressed: limitText(compressed, 220) || "Preview of selected lower-layer memories downscaling into broader meaning.",
+    upscale_direction: "Preview only. Show how selected lower-layer memories could become one broader memory node.",
+    do_not_invent: "Preview only. Do not treat this as saved memory or reply context.",
+    confidence: 0,
+    importance: 0,
+    source: "graph preview",
+    source_ids: sourceIds,
+    source_count: sourceIds.length,
+    timestamp: "",
+    preview_only: true,
+  };
+}
+
+function buildMemoryLayerGraph({ agentName, layers, compressionRatio, maxLayers, generatedAt }) {
+  const layerRows = [];
+  const nodes = [];
+  const edges = [];
+  const previewEdges = [];
+
+  for (let layer = 0; layer < maxLayers; layer += 1) {
+    const records = layers.get(layer) || [];
+    const rowNodes = records.map((record, index) => {
+      const node = graphNodeFromRecord(record, layer, index);
+      nodes.push(node);
+      return node.id;
+    });
+    layerRows.push({
+      layer,
+      layer_name: layerName(layer),
+      node_count: rowNodes.length,
+      node_ids: rowNodes,
+    });
+  }
+
+  const existingNodeIds = new Set(nodes.map((node) => node.id));
+  for (const node of nodes) {
+    for (const sourceId of node.source_ids || []) {
+      if (!existingNodeIds.has(sourceId)) continue;
+      edges.push({
+        from: sourceId,
+        to: node.id,
+        kind: "downscale_source",
+      });
+    }
+  }
+
+  const previewAnimations = [];
+  for (let layer = 0; layer < maxLayers - 1; layer += 1) {
+    const row = layerRows[layer];
+    const nextRow = layerRows[layer + 1];
+    if (!row || !nextRow || row.node_ids.length === 0) continue;
+    const sourceIds = row.node_ids.slice(0, compressionRatio);
+    const sourceNodes = sourceIds
+      .map((sourceId) => nodes.find((node) => node.id === sourceId))
+      .filter(Boolean);
+    let targetId = nextRow.node_ids[0] || "";
+    if (!targetId) {
+      const previewNode = previewNodeForLayer({
+        layer: layer + 1,
+        sourceIds,
+        sourceNodes,
+      });
+      nodes.push(previewNode);
+      nextRow.node_count += 1;
+      nextRow.node_ids.push(previewNode.id);
+      targetId = previewNode.id;
+    }
+    for (const sourceId of sourceIds) {
+      previewEdges.push({
+        from: sourceId,
+        to: targetId,
+        kind: "preview_downscale_source",
+        preview_only: true,
+      });
+    }
+    previewAnimations.push({
+      id: `preview-layer-${layer}-to-${layer + 1}`,
+      label: `${layerName(layer)} downscales into ${layerName(layer + 1)}`,
+      from_layer: layer,
+      to_layer: layer + 1,
+      source_ids: sourceIds,
+      target_id: targetId,
+      steps: [
+        { kind: "pulse", node_ids: sourceIds, duration_ms: 450 },
+        { kind: "connect", from_ids: sourceIds, to_id: targetId, duration_ms: 550 },
+        { kind: "glow-up", from_layer: layer, to_layer: layer + 1, duration_ms: 650 },
+        { kind: "show-preview-node", node_id: targetId, preview_only: nodes.find((node) => node.id === targetId)?.preview_only === true, duration_ms: 500 },
+      ],
+    });
+  }
+
+  return addLayoutHintsToGraph({
+    schema: "aiassistant.memory-layer-graph.v1",
+    agent: agentName,
+    generated_at: generatedAt,
+    compression_ratio: compressionRatio,
+    max_layers: maxLayers,
+    graph_run: {
+      generated_at: generatedAt,
+      saved_nodes: nodes.filter((node) => !node.preview_only).length,
+      preview_nodes: nodes.filter((node) => node.preview_only).length,
+      saved_edges: edges.length,
+      preview_edges: previewEdges.length,
+      animation_count: previewAnimations.length,
+      layer_stats: layerStatsFromRows(layerRows, nodes),
+    },
+    mode_note: "Debug/visual sidecar only. This graph does not affect replies.",
+    explanation: "Semantic memory downscales raw conversation into compact meaning. Text upscale later expands that meaning into replies, dreams, journals, stories, and summaries.",
+    rows: layerRows,
+    nodes,
+    edges,
+    preview_edges: previewEdges,
+    preview_animations: previewAnimations,
+    interaction_model: {
+      select: "Click a memory node to inspect compressed meaning, upscale guidance, boundaries, confidence, and source.",
+      debug_downscale: "Play preview_animations to show lower-layer memories becoming broader semantic memory.",
+      debug_upscale_context: "Use selected saved nodes only as preview context while neural memory remains off/debug.",
+    },
+  });
+}
+
 function averageConfidence(records) {
   const values = records
     .map((record) => Number(record.confidence))
@@ -200,6 +446,27 @@ async function readOptionalJsonl(filePath) {
     if (error.code === "ENOENT") return "";
     throw error;
   }), filePath);
+}
+
+async function readExistingLayers(outputFolder, maxLayers) {
+  const layers = new Map();
+  for (let layer = 0; layer < maxLayers; layer += 1) {
+    layers.set(layer, await readOptionalJsonl(path.join(outputFolder, `layer-${layer}.jsonl`)));
+  }
+  return layers;
+}
+
+async function writeMemoryLayerGraph({ agentName, outputFolder, compressionRatio, maxLayers, layers, generatedAt }) {
+  const graph = buildMemoryLayerGraph({
+    agentName,
+    layers,
+    compressionRatio,
+    maxLayers,
+    generatedAt,
+  });
+  await mkdir(outputFolder, { recursive: true });
+  await writeFile(path.join(outputFolder, "graph.json"), `${JSON.stringify(graph, null, 2)}\n`, "utf8");
+  return graph;
 }
 
 async function inspectMemoryLayers({ agentName, sourcePath, outputFolder, entries, compressionRatio, maxLayers }) {
@@ -232,6 +499,22 @@ async function inspectMemoryLayers({ agentName, sourcePath, outputFolder, entrie
   console.log("Inspection only. No files were written and no OpenRouter request was made.");
 }
 
+async function refreshMemoryLayerGraph({ agentName, outputFolder, compressionRatio, maxLayers }) {
+  const layers = await readExistingLayers(outputFolder, maxLayers);
+  const graph = await writeMemoryLayerGraph({
+    agentName,
+    outputFolder,
+    compressionRatio,
+    maxLayers,
+    layers,
+    generatedAt: new Date().toISOString(),
+  });
+  console.log(`Memory Layers graph refreshed for ${agentName}: ${graph.nodes.length} nodes, ${graph.edges.length} edges.`);
+  console.log(`Graph: ${path.join(outputFolder, "graph.json")}`);
+  console.log("Graph refresh is visual/debug only. Reply context remains unchanged.");
+  return graph;
+}
+
 async function summarizeChunk({ settings, openrouterApiKey, agentName, chunk }) {
   const source = chunk.entries
     .map((entry, offset) => entryToSource(entry, chunk.start + offset))
@@ -241,7 +524,7 @@ async function summarizeChunk({ settings, openrouterApiKey, agentName, chunk }) 
       role: "system",
       content: [
         `Interpret a cluster of ${agentName} shortmemory entries for experimental Memory Layers.`,
-        "This is not a reply and not memorysummary.",
+        "This is not a reply and not memorysum.",
         "Keep durable meaning, emotional movement, user-specific facts, relationship context, unresolved threads, and notable plans.",
         "Do not invent new facts.",
         "Write a semantic downscale memory node that a future text upscaler could safely expand when relevant.",
@@ -359,8 +642,9 @@ async function ensureMemoryLayersReadme(outputFolder) {
     "* `layer-1.jsonl` : scene-level interpretation. Can read thoughts later.",
     "* `layer-2.jsonl` : story/session summaries. Can read stories later.",
     "* `layer-3.jsonl` : emotional arcs. Can read journals and dreams later.",
-    "* `layer-4.jsonl` : durable truths. Can read memorysummary later.",
+    "* `layer-4.jsonl` : durable truths. Can read memorysum later.",
     "* `build-log.jsonl` : downscale run records.",
+    "* `graph.json` : generated visual sidecar for Yculth or other neuron-style memory viewers.",
     "",
     "Consciousness folders:",
     "",
@@ -414,6 +698,11 @@ async function main() {
 
   if (args.inspect || args["dry-run"]) {
     await inspectMemoryLayers({ agentName, sourcePath, outputFolder, entries, compressionRatio, maxLayers });
+    return;
+  }
+
+  if (args.graph || args["refresh-graph"]) {
+    await refreshMemoryLayerGraph({ agentName, outputFolder, compressionRatio, maxLayers });
     return;
   }
 
@@ -494,6 +783,16 @@ async function main() {
     await writeFile(path.join(outputFolder, `layer-${layer}.jsonl`), jsonl(higherLayers.get(layer) || []), "utf8");
   }
 
+  const layers = new Map([[0, layer0Records], [1, layer1Records], ...higherLayers.entries()]);
+  const graph = await writeMemoryLayerGraph({
+    agentName,
+    outputFolder,
+    compressionRatio,
+    maxLayers,
+    layers,
+    generatedAt: createdAt,
+  });
+
   const buildLogRecord = {
     timestamp: new Date().toISOString(),
     agent: agentName,
@@ -504,11 +803,14 @@ async function main() {
     layer_0_entries: layer0Records.length,
     layer_1_entries: layer1Records.length,
     higher_layer_entries: Object.fromEntries([...higherLayers.entries()].map(([layer, records]) => [`layer_${layer}`, records.length])),
+    graph_nodes: graph.nodes.length,
+    graph_edges: graph.edges.length,
     use_in_context: Boolean(layerSettings.use_in_context),
   };
   await appendFile(path.join(outputFolder, "build-log.jsonl"), jsonl([buildLogRecord]), "utf8");
 
   console.log(`Memory Layers wrote ${layer0Records.length} layer-0 entries and ${layer1Records.length} layer-1 summaries for ${agentName}.`);
+  console.log(`Memory Layers graph wrote ${graph.nodes.length} nodes and ${graph.edges.length} edges.`);
   console.log(`Output folder: ${outputFolder}`);
   if (!layerSettings.use_in_context) {
     console.log("Note: memory_layers.use_in_context is false. Reply context remains unchanged.");

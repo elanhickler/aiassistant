@@ -5,7 +5,7 @@ import { appendFile, mkdir, open, readFile, readdir, rm, stat, unlink, writeFile
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { savePrivateThought } from "./consciousness.js";
+import { savePrivateFeeling, savePrivateThought } from "./consciousness.js";
 import { buildOpenRouterMessages } from "./context.js";
 import { readShortMemoryEntries, shortMemoryEntriesToSource } from "./memory.js";
 import { semanticMemoryUsageContract } from "./semantic-memory.js";
@@ -131,8 +131,12 @@ async function replyTemporarily(message, text, milliseconds = 30000) {
 }
 
 async function safeReply(message, text) {
+  const replyPayload = {
+    content: String(text ?? ""),
+    allowedMentions: { parse: [], repliedUser: false },
+  };
   try {
-    return await message.reply(text);
+    return await message.reply(replyPayload);
   } catch (error) {
     console.error(`message.reply failed in ${message.channelId}: ${error.message}. Falling back to channel.send.`);
     if (!message.channel?.send) {
@@ -140,7 +144,7 @@ async function safeReply(message, text) {
       return null;
     }
     try {
-      return await message.channel.send(text);
+      return await message.channel.send(replyPayload);
     } catch (sendError) {
       console.error(`channel.send failed in ${message.channelId}: ${sendError.message}. Dropping reply text.`);
       return null;
@@ -397,11 +401,13 @@ const settings = mergeSettings(await loadJson(globalSettingsPath), await loadJso
 const soulFolder = path.join(agentFolder, "soul");
 const originPath = path.join(soulFolder, "origin.md");
 const originSummaryPath = path.join(soulFolder, "origin_summary.md");
-const memorySummaryPath = path.join(soulFolder, "memorysummary.txt");
-const legacyMemorySummaryPath = path.join(soulFolder, "longmemory.txt");
+const memorySumPath = path.join(soulFolder, "memorysum.txt");
+const legacyMemorySumPath = path.join(soulFolder, "memorysummary.txt");
+const legacyLongMemoryPath = path.join(soulFolder, "longmemory.txt");
 const shortMemoryPath = path.join(soulFolder, "shortmemory.jsonl");
 const shortMemoryTrashPath = path.join(soulFolder, "trash", "shortmemory-trash.jsonl");
 const statusPath = path.join(soulFolder, "status.json");
+const statusDisplayPath = path.join(soulFolder, "consciousness", "status-display.md");
 const rawOpenRouterPath = path.join(soulFolder, "raw.txt");
 const rawOpenRouterFolder = path.join(soulFolder, "raw");
 const secretsFolder = path.join(agentFolder, "secrets");
@@ -966,18 +972,73 @@ function statusDumpText(previousStatus, nextStatus, source) {
   ].join("\n");
 }
 
+function statusDisplaySettings() {
+  const displaySettings = settings.status_display || {};
+  return {
+    enabled: displaySettings.enabled !== false,
+    useThoughts: displaySettings.use_thoughts !== false,
+    useFeelings: displaySettings.use_feelings !== false,
+    outputFile: String(displaySettings.output_file || "soul/consciousness/status-display.md"),
+  };
+}
+
+function statusDisplayOutputPath() {
+  const relativePath = statusDisplaySettings().outputFile.trim() || "soul/consciousness/status-display.md";
+  const targetPath = relativePath === "soul/consciousness/status-display.md"
+    ? path.resolve(statusDisplayPath)
+    : path.resolve(agentFolder, relativePath);
+  const resolvedAgentFolder = path.resolve(agentFolder);
+  if (targetPath !== resolvedAgentFolder && !targetPath.startsWith(`${resolvedAgentFolder}${path.sep}`)) {
+    throw new Error(`status_display.output_file escapes agent folder: ${relativePath}`);
+  }
+  return targetPath;
+}
+
+async function readRichStatusDisplayForPost() {
+  if (!statusDisplaySettings().enabled) return "";
+  return readFile(statusDisplayOutputPath(), "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
+}
+
 async function appendStatusMemoryDump(previousStatus, nextStatus, source) {
   if (JSON.stringify(previousStatus) === JSON.stringify(nextStatus)) return;
 
   const dump = statusDumpText(previousStatus, nextStatus, source);
   const statusPost = await findMemoryForumPostByName("status").catch(() => null);
   if (statusPost?.send) {
-    await statusPost.send(dump.length <= 1900 ? dump : `${dump.slice(0, 1900)}\n...`);
+    try {
+      await generateRichStatusDisplay({ source: `status ${source}` });
+    } catch (error) {
+      console.error(`Rich status display failed for ${agentName}; posting raw status fallback: ${formatErrorForLog(error)}`);
+    }
+    const richStatus = (await readRichStatusDisplayForPost()).trim();
+    const statusText = richStatus || dump;
+    await statusPost.send(statusText.length <= 1900 ? statusText : `${statusText.slice(0, 1900)}\n...`);
   }
 }
 
 function statusSourceForTimePassage(source) {
   return source === "natural language" ? "natural time passage" : "time passage";
+}
+
+function sleepStartEnergy(status) {
+  const explicitStartEnergy = Number(status.sleep_start_energy);
+  if (Number.isFinite(explicitStartEnergy)) return clampNumber(explicitStartEnergy, 0, 100, 30);
+  const currentEnergy = Number(status.energy);
+  return Number.isFinite(currentEnergy) ? Math.min(30, Math.max(0, currentEnergy)) : 30;
+}
+
+function energyFromSleepProgress(status, remainingSleepMinutes) {
+  const neededMinutes = Number(status.sleep_needed_minutes || status.sleep_planned_minutes);
+  if (!Number.isFinite(neededMinutes) || neededMinutes <= 0 || !Number.isFinite(remainingSleepMinutes)) {
+    return status.energy;
+  }
+  if (remainingSleepMinutes <= 0) return 100;
+  const progress = clampNumber((neededMinutes - remainingSleepMinutes) / neededMinutes, 0, 1, 0);
+  const startEnergy = sleepStartEnergy(status);
+  return Math.round(startEnergy + ((100 - startEnergy) * progress));
 }
 
 async function addTimePassage(minutes, sleepTimerAdjustment = null, options = {}) {
@@ -1000,15 +1061,10 @@ async function addTimePassage(minutes, sleepTimerAdjustment = null, options = {}
   });
 
   const previousStatus = await readStatus();
-  const energy = Number(previousStatus.energy);
   const sleepLikeMode = previousStatus.mode === "falling_asleep" || previousStatus.mode === "sleeping" || previousStatus.mode === "dreaming";
-  const energyGain = sleepLikeMode
-    ? Math.max(1, Math.floor(minutes / 6))
-    : 0;
   const remainingSleepMinutes = Number(previousStatus.sleep_remaining_minutes);
   const nextStatus = {
     ...previousStatus,
-    energy: Number.isFinite(energy) ? Math.min(100, energy + energyGain) : previousStatus.energy,
     current_datetime: addMinutesToIsoDateTime(previousStatus.current_datetime, minutes),
     last_time_update_at: recordedAt,
     last_time_passed_minutes: minutes,
@@ -1026,6 +1082,8 @@ async function addTimePassage(minutes, sleepTimerAdjustment = null, options = {}
     const adjustmentMinutes = Number(sleepTimerAdjustment?.minutes || 0);
     const nextRemainingSleepMinutes = remainingSleepMinutes - minutes - adjustmentMinutes;
     nextStatus.sleep_remaining_minutes = nextRemainingSleepMinutes;
+    nextStatus.sleep_start_energy = sleepStartEnergy(previousStatus);
+    nextStatus.energy = energyFromSleepProgress(previousStatus, nextRemainingSleepMinutes);
     if (previousStatus.mode === "falling_asleep" && minutes > 0 && nextRemainingSleepMinutes > 0) {
       nextStatus.mode = "sleeping";
       nextStatus.status = {
@@ -1049,6 +1107,7 @@ async function addTimePassage(minutes, sleepTimerAdjustment = null, options = {}
         ...statusFlagsForMode("awake"),
       };
       nextStatus.woke_minutes_ago = wokeMinutesAgo;
+      nextStatus.energy = 100;
       nextStatus.current_activity = wokeMinutesAgo > 0
         ? `woke up ${wokeMinutesAgo} minutes ago after sleeping`
         : "just woke up after sleeping";
@@ -1070,9 +1129,10 @@ const skillContext = {
   conversationHistoryLimit,
   findMemoryForumPostByName,
   getSkills: () => skills,
-  legacyMemorySummaryPath,
-  longMemoryPath: memorySummaryPath,
-  memorySummaryPath,
+  legacyMemorySumPath,
+  legacyLongMemoryPath,
+  longMemoryPath: memorySumPath,
+  memorySumPath,
   model,
   openrouterApiKey,
   replyTemporarily,
@@ -1089,7 +1149,7 @@ const skillContext = {
   utilityModel,
   writeRawOpenRouterText,
 };
-skills = createRuntimeSkills(enabledSkills, skillContext);
+skills = await createRuntimeSkills(enabledSkills, skillContext);
 console.log(`Loaded skills for ${agentName}: ${skillLoadSummary(skills)}`);
 
 async function runSkillHook(hookName, hookContext) {
@@ -1869,8 +1929,8 @@ const memoryForumPostDescriptions = new Map([
   ["adjustments", "Audit log of reply adjustments requested by the user."],
   ["status", "Current agent status changes, activity state, energy, and sleep or away logs."],
   ["profilepic", "Profile picture ideas, references, and avatar notes."],
-  ["memorysummary", "Compact active durable memory sent to the model as context."],
-  ["longmemory", "Legacy memorysummary post name. Kept readable for older agents during migration."],
+  ["memorysum", "Compact active durable memory sent to the model as context."],
+  ["longmemory", "Legacy memorysum post name. Kept readable for older agents during migration."],
   ["shortmemory", "Recent conversation memory. Discord should be treated as the authority when configured."],
   ["dreams", "Dream output, associative fragments, and sleep-cycle creative notes."],
   ["thoughts", "First-person internal thoughts, softer than memory, used later to support stories, dreams, and end-of-day memory work."],
@@ -1894,9 +1954,11 @@ function helpCommandLists() {
     [`||${agentCommandName} reply||`, "Reply to the last non-reply message without adding this command to shortmemory."],
     [`||${agentCommandName} continue||`, "Continue from recent context without adding this command to shortmemory."],
     [`||${agentCommandName} continue: text||`, "Continue with one-time instructions without adding this command to shortmemory."],
+    [`||${agentCommandName}\u25B6||`, "Pipe emoji continue. Same as continue, but compact."],
+    [`||${agentCommandName}\u25B6 text||`, "Pipe emoji continue with one-time instructions."],
     [`||${agentCommandName} adjust: text||`, "Redo the previous bot reply with adjustment instructions; deletes the old bot reply and its assistant shortmemory entry."],
-    [`||${agentCommandName} summarize||`, "Create a durable memory entry, update memorysummary from shortmemory and consciousness artifacts, then clear temporary thoughts."],
-    [`||${agentCommandName} story||`, "Write a first-person story from saved stories, shortmemory, thoughts, journals, neural memory if present, and memorysummary."],
+    [`||${agentCommandName} summarize||`, "Create a durable memory entry, update memorysum from shortmemory and consciousness artifacts, then clear temporary thoughts."],
+    [`||${agentCommandName} story||`, "Write a first-person story from saved stories, shortmemory, thoughts, journals, neural memory if present, and memorysum."],
     [`||${agentCommandName} story: text||`, "Write a first-person story using extra instructions. Creativity, realism, style, chaos, or numbers are one-time guidance only."],
     [`||${agentCommandName} subtext: text||`, "Private assumptions/persona nudges; loosely stored later by memory updates."],
     [`||${agentCommandName} sleep||`, "Set sleeping."],
@@ -2194,23 +2256,23 @@ async function appendAdjustmentMemoryDump({ originalReplyText, adjustInstruction
   return true;
 }
 
-async function postMemorySummaryPreview({ outputFile, outputText }) {
-  const post = await findMemoryForumPostByName("memorysummary").catch(() => null)
+async function postMemorySumPreview({ outputFile, outputText }) {
+  const post = await findMemoryForumPostByName("memorysum").catch(() => null)
     || await findMemoryForumPostByName("longmemory").catch(() => null);
   if (!post?.send) return false;
 
   const previewLimit = 1200;
   const preview = outputText.length > previewLimit ? `${outputText.slice(0, previewLimit)}\n...` : outputText;
   const message = [
-    "latest_memorysummary:",
+    "latest_memorysum:",
     `timestamp: ${new Date().toISOString()}`,
     `agent: ${agentName}`,
     `local_file: ${outputFile}`,
     `characters: ${outputText.length}`,
-    "kind: memorysummary update",
+    "kind: memorysum update",
     "",
     "full_memory_location:",
-    "The full memorysummary is only stored in the local txt/md file listed above. Discord is only a preview/notice because Discord posts have text limits.",
+    "The full memorysum is only stored in the local txt/md file listed above. Discord is only a preview/notice because Discord posts have text limits.",
     "",
     "preview:",
     preview,
@@ -2223,12 +2285,15 @@ async function readRelativeTextFile(relativeFilePath) {
   return readTextFile(path.join(agentFolder, relativeFilePath));
 }
 
-async function readMemorySummaryText() {
-  return readRelativeTextFile("soul/memorysummary.txt").catch((error) => {
+async function readMemorySumText() {
+  return readRelativeTextFile("soul/memorysum.txt").catch((error) => {
     if (error.message.startsWith("Missing required file:")) {
-      return readRelativeTextFile("soul/longmemory.txt").catch((legacyError) => {
-        if (legacyError.message.startsWith("Missing required file:")) return "";
-        throw legacyError;
+      return readRelativeTextFile("soul/memorysummary.txt").catch((legacyMemorySumError) => {
+        if (!legacyMemorySumError.message.startsWith("Missing required file:")) throw legacyMemorySumError;
+        return readRelativeTextFile("soul/longmemory.txt").catch((legacyError) => {
+          if (legacyError.message.startsWith("Missing required file:")) return "";
+          throw legacyError;
+        });
       });
     }
     throw error;
@@ -2464,9 +2529,9 @@ async function runSummarization({ force = false, source = "manual" } = {}) {
     }
 
     const selectedEntries = entries.slice(-dailySummaryEntries);
-    const memorySummaryThoughtControl = thoughtInfluenceControl("memorysummary_update", 0.5);
+    const memorySumThoughtControl = thoughtInfluenceControl("memorysum_update", 0.5);
     const consciousnessArtifacts = await readConsciousnessSummaryArtifacts();
-    if (!memorySummaryThoughtControl.useThoughts) {
+    if (!memorySumThoughtControl.useThoughts) {
       consciousnessArtifacts.thoughts = [];
       consciousnessArtifacts.counts.thoughts = 0;
     }
@@ -2476,18 +2541,18 @@ async function runSummarization({ force = false, source = "manual" } = {}) {
       return { skipped: true, reason: "shortmemory and consciousness artifacts are empty" };
     }
 
-    const summaryFile = "soul/memorysummary.txt";
-    const existingSummary = await readMemorySummaryText();
+    const summaryFile = "soul/memorysum.txt";
+    const existingSummary = await readMemorySumText();
     const summaryPolicy = String(
       summarizationSettings.summary_policy || "remember durable per-user context, not everything",
     );
     const consciousnessDescriptors = requiredSetting("consciousness_descriptors");
     const memoryDescriptor = String(consciousnessDescriptors.memory || "").trim();
-    const memorySummaryDescriptor = String(
-      consciousnessDescriptors.memorysummary || consciousnessDescriptors.summary || "",
+    const memorySumDescriptor = String(
+      consciousnessDescriptors.memorysum || consciousnessDescriptors.summary || "",
     ).trim();
-    if (!memorySummaryDescriptor) {
-      throw new Error("Missing consciousness_descriptors.memorysummary.");
+    if (!memorySumDescriptor) {
+      throw new Error("Missing consciousness_descriptors.memorysum.");
     }
     const sourceText = shortMemoryEntriesToSource(selectedEntries);
     const messages = [
@@ -2500,22 +2565,22 @@ async function runSummarization({ force = false, source = "manual" } = {}) {
           "# Summarization Task",
           memoryDescriptor ? `Memory entry descriptor:\n${memoryDescriptor}` : "",
           "",
-          `Memorysummary descriptor:\n${memorySummaryDescriptor}`,
+          `Memorysum descriptor:\n${memorySumDescriptor}`,
           "",
-          `Create a durable memory entry and update memorysummary from recent shortmemory as part of ${source} memory maintenance.`,
-          "Write compact durable memorysummary, not a transcript.",
-          "Memorysummary should preserve what should affect future replies: stable facts, relationship truths, recurring preferences, important boundaries, unresolved plans, and lasting changes.",
+          `Create a durable memory entry and update memorysum from recent shortmemory as part of ${source} memory maintenance.`,
+          "Write compact durable memorysum, not a transcript.",
+          "Memorysum should preserve what should affect future replies: stable facts, relationship truths, recurring preferences, important boundaries, unresolved plans, and lasting changes.",
           "Preserve important per-user facts when they help future replies.",
           "Keep user-specific notes grouped by username or user_id when possible.",
           "Prefer stable facts, boundaries, preferences, relationships, ongoing situations, and unresolved threads.",
-          "Use private thoughts only when memorysummary_update.use_thoughts is enabled. Use journals, dreams, stories, and neural memory as evidence, but do not dump them into memorysummary.",
-          formatThoughtInfluenceInstruction("Memorysummary update", memorySummaryThoughtControl),
+          "Use private thoughts only when memorysum_update.use_thoughts is enabled. Use journals, dreams, stories, and neural memory as evidence, but do not dump them into memorysum.",
+          formatThoughtInfluenceInstruction("Memorysum update", memorySumThoughtControl),
           semanticMemoryUsageContract(),
           "Absorb useful temporary thoughts into durable memory only when they reveal stable patterns or important unresolved context.",
           "Journals, dreams, and stories are durable source artifacts. Do not mark them for deletion.",
           "Do not save throwaway moods, one-off wording, private subtext, raw logs, or every dream/story detail unless they became durably important.",
-          "If existing memorysummary already contains a fact, keep it concise and avoid duplication.",
-          "Memorysummary must use these exact top-level sections:",
+          "If existing memorysum already contains a fact, keep it concise and avoid duplication.",
+          "Memorysum must use these exact top-level sections:",
           "# Past",
           "What happened before, durable relationship facts, stable preferences, boundaries, and important history.",
           "# Present",
@@ -2529,16 +2594,16 @@ async function runSummarization({ force = false, source = "manual" } = {}) {
       {
         role: "user",
         content: [
-          "# Existing Memorysummary",
+          "# Existing Memorysum",
           existingSummary || "(empty)",
           "",
           "# Recent Shortmemory To Consider",
           sourceText || "(empty)",
           "",
           "# Temporary Thoughts To Absorb If Useful",
-          memorySummaryThoughtControl.useThoughts
+          memorySumThoughtControl.useThoughts
             ? formatSourceFilesForSummary(consciousnessArtifacts.thoughts)
-            : "(disabled by memorysummary_update.use_thoughts)",
+            : "(disabled by memorysum_update.use_thoughts)",
           "",
           "# Durable Journals To Consider",
           formatSourceFilesForSummary(consciousnessArtifacts.journals),
@@ -2552,7 +2617,7 @@ async function runSummarization({ force = false, source = "manual" } = {}) {
           "# Neural Memory If Available",
           formatSourceFilesForSummary(consciousnessArtifacts.neuralMemory),
           "",
-          "Return the complete proposed memorysummary text with # Past, # Present, and # Future / Plans.",
+          "Return the complete proposed memorysum text with # Past, # Present, and # Future / Plans.",
         ].join("\n"),
       },
     ];
@@ -2584,9 +2649,9 @@ async function runSummarization({ force = false, source = "manual" } = {}) {
     const outputFile = summaryFile;
     const outputPath = await writeRelativeTextFile(outputFile, `${summaryText}\n`);
     const memoryEntry = await writeMemoryEntry({ source, selectedEntries, summaryText });
-    await verifyReadableFile(outputPath, "memorysummary");
+    await verifyReadableFile(outputPath, "memorysum");
     await verifyReadableFile(memoryEntry.filePath, "memory entry");
-    const postedMemorySummaryPreview = await postMemorySummaryPreview({
+    const postedMemorySumPreview = await postMemorySumPreview({
       outputFile,
       outputText: summaryText,
     });
@@ -2599,7 +2664,7 @@ async function runSummarization({ force = false, source = "manual" } = {}) {
       return 0;
     });
     console.log(
-      `Created memory entry and updated memorysummary for ${agentName} from ${source}; read back ${outputPath} and ${memoryEntry.filePath}; cleared ${clearedThoughts.deleted || 0} thoughts; cleaned ${deletedAdjustmentMessages} adjustment messages.`,
+      `Created memory entry and updated memorysum for ${agentName} from ${source}; read back ${outputPath} and ${memoryEntry.filePath}; cleared ${clearedThoughts.deleted || 0} thoughts; cleaned ${deletedAdjustmentMessages} adjustment messages.`,
     );
     await runSkillHook("afterSummary", {
       entries: selectedEntries,
@@ -2624,7 +2689,7 @@ async function runSummarization({ force = false, source = "manual" } = {}) {
       skipped: false,
       entries: selectedEntries.length,
       outputFile,
-      postedMemorySummaryPreview,
+      postedMemorySumPreview,
       memoryEntryFile: memoryEntry.relativeFilePath,
       deletedAdjustmentMessages,
       clearedThoughtsDeleted: clearedThoughts.deleted || 0,
@@ -2883,6 +2948,24 @@ function stripPipeCommandTarget(text, isDm) {
   return isDm ? trimmedText : null;
 }
 
+const pipeEmojiCommands = new Map([
+  ["\u25B6", "continue"],
+  ["\u25B6\uFE0F", "continue"],
+]);
+
+function parsePipeEmojiCommandText(text) {
+  const trimmedText = text.trim();
+  const emojiMatch = trimmedText.match(/^(\u25B6\uFE0F?)([\s\S]*)$/u);
+  if (!emojiMatch) return null;
+  const kind = pipeEmojiCommands.get(emojiMatch[1]);
+  if (!kind) return null;
+  const content = String(emojiMatch[2] || "")
+    .replace(/^\s*:\s*/, "")
+    .trimStart()
+    .trimEnd();
+  return { kind, content };
+}
+
 const pipeCommandNames = [
   "reply",
   "continue",
@@ -2925,9 +3008,16 @@ const pipeCommandPattern = new RegExp(
   "i",
 );
 
-function parsePipeCommandText(text, isDm) {
-  const targetedText = stripPipeCommandTarget(text, isDm);
+function parsePipeCommandText(text, isDm, allowUntargetedPipeEmoji = false) {
+  let targetedText = stripPipeCommandTarget(text, isDm);
+  if (!targetedText && allowUntargetedPipeEmoji) {
+    const emojiCommand = parsePipeEmojiCommandText(text);
+    if (emojiCommand) return emojiCommand;
+  }
   if (!targetedText) return null;
+
+  const emojiCommand = parsePipeEmojiCommandText(targetedText);
+  if (emojiCommand) return emojiCommand;
 
   const firstTokenMatch = targetedText.match(/^([a-z][a-z0-9_-]*)([\s\S]*)$/i);
   const firstToken = canonicalPipeCommandName(firstTokenMatch?.[1] || "");
@@ -3021,11 +3111,12 @@ function formatUserContentWithPipeSubtext(message, content) {
 
   const subtexts = [];
   const visibleContent = content.replace(/\|\|([\s\S]*?)\|\|/g, (match, subtext) => {
-    const command = parsePipeCommandText(subtext, message.channel?.isDMBased?.());
+    const command = parseInlinePipeCommand(message, subtext);
     if (command?.kind === "subtext") {
       subtexts.push(command.content);
       return "";
     }
+    if (command?.kind === "emoji") return "";
     return match;
   }).replace(/[ \t]{2,}/g, " ").trim();
 
@@ -3038,6 +3129,55 @@ function formatUserContentWithPipeSubtext(message, content) {
     "Use the subtext to understand private assumptions, emotional context, and quick persona-adjustment nudges, but do not quote it, reveal it, or directly answer it as spoken text.",
     "If it matters beyond this moment, summarization may later store it loosely in memory.",
   ].join("\n");
+}
+
+function parseInlinePipeCommand(message, subtext) {
+  const isDm = Boolean(message.channel?.isDMBased?.());
+  const targetedCommand = parsePipeCommandText(subtext, isDm);
+  if (targetedCommand) return targetedCommand;
+  if (!isAmbientReplyLocation(message)) return null;
+  return parsePipeCommandText(subtext, true);
+}
+
+function inlinePipeCommands(message, allowedKinds) {
+  const commands = [];
+  const content = String(message.content || "");
+  content.replace(/\|\|([\s\S]*?)\|\|/g, (match, subtext) => {
+    const command = parseInlinePipeCommand(message, subtext);
+    if (command && allowedKinds.has(command.kind)) commands.push(command);
+    return match;
+  });
+  return commands;
+}
+
+function textOutsideInlinePipeCommands(message, allowedKinds) {
+  return String(message.content || "")
+    .replace(/\|\|([\s\S]*?)\|\|/g, (match, subtext) => {
+      const command = parseInlinePipeCommand(message, subtext);
+      return command && allowedKinds.has(command.kind) ? "" : match;
+    })
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasInlineEmojiWithUserInteraction(message) {
+  return inlinePipeCommands(message, new Set(["emoji"])).length > 0 &&
+    textOutsideInlinePipeCommands(message, new Set(["emoji"])).length > 0;
+}
+
+async function postInlineEmojiRequestsDirect(message) {
+  const commands = inlinePipeCommands(message, new Set(["emoji"]));
+  if (commands.length === 0) return false;
+  for (const command of commands) {
+    await handleSkillPipeCommand(command, message);
+  }
+  return true;
+}
+
+async function handleInlineEmojiRequests(message) {
+  return enqueueAgentWork(`inline emoji ${message.id}`, () =>
+    postInlineEmojiRequestsDirect(message)
+  );
 }
 
 function directAgentControlPattern() {
@@ -3322,6 +3462,186 @@ async function generatePrivateThoughtForReply(message, currentUserContent) {
   };
 }
 
+async function generatePrivateFeelingForReply(message, currentUserContent) {
+  const neuralMemorySettings = requiredSetting("neural_memory");
+  const consciousnessDescriptors = requiredSetting("consciousness_descriptors");
+  const recentMemoryWindowEntries = positiveIntegerFromNamedObject(
+    neuralMemorySettings,
+    "thought_window_entries",
+    10,
+    "neural_memory",
+  );
+  const instruction = String(consciousnessDescriptors.feeling || "").trim();
+  if (!instruction) throw new Error("Missing consciousness_descriptors.feeling.");
+
+  const recentEntries = (await readShortMemoryEntries(shortMemoryPath)).slice(-recentMemoryWindowEntries);
+  const recentShortMemory = shortMemoryEntriesToSource(recentEntries);
+  const messages = [
+    {
+      role: "system",
+      content: [
+        `# Persona: ${agentName}`,
+        systemPrompt,
+        "",
+        "# Private Feeling Task",
+        instruction,
+        "Write only this agent's private first-person emotional, bodily, and atmospheric feeling for the immediate moment before the visible reply.",
+        "This is temporary working memory, not a public reply, not a story, and not a message to the user.",
+        "Use first person: I feel, my body, my chest, my instincts, my mood, the room feels.",
+        "Do not write as an outside narrator.",
+        "Do not explain mechanics or mention that this is a private feeling artifact.",
+        "Return only strict JSON with this shape:",
+        "{\"title\":\"short title\",\"feeling_markdown\":\"markdown feeling beginning with a matching # title\"}",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        "# Current Visible Reply Input",
+        currentUserContent,
+        "",
+        "# Recent Memory Entries",
+        recentShortMemory || "(empty)",
+      ].join("\n"),
+    },
+  ];
+
+  const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openrouterApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: utilityModel,
+      messages,
+      temperature: Math.min(Number(requiredSetting("chaos")), 0.6),
+      max_tokens: 500,
+      provider: openRouterProviderOptions(),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
+  }
+
+  const payload = await response.json();
+  const raw = payload.choices?.[0]?.message?.content?.trim();
+  if (!raw) throw new Error("OpenRouter returned an empty private feeling.");
+  const parsed = parseJsonObjectFromModelText(raw, "private feeling");
+  const title = String(parsed.title || "Feeling").trim() || "Feeling";
+  let feelingMarkdown = String(parsed.feeling_markdown || "").trim();
+  if (!feelingMarkdown) throw new Error("OpenRouter returned a private feeling without feeling_markdown.");
+  if (!feelingMarkdown.startsWith("# ")) {
+    feelingMarkdown = [`# ${title}`, "", feelingMarkdown].join("\n");
+  }
+
+  const saved = await savePrivateFeeling({
+    agentFolder,
+    agentName,
+    sourceMessage: message,
+    instruction,
+    recentMemoryWindowEntries,
+    title,
+    feelingMarkdown,
+  });
+  return {
+    ...saved,
+    title,
+    content: feelingMarkdown,
+    source: saved.filePath,
+  };
+}
+
+async function generateRichStatusDisplay({
+  source = "reply",
+  message = null,
+  visibleReply = "",
+  privateThought = null,
+  privateFeeling = null,
+} = {}) {
+  const displaySettings = statusDisplaySettings();
+  if (!displaySettings.enabled) return null;
+
+  const currentStatus = await readStatus();
+  const recentEntries = (await readShortMemoryEntries(shortMemoryPath)).slice(-10);
+  const recentShortMemory = shortMemoryEntriesToSource(recentEntries);
+  const thoughtText = displaySettings.useThoughts ? String(privateThought?.content || "").trim() : "";
+  const feelingText = displaySettings.useFeelings ? String(privateFeeling?.content || "").trim() : "";
+  const messages = [
+    {
+      role: "system",
+      content: [
+        `# Persona: ${agentName}`,
+        systemPrompt,
+        "",
+        "# Rich Status Display Task",
+        "Write a beautiful current-state markdown display for the agent.",
+        "Use status JSON as truth, then transform private thoughts and feelings into atmosphere without revealing their raw text.",
+        "Do not quote raw private thought or raw private feeling text.",
+        "Do not use technical status field names, JSON labels, or implementation language.",
+        "Keep it short, current, readable, and emotionally vivid.",
+        "Use emoji section markers where they help, like time, weather/atmosphere, sound, sight, body, mood, or current action.",
+        "Return only markdown. No code fence.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: [
+        "# Source",
+        source,
+        "",
+        "# Current Status JSON",
+        JSON.stringify(currentStatus, null, 2),
+        "",
+        "# Latest User Message",
+        message?.content || "(none)",
+        "",
+        "# Visible Reply",
+        visibleReply || "(none)",
+        "",
+        "# Recent Shortmemory",
+        recentShortMemory || "(empty)",
+        "",
+        "# Private Thought Material",
+        thoughtText || "(disabled or unavailable)",
+        "",
+        "# Private Feeling Material",
+        feelingText || "(disabled or unavailable)",
+      ].join("\n"),
+    },
+  ];
+
+  await writeRawOpenRouterText(messages, "rich status display");
+  const response = await fetch(`${requiredSetting("openrouter_base_url")}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${openrouterApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: utilityModel,
+      messages,
+      temperature: 0.35,
+      max_tokens: 420,
+      provider: openRouterProviderOptions(),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
+  }
+
+  const payload = await response.json();
+  const markdown = payload.choices?.[0]?.message?.content?.trim();
+  if (!markdown) throw new Error("OpenRouter returned an empty rich status display.");
+
+  const outputPath = statusDisplayOutputPath();
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${markdown}\n`, "utf8");
+  return { filePath: outputPath, markdown };
+}
+
 async function inferNaturalTimePassageForMessage(message) {
   const config = naturalTimeConfig();
   if (!config.enabled) return null;
@@ -3436,6 +3756,10 @@ async function generateReplyFromContext(contextSource, userContent, logEntry, se
     } catch (error) {
       console.error(`Skill ${skill.name || "unknown"} afterReply failed: ${error.message}`);
     }
+  }
+
+  if (contextSource?.author?.id && String(contextSource.author.id) !== String(bot.user.id)) {
+    await postInlineEmojiRequestsDirect(contextSource);
   }
 
   return sentMessage;
@@ -3671,7 +3995,7 @@ async function summarizeNowText() {
   if (result.skipped) {
     return `Skipped summarization for ${agentName}: ${result.reason}.`;
   }
-  return `Summarized ${result.entries} shortmemory entries for ${agentName}. Wrote memorysummary: ${result.outputFile}. Memory entry: ${result.memoryEntryFile}. Memorysummary Discord preview: ${result.postedMemorySummaryPreview ? "posted" : "not found"}. Cleared thoughts: ${result.clearedThoughtsDeleted || 0}. Cleaned adjustments: ${result.deletedAdjustmentMessages || 0}.`;
+  return `Summarized ${result.entries} shortmemory entries for ${agentName}. Wrote memorysum: ${result.outputFile}. Memory entry: ${result.memoryEntryFile}. Memorysum Discord preview: ${result.postedMemorySumPreview ? "posted" : "not found"}. Cleared thoughts: ${result.clearedThoughtsDeleted || 0}. Cleaned adjustments: ${result.deletedAdjustmentMessages || 0}.`;
 }
 
 async function handlePipeSummarize(message) {
@@ -3741,6 +4065,23 @@ async function handleSleepingMessage(message) {
   return false;
 }
 
+function messageMentionsBotUser(message, botUserId) {
+  const content = message.content || "";
+  return Boolean(message.mentions?.users?.has?.(botUserId)) ||
+    new RegExp(`<@!?${botUserId}>`).test(content);
+}
+
+function messageMentionsAgentRole(message, roleId) {
+  const content = message.content || "";
+  return Boolean(message.mentions?.roles?.has?.(roleId)) ||
+    new RegExp(`<@&${roleId}>`).test(content);
+}
+
+function hasMassMention(message) {
+  return Boolean(message.mentions?.everyone) ||
+    /(^|\s)@(everyone|here)\b/i.test(message.content || "");
+}
+
 async function shouldReply(message) {
   const authorId = String(message.author.id);
   if (doNotReplyToUserIds.has(authorId)) return false;
@@ -3758,22 +4099,23 @@ async function shouldReply(message) {
 
   const contentLower = message.content.toLowerCase();
   const botUserId = String(bot.user.id);
-  const mentioned =
-    Boolean(message.mentions?.has?.(botUserId)) ||
-    Boolean(message.mentions?.users?.has?.(botUserId)) ||
-    new RegExp(`<@!?${botUserId}>`).test(message.content);
-  const roleMentioned = [...mentionRoleIds].some((roleId) =>
-    Boolean(message.mentions?.roles?.has?.(roleId)) ||
-    new RegExp(`<@&${roleId}>`).test(message.content)
-  );
+  const mentioned = messageMentionsBotUser(message, botUserId);
+  const roleMentioned = [...mentionRoleIds].some((roleId) => messageMentionsAgentRole(message, roleId));
   const directlyMentioned = mentioned || roleMentioned;
   const nameUsed = botNames.some((name) => contentLower.includes(name));
   const status = await statusApi.get();
   if (status.mode === "away") return false;
+  const massMentioned = hasMassMention(message);
+  if (massMentioned && !directlyMentioned) {
+    console.log(
+      `Skipped ${agentName} reply: message ${message.id} used @everyone/@here without directly mentioning bot user ${botUserId} or mention roles ${[...mentionRoleIds].join(", ") || "none"}.`,
+    );
+    return false;
+  }
   const hasAnyAtMention =
     message.mentions?.users?.size > 0 ||
     message.mentions?.roles?.size > 0 ||
-    message.mentions?.everyone ||
+    massMentioned ||
     /<@&?\d+>|@everyone|@here/.test(message.content);
   if (doNotReplyWhenAtIsNotAboutBot && hasAnyAtMention && !directlyMentioned) {
     console.log(
@@ -3836,16 +4178,28 @@ async function askOpenRouter(message, currentUserContent = "") {
     console.error(`Private thought generation failed for ${agentName}; continuing visible reply: ${formatErrorForLog(error)}`);
   }
 
+  let privateFeeling = null;
+  try {
+    privateFeeling = await generatePrivateFeelingForReply(message, currentUserContent);
+    console.log(
+      `Saved private feeling for ${agentName} before replying to message ${message.id}: ${privateFeeling.fileName}`,
+    );
+  } catch (error) {
+    console.error(`Private feeling generation failed for ${agentName}; continuing visible reply: ${formatErrorForLog(error)}`);
+  }
+
   let messages = await buildOpenRouterMessages({
     agentName,
     agentFolder,
     conversationHistory,
     conversationHistoryLimit,
-    legacyMemorySummaryPath,
-    memorySummaryPath,
+    legacyMemorySumPath,
+    legacyLongMemoryPath,
+    memorySumPath,
     message,
     originSummaryPath,
     persona: systemPrompt,
+    privateFeeling,
     privateThought,
     shortMemoryPath,
     statusPath,
@@ -3953,6 +4307,17 @@ async function askOpenRouter(message, currentUserContent = "") {
 
     const thoughtDebugVisibility = String(settings.thought_debug?.visibility || "off").trim();
     if (thoughtDebugVisibility === "append_to_reply" && privateThought?.content) {
+      try {
+        await generateRichStatusDisplay({
+          source: "normal reply",
+          message,
+          visibleReply: reply,
+          privateThought,
+          privateFeeling,
+        });
+      } catch (error) {
+        console.error(`Rich status display failed for ${agentName}; continuing visible reply: ${formatErrorForLog(error)}`);
+      }
       return [
         reply,
         "",
@@ -3961,6 +4326,18 @@ async function askOpenRouter(message, currentUserContent = "") {
         "private thought debug:",
         privateThought.content,
       ].join("\n");
+    }
+
+    try {
+      await generateRichStatusDisplay({
+        source: "normal reply",
+        message,
+        visibleReply: reply,
+        privateThought,
+        privateFeeling,
+      });
+    } catch (error) {
+      console.error(`Rich status display failed for ${agentName}; continuing visible reply: ${formatErrorForLog(error)}`);
     }
 
     return reply;
@@ -3974,6 +4351,20 @@ bot.on("messageCreate", async (message) => {
   if (message.author.bot && !isAllowedWebhookMessage && !replyToBotIds.has(String(message.author.id))) return;
 
   try {
+    const handledByIncomingSkill = await enqueueAgentWork(`incoming skill ${message.id}`, async () => {
+      for (const { hook } of skillHandlers(skills, "handleIncomingMessage")) {
+        if (await hook(message)) return true;
+      }
+      return false;
+    });
+    if (handledByIncomingSkill) return;
+  } catch (error) {
+    console.error(`Error handling incoming local skill message for ${agentName}: ${formatErrorForLog(error)}`);
+    await replyWithTemporaryError(message, formatTemporaryError("Error handling local skill", error));
+    return;
+  }
+
+  try {
     if (await handlePendingReplyEdit(message)) return;
   } catch (error) {
     await replyWithTemporaryError(message, formatTemporaryError("Error editing reply", error));
@@ -3983,6 +4374,7 @@ bot.on("messageCreate", async (message) => {
   try {
     const wholePipeCommand = await parseWholeMessagePipeCommand(message);
     if (await handlePipeReply(message)) return;
+    if (await handlePipeAdjust(message)) return;
     if (await handlePipeSummarize(message)) return;
     if (wholePipeCommand) {
       const handled = await enqueueAgentWork(`skill pipe ${wholePipeCommand.kind || "unknown"} ${message.id}`, () =>
@@ -3998,18 +4390,19 @@ bot.on("messageCreate", async (message) => {
     return;
   }
 
-  try {
-    if (await handlePipeAdjust(message)) return;
-  } catch (error) {
-    await replyWithTemporaryError(message, formatTemporaryError("Error adjusting reply", error));
+  if (!(await shouldReply(message))) {
+    await handleInlineEmojiRequests(message);
     return;
   }
-
-  if (!(await shouldReply(message))) return;
   if (!(await waitForMessageToSurviveBeforeReply(message))) return;
 
   try {
-    if (await enqueueAgentWork(`sleeping message ${message.id}`, () => handleSleepingMessage(message))) return;
+    message.__aiassistantForceSleepVisibleMessage = hasInlineEmojiWithUserInteraction(message);
+    const sleepResult = await enqueueAgentWork(`sleeping message ${message.id}`, () => handleSleepingMessage(message));
+    if (sleepResult === true || sleepResult?.handled) {
+      await handleInlineEmojiRequests(message);
+      return;
+    }
   } catch (error) {
     await replyWithTemporaryError(message, formatTemporaryError("Error handling sleep status", error));
     return;
@@ -4442,8 +4835,24 @@ async function handleCodeRefreshReaction({ message, userId, source }) {
     }
 
     if (await maybeRepairGeneratedDreamMessage(message, userId)) return;
-    await removeMatchingUserReaction(message, userId, isCodeRefreshReactionEmoji);
-    console.log(`Recycle reaction had no known refresh action for ${agentName} reply ${message.id}.`);
+
+    const userMessage = await findUserMessageBeforeBotReply(message);
+    if (!userMessage) {
+      await removeMatchingUserReaction(message, userId, isCodeRefreshReactionEmoji);
+      console.error(`Could not refresh ${agentName} reply ${message.id}: no earlier user message found.`);
+      return;
+    }
+
+    await enqueueAgentWork(`code refresh reaction ${message.id}`, async () => {
+      await removeMatchingUserReaction(message, userId, isCodeRefreshReactionEmoji);
+      await forgetBotReply(message, "Refreshed");
+      await deleteDiscordMessageIfExists(message, `${agentName} reply ${message.id}`);
+      await userMessage.channel.sendTyping();
+      await sendRegeneratedReply(userMessage, userMessage.content);
+    });
+    console.log(
+      `Refreshed ${agentName} reply ${message.id} from ${source} reaction by ${userId} using user message ${userMessage.id}.`,
+    );
   } catch (error) {
     console.error(`Error handling recycle/code-refresh reaction: ${error.message}`);
   }

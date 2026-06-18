@@ -19,6 +19,15 @@ function normalizeSourceSkills(settings) {
   return sourceSkills.map((skillName) => String(skillName).trim()).filter(Boolean);
 }
 
+async function readMemorySumText(memorySumPath) {
+  const text = await readFile(memorySumPath, "utf8").catch(() => "");
+  if (text.trim()) return text;
+  const legacyMemorySumPath = memorySumPath.replace(/memorysum\.txt$/i, "memorysummary.txt");
+  const legacyMemorySum = await readFile(legacyMemorySumPath, "utf8").catch(() => "");
+  if (legacyMemorySum.trim()) return legacyMemorySum;
+  return readFile(memorySumPath.replace(/memorysum\.txt$/i, "longmemory.txt"), "utf8").catch(() => "");
+}
+
 export function createDiscordStatusUpdateSkill(context) {
   const {
     agentName,
@@ -87,7 +96,7 @@ export function createDiscordStatusUpdateSkill(context) {
     const statusHints = await collectStatusHints(summaryContext);
     const summaryText = limitText(summaryContext.summaryText, 6000);
     const sourceText = limitText(summaryContext.sourceText, 6000);
-    const memorySummaryText = summaryText || limitText(await readFile(longMemoryPath, "utf8").catch(() => ""), 6000);
+    const memorySumText = summaryText || limitText(await readMemorySumText(longMemoryPath), 6000);
 
     const messages = [
       {
@@ -122,8 +131,8 @@ export function createDiscordStatusUpdateSkill(context) {
           "# User Basis Or Suggested Status",
           basisText || "(none)",
           "",
-          "# Memorysummary",
-          memorySummaryText || "(empty)",
+          "# Memorysum",
+          memorySumText || "(empty)",
           "",
           "# Recent Shortmemory Source Used By Summary",
           sourceText || "(empty)",

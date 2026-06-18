@@ -13,7 +13,8 @@ Starter project for a multi-agent AI assistant system.
     * `.gitignore` : Keeps local secrets and regenerated dependency folders out of git.
     * `.npmrc` : Prevents npm from writing a root `package-lock.json`.
     * `bot.js` : Shared Discord bot runtime. Uses `AGENT_NAME` to choose an agent folder and defaults to `Stardust`.
-    * `context.js` : Builds OpenRouter request context from persona, Memorysummary, recent shortmemory, and enabled skill context blocks.
+    * `web-chat.js` : Local visitor chat server for a slim `/chat` page and `/api/chat` endpoint. It uses `web_chat.allowed_agents` and isolated visitor shortmemory under `web-chat/visitors/`.
+    * `context.js` : Builds OpenRouter request context from persona, Memorysum, recent shortmemory, and enabled skill context blocks.
     * `memory-layers.js` : Manual experimental Memory Layers builder. It writes only `soul/memory-layers/` files and does not affect replies.
     * `memory.js` : Shared shortmemory parsing and formatting helpers.
     * `package.json` : Runtime scripts for installing dependencies, checking syntax, and starting the bot.
@@ -38,7 +39,7 @@ Starter project for a multi-agent AI assistant system.
 * `docs/` : Planning and architecture notes.
     * `code-skill.md` : Interface-neutral coding adapter notes.
     * `file-skill.md` : Interface-neutral file-management adapter notes.
-    * `memory-layers.md` : Preserved plan for Memory Layers / Neural Memory, where raw memory, private thoughts, journals, dreams, memory entries, and memorysummary become an inspectable neuron-like memory graph.
+    * `memory-layers.md` : Preserved plan for Memory Layers / Neural Memory, where raw memory, private thoughts, journals, dreams, memory entries, and memorysum become an inspectable neuron-like memory graph.
     * `runprogram-skill.md` : Interface-neutral program runner adapter notes.
     * `speak-skill.md` : Interface-neutral text-to-speech and voice-training skill notes.
     * `music-skill.md` : Interface-neutral music search and link-formatting skill notes.
@@ -101,6 +102,27 @@ cd C:\Users\argit\Documents\_PROGRAMMING\aiassistant\discord-bot
 npm.cmd run layerinspect -- --agent Stardust
 ```
 
+To refresh the visual `graph.json` sidecar from existing layer files without calling OpenRouter:
+
+```powershell
+cd C:\Users\argit\Documents\_PROGRAMMING\aiassistant\discord-bot
+npm.cmd run layergraph -- --agent Stardust
+```
+
+To preview the neuron-style graph without Yculth, open:
+
+```text
+docs/memory-layer-viewer.html
+```
+
+Then load `agents/<Agent>/soul/memory-layers/graph.json`. The static viewer draws layer rows and memory nodes, supports click-to-inspect, and plays the Debug Downscale preview animation.
+
+If you serve the repository root locally, you can also open a graph directly:
+
+```text
+http://127.0.0.1:8765/docs/memory-layer-viewer.html?graph=/agents/Trish/soul/memory-layers/graph.json
+```
+
 To generate experimental Memory Layers files, enable `memory_layers.enabled` or pass `--force` for one manual build:
 
 ```powershell
@@ -108,7 +130,7 @@ cd C:\Users\argit\Documents\_PROGRAMMING\aiassistant\discord-bot
 npm.cmd run memorylayers -- --agent Stardust --force
 ```
 
-This reads the selected agent's configured `memory_layers.layer_0_source`, usually `soul/shortmemory.jsonl`, then writes generated files under `soul/memory-layers/`. It can spend OpenRouter tokens because layer-1 scene interpretations are model-generated. New memory nodes prefer `kind`, `compressed`, `upscale_direction`, `do_not_invent`, `confidence`, and `source`, while `summary` remains as a compatibility mirror for older readers. Higher layers are conservative semantic downscales derived from the generated lower layer.
+This reads the selected agent's configured `memory_layers.layer_0_source`, usually `soul/shortmemory.jsonl`, then writes generated files under `soul/memory-layers/`. It can spend OpenRouter tokens because layer-1 scene interpretations are model-generated. New memory nodes prefer `kind`, `compressed`, `upscale_direction`, `do_not_invent`, `confidence`, and `source`, while `summary` remains as a compatibility mirror for older readers. Higher layers are conservative semantic downscales derived from the generated lower layer. The builder also writes `graph.json`, a visual/debug sidecar with rows, nodes, edges, preview edges, normalized layout hints, and preview animation hints for Yculth's neuron-style memory interface.
 
 Full semantic downscale is still manual for now. The automatic consciousness cycle refreshes `layer-0.jsonl` from recent shortmemory, but full model-generated downscale still belongs to the manual builder until Yculth visual inspection proves the files help. `memory_layers.use_in_context` must stay false and `neural_memory.mode` must stay `off` by default, so replies do not read Memory Layers or Neural Memory. `neural_memory.mode: debug` writes an inspectable local report under `agents/<Agent>/regenerated/neural-memory-debug/latest-report.md` without adding semantic memory to the reply prompt. Before enabling `on` later, Yculth must be able to preview exactly what neural memory context would be sent to OpenRouter.
 
@@ -121,7 +143,7 @@ npm.cmd run test:semantic-memory
 
 The fixture lives in `discord-bot/fixtures/semantic-memory/` and checks `kind`, `compressed`, `upscale_direction`, `do_not_invent`, `confidence`, and `source`.
 
-Old memory does not need automatic migration. Keep `soul/shortmemory.jsonl` as raw recent conversation and `soul/memorysummary.txt` as durable memory until neural memory is proven. Do not dump Memorysummary into `soul/persona.md`; persona should stay identity, personality, voice, preferences, boundaries, and behavior guidance. For a manual migration experiment, preserve backups, run the Memory Layers builder, inspect Yculth Debug Downscale / Debug Upscale Context, and only enable neural memory in replies after inspection.
+Old memory does not need automatic migration. Keep `soul/shortmemory.jsonl` as raw recent conversation and `soul/memorysum.txt` as durable memory until neural memory is proven. Do not dump Memorysum into `soul/persona.md`; persona should stay identity, personality, voice, preferences, boundaries, and behavior guidance. For a manual migration experiment, preserve backups, run the Memory Layers builder, inspect Yculth Debug Downscale / Debug Upscale Context, and only enable neural memory in replies after inspection.
 
 ## Settings
 
@@ -135,7 +157,7 @@ Old memory does not need automatic migration. Keep `soul/shortmemory.jsonl` as r
 * `settings.jsonc` : Global defaults used by every bot.
 * `global-persona.md` : Repo-level generation defaults applied to every agent model request.
 * `agents/<AGENT_NAME>/settings.jsonc` : Per-agent overrides only. Arrays replace the global array; objects merge with the global object.
-* `agents/<AGENT_NAME>/backups/` : Automatic timestamped backups created before large local overwrites such as persona reloads, memorysummary rewrites, shortmemory rewrites, and trash rewrites.
+* `agents/<AGENT_NAME>/backups/` : Automatic timestamped backups created before large local overwrites such as persona reloads, memorysum rewrites, shortmemory rewrites, and trash rewrites.
 * required per-agent overrides : `identity` and `memory_forum_channel_id`.
 * `model` : Main OpenRouter model used for character replies and creative writing.
 * `utility_model` : Free or cheap OpenRouter model used for small structured decisions like status inference and whether sleep should create a dream.
@@ -150,14 +172,15 @@ Old memory does not need automatic migration. Keep `soul/shortmemory.jsonl` as r
 * `consciousness.cleanup.move_expired_backups_to_os_trash` : When true, expired backups are moved to the operating system trash / Windows Recycle Bin. If OS trash fails, backups are left untouched.
 * `consciousness.cleanup.permanently_delete_expired_backups` : Dangerous override for permanent deletion of expired backups. The default is false; cleanup does not permanently delete unless this is explicitly enabled.
 * `memory_layers` : Disabled experimental Memory Layers / Neural Memory settings. Layer 0 is raw/original-resolution recent text derived from shortmemory; higher layers become semantic downscales such as scene interpretation, story/session memory nodes, emotional arcs, and durable truths beside the current memory system. This is the visual/debug surface for future `neural_memory`.
-* Memory Layers routing : thoughts feed stories; journals feed dreams. Private thoughts and durable journals live under `soul/consciousness/`, but current reply behavior does not use neural memory layers yet.
-* consciousness loop direction : `shortmemory` is raw recent reply context, thoughts are private first-person internal monologue generated every reply, `neural_memory` is the large semantic downscale graph, journal is durable daily first-person emotional reflection, dream is mandatory daily symbolic/emotional artifact, and memorysummary is the compact active durable memory update.
-* `consciousness_descriptors` : Human-editable artifact definitions for thought, journal, dream, dreamjournal, story, memory, memorysummary, neural memory, and reply behavior.
+* Memory Layers routing : thoughts feed stories; journals feed dreams. Private thoughts, private feelings, and durable journals live under `soul/consciousness/`, but current reply behavior does not use neural memory layers yet.
+* consciousness loop direction : `shortmemory` is raw recent reply context, thoughts are private first-person internal words generated every reply, feelings are private emotional/body/atmosphere state generated every reply, `neural_memory` is the large semantic downscale graph, journal is durable daily first-person emotional reflection, dream is mandatory daily symbolic/emotional artifact, and memorysum is the compact active durable memory update.
+* `consciousness_descriptors` : Human-editable artifact definitions for thought, feeling, journal, dream, dreamjournal, story, memory, memorysum, neural memory, and reply behavior.
 * `thought_influence_scale` : Human-editable numeric interpretation scale for future thought influence settings. This is a scale descriptor, not a separate thought-usage system.
-* thought influence controls : `journal`, `dream`, `story`, and `memorysummary_update` each have `use_thoughts` and `thought_influence`. When `use_thoughts` is false, that process does not read private thoughts. When true, the model receives the influence number plus `thought_influence_scale` and interpolates naturally between scale points.
+* thought influence controls : `journal`, `dream`, `story`, and `memorysum_update` each have `use_thoughts` and `thought_influence`. When `use_thoughts` is false, that process does not read private thoughts. When true, the model receives the influence number plus `thought_influence_scale` and interpolates naturally between scale points.
 * `conversation_history_limit` : Deprecated compatibility fallback. Prefer `recent_context_entries`.
 * `control_user_ids` : Discord user IDs allowed to run slash-command control actions. If blank, everyone can run slash-command controls.
 * `skill_aliases` : Global/local pipe command aliases. For example, the canonical `image:` command can also be called `imagegen:`, or an agent can override it to `paint:`.
+* `web_chat` : Local visitor chat settings. Start with `npm run webchat` from `discord-bot/`. The first controlled test allows only Tek and stores visitor conversations separately from Discord shortmemory.
 * common per-agent overrides : optional `enabled_skills`, Discord thread IDs, reply channel IDs, and skill-specific thread IDs such as `music_skill.music_thread_id`.
 
 ## Discord Slash Commands
@@ -183,18 +206,19 @@ Slash commands are control actions. Only users listed in `control_user_ids` can 
 * `||@agent reply||` : Has the agent continue the story from recent context. In DMs, `@agent` is optional.
 * `||@agent continue||` : Has the agent continue the story from recent context without adding the command itself to shortmemory. In DMs, `@agent` is optional.
 * `||@agent continue: instructions||` : Has the agent continue with one-time instructions. The command itself is not added to shortmemory.
+* `||▶||`, `||@agent▶||`, `||@agent▶instructions||` : Pipe emoji continue. Bare `||▶||` works in DMs and ambient reply channels; use `@agent` in shared server channels when targeting matters.
 * direct agent control : Natural text like `AgentName is...`, `AgentName has...`, or `AgentName does...` is treated as authoritative roleplay direction for that agent, similar to a softer in-scene adjustment.
 * `normal text ||@agent subtext: private text||` : Inline private subtext lets you communicate assumptions and quick persona adjustments. It is not spoken text to quote or answer directly, and it may be loosely stored later by memory updates. In DMs, `@agent` is optional.
 * `||@agent adjust: adjustment instructions||` : Redoes the previous bot reply with adjustment instructions. The bot deletes the old reply, removes that assistant shortmemory entry, and writes a replacement reply to the original user message.
-* `||@agent summarize||` : Summarizes recent shortmemory plus useful thoughts, journals, dreams, stories, and neural memory into compact `soul/memorysummary.txt`, posts a Memorysummary preview, clears temporary thought files after backing them up, and cleans adjustment audit messages. In DMs, `@agent` is optional.
-* `||@agent thought: thought prompt||` : Writes a first-person internal thought from the prompt, shortmemory, Memorysummary, and recent thoughts. Thoughts are softer than memory and can support end-of-day memory work, stories, and dreams.
-* `||@agent journal||` : Writes a private first-person journal entry from recent shortmemory, saved thoughts, neural memory if available, and Memorysummary. The journal is saved locally and only a temporary `journal saved` confirmation is posted.
+* `||@agent summarize||` : Summarizes recent shortmemory plus useful thoughts, journals, dreams, stories, and neural memory into compact `soul/memorysum.txt`, posts a Memorysum preview, clears temporary thought files after backing them up, and cleans adjustment audit messages. In DMs, `@agent` is optional.
+* `||@agent thought: thought prompt||` : Writes a first-person internal thought from the prompt, shortmemory, Memorysum, and recent thoughts. Thoughts are softer than memory and can support end-of-day memory work, stories, and dreams.
+* `||@agent journal||` : Writes a private first-person journal entry from recent shortmemory, saved thoughts, neural memory if available, and Memorysum. The journal is saved locally and only a temporary `journal saved` confirmation is posted.
 * `||@agent journal: instructions||` : Writes a private first-person journal entry using the journal descriptor plus one-time instructions.
 * `||@agent emoji||` : Posts one image from `soul/emojis/` based on mood, status, recent context, and natural-language filename meaning. In DMs, `@agent` is optional.
 * `||@agent emoji: text||` : Posts one emoji image using extra one-time mood or context guidance.
-* `||@agent story||` : Story command that writes a first-person evidence-grounded short story from saved stories, recent shortmemory, thoughts, journals, neural memory if present, and Memorysummary, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@agent` is optional.
-* `||@agent story: story prompt||` : Story command that searches saved stories, shortmemory, thoughts, journals, neural memory if present, and Memorysummary for the requested subject, then writes only what the evidence supports. Mentions of creativity, realism, poetic style, scientific detail, chaos, or numeric style values are treated as one-time natural-language guidance.
-* story recall : Normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and Memorysummary context, and let the agent answer with a focused summary or explanation without inventing unsupported details.
+* `||@agent story||` : Story command that writes a first-person evidence-grounded short story from saved stories, recent shortmemory, thoughts, journals, neural memory if present, and Memorysum, then saves it in `soul/stories/` and posts it to the `stories` memory forum post. In DMs, `@agent` is optional.
+* `||@agent story: story prompt||` : Story command that searches saved stories, shortmemory, thoughts, journals, neural memory if present, and Memorysum for the requested subject, then writes only what the evidence supports. Mentions of creativity, realism, poetic style, scientific detail, chaos, or numeric style values are treated as one-time natural-language guidance.
+* story recall : Normal messages that ask about saved stories search `soul/stories/`, combine that with shortmemory and Memorysum context, and let the agent answer with a focused summary or explanation without inventing unsupported details.
 * natural music intent : If `music` is enabled and a message matches `intent_triggers.music`, the bot asks a small AI intent question. If the answer says the user wants music now, it posts a formatted music link instead of a normal reply.
 * `||@agent music||` : Optional `music` skill. Infers the latest music request from shortmemory, posts a formatted music link, and archives it to the configured music thread. The `:musical_note:` reaction does the same thing without needing command text. In DMs, `@agent` is optional.
 * `||@agent music: description or link||` : Optional `music` skill with direct input. Can use a music description, a specific music link, or `Artist - Song | https://...`.
@@ -251,36 +275,38 @@ Each agent keeps its own secrets under `agents/<AGENT_NAME>/secrets/`.
 Each normal reply sends an assembled OpenRouter request instead of only `soul/persona.md`.
 
 * `soul/persona.md` : Identity and behavior anchor.
-* `global-persona.md` : Shared behavior/style defaults used by replies, dreams, journals, stories, memorysummary updates, status updates, and text transformation.
+* `global-persona.md` : Shared behavior/style defaults used by replies, dreams, journals, stories, memorysum updates, status updates, and text transformation.
 * `soul/origin.md` : Optional full lore dump for origin/backstory material. On startup, the bot mirrors non-empty text from the Discord `origin` memory post into this file. This is editable source material and is not sent in every model request.
 * `soul/origin_summary.md` : Optional compact origin summary generated from `soul/origin.md`. If present and non-empty, it is sent as hidden `Origin Summary` context.
-* `soul/memorysummary.txt` : Durable compact memory sent as hidden context when present. It uses explicit `# Past`, `# Present`, and `# Future / Plans` sections.
+* `soul/memorysum.txt` : Durable compact memory sent as hidden context when present. It uses explicit `# Past`, `# Present`, and `# Future / Plans` sections.
 * `soul/shortmemory.jsonl` : Recent local shortmemory lines sent as hidden context.
-* `soul/consciousness/thoughts/` : Private first-person thought files created by `||@agent thought: ...||` and automatic pre-reply thought generation. They are interpretations and emotional reflections, less stable than shortmemory, not posted publicly, and useful for stories, dreams, and end-of-day memory work. Thoughts are temporary and are cleared after a successful memory cycle backs them up and absorbs useful material into memory entries and memorysummary.
+* `soul/consciousness/thoughts/` : Private first-person thought files created by `||@agent thought: ...||` and automatic pre-reply thought generation. They are interpretations and emotional reflections, less stable than shortmemory, not posted publicly, and useful for stories, dreams, and end-of-day memory work. Thoughts are temporary and are cleared after a successful memory cycle backs them up and absorbs useful material into memory entries and memorysum.
+* `soul/consciousness/feelings/` : Private first-person feeling files created by automatic pre-reply feeling generation. Feelings focus on mood, body state, atmosphere, tension, comfort, fatigue, instinct, and emotional weather beneath the visible reply. They are not posted publicly.
+* `soul/consciousness/status-display.md` : Rich markdown current-state display generated from status, recent context, thoughts, and feelings. It transforms private artifacts into atmosphere without quoting raw private thoughts or feelings.
 * `soul/consciousness/journals/` : Durable first-person emotional journal files created by `||@agent journal||` and future daily cycles. Journals are private local memory, are not dumped into chat, are not cleared by ordinary memory cleanup, and are intended to feed dreams and memory updates later.
 * `soul/consciousness/dream-journals/` : Durable private interpretations of existing dreams. Dream journals analyze meaning and support later memory work; they do not create new dream events.
-* automatic thoughts : Generated visible replies first create a private first-person thought and save it silently. These thoughts are temporary and are cleared only after successful summarization has a chance to absorb useful material.
+* automatic thoughts and feelings : Generated visible replies first create a private first-person thought and private first-person feeling, then save them silently. These artifacts are not public replies. Thoughts are temporary and cleared only after successful summarization has a chance to absorb useful material; feelings currently feed rich status display and future emotional memory work.
 * `soul/raw/` : Latest OpenRouter request split into readable text parts. This is the canonical raw inspection surface.
 * `soul/raw.txt` : Concatenated compatibility copy of the latest `soul/raw/` parts for slash-command download and older tools.
 * `soul/trash/shortmemory-trash.jsonl` : Recoverable user-curated trash for shortmemory entries. Trashed entries are not sent to OpenRouter, memory updates, story recall, or dreams.
 * `shortmemory` Discord forum post : Mirrored shortmemory authority when available. If `shortmemory_thread_id` is blank, the bot finds this post from the memory forum.
 * `help` Discord forum post : Clean command reference for slash commands, pipe commands, and delete reaction behavior.
-* `Memorysummary` Discord forum post : Receives a latest Memorysummary preview/notice from `||@agent summarize||`. The full memory is only stored in the local txt file because Discord posts have text limits.
+* `Memorysum` Discord forum post : Receives a latest Memorysum preview/notice from `||@agent summarize||`. The full memory is only stored in the local txt file because Discord posts have text limits.
 * `adjustments` Discord forum post : Receives an audit entry whenever `||@agent adjust: ...||` replaces a reply.
 * `status` Discord forum post : Receives a status dump whenever status changes, including AI-inferred status changes.
 * `discord_status_update` : Controls which enabled skills may provide optional hints for natural-language status text after summarization. Unknown or unavailable skill names are ignored.
 * `seconds_before_reply` : Tupper/delete-race hack. The bot waits this many seconds before a normal OpenRouter reply, re-checks that the source message still exists, and skips the model call if the message was deleted.
-* `summarization_settings.summary_policy` : Summarization guidance. Remember durable per-user context when it improves future replies, but do not save every passing detail. Memorysummary keeps `# Past`, `# Present`, and `# Future / Plans`.
+* `summarization_settings.summary_policy` : Summarization guidance. Remember durable per-user context when it improves future replies, but do not save every passing detail. Memorysum keeps `# Past`, `# Present`, and `# Future / Plans`.
 * `origin_summary_settings.summary_policy` : Origin summary guidance. This controls how `soul/origin.md` becomes `soul/origin_summary.md`, with more emphasis on memorable lore, triggers, voice anchors, and roleplay hooks.
 * `natural_time_settings` : Controls natural roleplay time inference before normal replies. `minimum_confidence` prevents weak guesses, `vague_max_minutes` caps loose phrases like later, and `explicit_max_minutes` caps direct phrases like three days later.
 * `agent_time_debug` : Visible reply header for tuning roleplay time. Leave it off for normal roleplay; when enabled, generated model replies start with current in-game time, how much time advanced, and optionally the reason. Command replies, errors, music links, and dream links do not use the header.
 * `summarization_settings.daily_summary_entries` : Number of recent shortmemory entries used for the daily sleep/dream memory pass. This can be much higher than `recent_context_entries` because it is meant to run about once per sleep cycle, not on every reply.
 * `summarization_settings.summarize_on_sleep` : If true, entering sleep runs daily summarization quietly as part of the sleep/dream memory cycle.
-* automatic consciousness cycle : Runs when user interaction has added about `consciousness_cycle.cycle_hours * 60 * 60 / consciousness_cycle.seconds_per_message` new memory entries since the last cycle. The default target is 288 entries. The cycle refreshes neural memory layer 0, generates a journal, generates a dream, updates Memorysummary from shortmemory plus useful thoughts, journals, dreams, stories, and neural memory, backs up and clears temporary thoughts, then ages shortmemory trash. Journals, dreams, stories, and Memorysummary persist.
-* backup cleanup : After successful memory maintenance, only old files directly under `agents/<AGENT_NAME>/backups/` are eligible for cleanup. Active soul files, persona, origin, settings, shortmemory, memorysummary, memory entries, journals, dreams, dream journals, stories, and neural memory files are never cleanup targets.
-* cycle order : refresh `soul/memory-layers/layer-0.jsonl`, generate journal, generate dream, update Memorysummary summary, back up thoughts, clear temporary thoughts.
+* automatic consciousness cycle : Runs when user interaction has added about `consciousness_cycle.cycle_hours * 60 * 60 / consciousness_cycle.seconds_per_message` new memory entries since the last cycle. The default target is 288 entries. The cycle refreshes neural memory layer 0, generates a journal, generates a dream, updates Memorysum from shortmemory plus useful thoughts, journals, dreams, stories, and neural memory, backs up and clears temporary thoughts, then ages shortmemory trash. Journals, dreams, stories, and Memorysum persist.
+* backup cleanup : After successful memory maintenance, only old files directly under `agents/<AGENT_NAME>/backups/` are eligible for cleanup. Active soul files, persona, origin, settings, shortmemory, memorysum, memory entries, journals, dreams, dream journals, stories, and neural memory files are never cleanup targets.
+* cycle order : refresh `soul/memory-layers/layer-0.jsonl`, generate journal, generate dream, update Memorysum summary, back up thoughts, clear temporary thoughts.
 * automatic Discord status update : When `discordstatusupdate` is enabled, successful summarization writes a concise human-readable status into `soul/status.json` and mirrors it to the `status` Discord forum post.
-* `dream_settings` : Controls the dream part of the core time system. `||@agent dream||` requires `soul/status.json` mode `sleeping`, reads configured source files, thoughts, journals, previous dreams, neural memory files if present, and `soul/dream_summary.md`, writes a dream draft into `soul/dreams`, and lets summarization later decide what dream material belongs in Memorysummary. Extra chaos, creativity, realism, symbolism, or style should be expressed as natural-language dream command instructions rather than global settings.
+* `dream_settings` : Controls the dream part of the core time system. `||@agent dream||` requires `soul/status.json` mode `sleeping`, reads configured source files, thoughts, journals, previous dreams, neural memory files if present, and `soul/dream_summary.md`, writes a dream draft into `soul/dreams`, and lets summarization later decide what dream material belongs in Memorysum. Extra chaos, creativity, realism, symbolism, or style should be expressed as natural-language dream command instructions rather than global settings.
 * `||@agent passtimeminutes: 60||` : Adds a one-shot hidden time passage block to the next normal reply.
 * `||@agent passtimehours: 8||` : Adds a longer one-shot hidden time passage block to the next normal reply.
 * sleep timer : When status changes to `sleeping`, `utility_model` estimates `sleep_planned_minutes` and stores `sleep_remaining_minutes` in `soul/status.json`. Passing time counts that value down. Extra pass-time context can adjust the timer; interruptions reduce it faster, restful protection can extend it. If it reaches zero or below, status becomes `awake` and `woke_minutes_ago` records how long ago the agent woke.
@@ -296,7 +322,7 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 * `soul/status.json` : Current agent state used by core replies and status-aware skills. `mode` is the primary state; `status` contains boolean flags. Current modes are `awake`, `sleepy`, `sleeping`, `dreaming`, and `away`. `away` blocks normal replies.
 * `soul/dreams/` : Dream output folder used by the pipe dream command.
 * `soul/dream_summary.md` : Compact summary of recurring dream symbols, fears, wishes, settings, and motifs. It is dream memory, not factual waking memory.
-* `soul/stories/` : Story output folder used by `||@agent story||`. Story generation and recall search `.md` and `.txt` files here, then combine relevant story text with shortmemory, thoughts, journals, neural memory files if present, and Memorysummary as evidence. Extra creativity, realism, scientific detail, chaos, or style should be expressed as natural-language story command instructions rather than global settings.
+* `soul/stories/` : Story output folder used by `||@agent story||`. Story generation and recall search `.md` and `.txt` files here, then combine relevant story text with shortmemory, thoughts, journals, neural memory files if present, and Memorysum as evidence. Extra creativity, realism, scientific detail, chaos, or style should be expressed as natural-language story command instructions rather than global settings.
 * `soul/art/` : Placeholder content folder for future art context.
 * `soul/emojis/` : Emoji image folder used by `||@agent emoji||`. Filenames are interpreted naturally and cross-referenced with mood/status when choosing which image to post.
 * `planned_skill_settings.tts` : Older placeholder for normal expressive voice output. Use `speak_skill` for implemented runtime TTS and voice-training hooks.
@@ -310,5 +336,5 @@ Each normal reply sends an assembled OpenRouter request instead of only `soul/pe
 
 Summarization is core memory infrastructure, not an optional skill.
 
-* `||@agent summarize||` : Summarize recent shortmemory plus useful thoughts, journals, dreams, stories, neural memory, and adjustment history into `soul/memorysummary.txt`, then back up and clear temporary thoughts and clean adjustment audit messages.
-* review memory result : Check that useful adjustment lessons made it into memory entries and memorysummary.
+* `||@agent summarize||` : Summarize recent shortmemory plus useful thoughts, journals, dreams, stories, neural memory, and adjustment history into `soul/memorysum.txt`, then back up and clear temporary thoughts and clean adjustment audit messages.
+* review memory result : Check that useful adjustment lessons made it into memory entries and memorysum.

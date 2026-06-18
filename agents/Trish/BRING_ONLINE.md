@@ -10,7 +10,7 @@
 
 * `settings.jsonc` : Trish's local overrides.
 * `soul/persona.md` : Trish's identity and voice.
-* `soul/memorysummary.txt` : Durable memory.
+* `soul/memorysum.txt` : Durable memory.
 * `soul/shortmemory.jsonl` : Recent memory cache.
 * `soul/status.json` : Current raw state.
 * `secrets/discord_token.txt` : Trish's Discord app token.

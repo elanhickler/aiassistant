@@ -10,7 +10,7 @@
 
 * `settings.jsonc` : Stardust's local overrides.
 * `soul/persona.md` : Stardust's identity and voice.
-* `soul/memorysummary.txt` : Durable memory.
+* `soul/memorysum.txt` : Durable memory.
 * `soul/shortmemory.jsonl` : Recent memory cache.
 * `soul/status.json` : Current raw state.
 * `secrets/discord_token.txt` : Stardust's Discord app token.

@@ -127,15 +127,15 @@ The current Discord runtime includes up to `planned_skill_settings.visualexpress
 
 ## Summary Interaction
 
-Memorysummary may mention visual memory only when the visual changes durable continuity.
+Memorysum may mention visual memory only when the visual changes durable continuity.
 
-Good Memorysummary fact:
+Good Memorysum fact:
 
 ```text
 The agent's recurring dream symbol is a glass hallway lit by blue emergency lights.
 ```
 
-Bad Memorysummary fact:
+Bad Memorysum fact:
 
 ```text
 There is an image file named 2026-06-13-example.png.
@@ -154,6 +154,6 @@ Promoted `soul/art/` and `soul/emojis/` files should have stronger recall weight
 ## Boundaries
 
 * Do not load every generated image into context.
-* Do not summarize every generated image into Memorysummary.
+* Do not summarize every generated image into Memorysum.
 * Do not store private prompt internals in visual memory summaries.
 * Do not rely on Discord as the only record of visual memory.

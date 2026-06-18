@@ -1,3 +1,4 @@
+import { access } from "node:fs/promises";
 import { createCodeSkill } from "./code.js";
 import { createDiscordStatusUpdateSkill } from "./discordstatusupdate.js";
 import { createDreamJournalSkill } from "./dreamjournal.js";
@@ -91,17 +92,40 @@ export function skillRegistrySnapshot() {
   };
 }
 
-export function createRuntimeSkills(enabledSkills, context) {
+async function localSkillFactory(skillName) {
+  const name = String(skillName || "").trim().toLowerCase();
+  if (!name) return null;
+
+  const localSkillUrl = new URL(`../local-skills/${name}.js`, import.meta.url);
+  try {
+    await access(localSkillUrl);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+
+  const module = await import(localSkillUrl.href);
+  const factory = module.createSkill || module.default;
+  if (typeof factory !== "function") {
+    throw new Error(`Local skill ${name} must export createSkill(context) or a default factory function.`);
+  }
+  return factory;
+}
+
+export async function createRuntimeSkills(enabledSkills, context) {
+  const optionalSkills = [];
+  for (const skillName of normalizeEnabledSkillNames(enabledSkills)) {
+    const factory = optionalSkillFactories.get(skillName) || await localSkillFactory(skillName);
+    if (skillImplementationStatus(skillName) === "planned") {
+      throw new Error(`Skill is planned but not implemented yet: ${skillName}`);
+    }
+    if (!factory) throw new Error(`Unknown enabled skill: ${skillName}`);
+    optionalSkills.push(factory(context));
+  }
+
   return [
     ...coreSkillFactories.map((factory) => factory(context)),
-    ...normalizeEnabledSkillNames(enabledSkills).map((skillName) => {
-      const factory = optionalSkillFactories.get(skillName);
-      if (skillImplementationStatus(skillName) === "planned") {
-        throw new Error(`Skill is planned but not implemented yet: ${skillName}`);
-      }
-      if (!factory) throw new Error(`Unknown enabled skill: ${skillName}`);
-      return factory(context);
-    }),
+    ...optionalSkills,
   ];
 }
 

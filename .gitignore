@@ -8,8 +8,11 @@ agents/*/backups/
 agents/*/regenerated/
 
 discord-bot/regenerated/
+discord-bot/local-skills/
 discord-bot/node_modules/
 discord-bot/npm-debug.log*
+
+web-chat/visitors/
 
 *.bak
 *.log

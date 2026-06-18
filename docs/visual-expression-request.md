@@ -24,7 +24,7 @@ Use `docs/visual-provider-contract.md` when a request is submitted to a generato
     "message_id": "",
     "channel_id": "",
     "shortmemory_ids": [],
-    "Memorysummary_sections": [],
+    "Memorysum_sections": [],
     "story_files": [],
     "dream_files": [],
     "reference_ids": []
@@ -94,7 +94,7 @@ Use `docs/visual-prompt-assembly.md` for the full prompt assembly rules.
 * current message and reply intent
 * status, including sleep or dream state
 * relevant shortmemory
-* relevant Memorysummary
+* relevant Memorysum
 * selected story or dream files
 * selected visual reference IDs
 
@@ -114,7 +114,7 @@ The note mirrors request status, prompt text, style preset, size, variant data, 
 
 Only send focused provider input to image generation.
 
-Do not send full shortmemory, full Memorysummary, secret values, local settings, or raw Discord message dumps to the provider.
+Do not send full shortmemory, full Memorysum, secret values, local settings, or raw Discord message dumps to the provider.
 
 Use `docs/visual-provider-contract.md` for provider input, output, and error handling.
 Use `docs/visual-variants.md` when a request asks for more than one intentional variant.

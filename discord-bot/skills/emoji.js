@@ -92,10 +92,15 @@ function chooseStatusEmoji(candidates, status, commandText) {
   }) || null;
 }
 
-function stableDiscordAttachmentUrl(url) {
+function discordEmojiDisplayUrl(url, size = 256) {
   const text = String(url || "").trim();
   const match = text.match(/^(https:\/\/cdn\.discordapp\.com\/attachments\/\d+\/\d+\/[^?]+?\.(?:png|jpe?g|webp|gif))/i);
-  return match?.[1] || text;
+  const stableUrl = match?.[1] || text;
+  if (!/^https:\/\/cdn\.discordapp\.com\/attachments\//i.test(stableUrl)) return stableUrl;
+
+  const proxiedUrl = stableUrl.replace(/^https:\/\/cdn\.discordapp\.com\//i, "https://media.discordapp.net/");
+  const separator = proxiedUrl.includes("?") ? "&" : "?";
+  return `${proxiedUrl}${separator}width=${size}&height=${size}`;
 }
 
 export function createEmojiSkill(context) {
@@ -270,7 +275,7 @@ export function createEmojiSkill(context) {
       return "";
     });
     if (hostedUrl) {
-      return message.reply(stableDiscordAttachmentUrl(hostedUrl));
+      return message.reply(discordEmojiDisplayUrl(hostedUrl));
     }
     return message.reply({ files: [{ attachment: selected.path, name: selected.name }] });
   }

@@ -12,7 +12,7 @@ Rena is a new aiassistant agent.
 * `soul/origin.md` : Optional full lore dump for Rena's origin/backstory. On startup, the bot mirrors non-empty text from the Discord `origin` memory post into this file. This is editable source material and is not sent in every model request.
 * `soul/origin_summary.md` : Optional compact origin summary generated from `soul/origin.md`. If non-empty, it is sent as hidden Origin Summary context.
 * `soul/visual-references/` : Downloaded or manually collected visual references for future visual expression work. Keep source and attribution notes beside internet downloads.
-* `soul/memorysummary.txt` : Compact active durable memory sent to the model. Starts mostly empty.
+* `soul/memorysum.txt` : Compact active durable memory sent to the model. Starts mostly empty.
 * `soul/shortmemory.jsonl` : Recent memory cache. Starts empty.
 * `soul/consciousness/thoughts/` : Private first-person internal thought files. Thoughts are softer than shortmemory, are not posted publicly, and can feed stories, dreams, and end-of-day memory work.
 * `soul/consciousness/journals/` : Durable first-person emotional journal files. Journals are not cleared by ordinary cleanup and can feed dreams and memory updates later.
@@ -34,5 +34,5 @@ Rena is a new aiassistant agent.
 * `||@rena state||` : Show raw state.
 * `||@rena status||` : Generate a natural-language status update.
 * `||@rena status: text||` : Generate a natural-language status update from suggested text.
-* `||@rena summarize||` : Summarize recent shortmemory into Memorysummary.
-* `||@rena thought: thought prompt||` : Write a first-person internal thought from the prompt, shortmemory, Memorysummary, and recent thoughts.
+* `||@rena summarize||` : Summarize recent shortmemory into Memorysum.
+* `||@rena thought: thought prompt||` : Write a first-person internal thought from the prompt, shortmemory, Memorysum, and recent thoughts.

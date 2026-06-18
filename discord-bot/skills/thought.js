@@ -21,6 +21,14 @@ async function readOptionalTextFile(filePath) {
   });
 }
 
+async function readMemorySumText(agentFolder, memorySumPath) {
+  const text = await readOptionalTextFile(memorySumPath);
+  if (text.trim()) return text;
+  const legacyMemorySum = await readOptionalTextFile(`${agentFolder}/soul/memorysummary.txt`);
+  if (legacyMemorySum.trim()) return legacyMemorySum;
+  return readOptionalTextFile(`${agentFolder}/soul/longmemory.txt`);
+}
+
 export function createThoughtSkill(context) {
   const {
     agentFolder,
@@ -50,7 +58,7 @@ export function createThoughtSkill(context) {
 
     const recentEntries = (await readShortMemoryEntries(shortMemoryPath)).slice(-thoughtWindowEntries);
     const recentShortMemory = shortMemoryEntriesToSource(recentEntries);
-    const existingMemorySummary = await readOptionalTextFile(longMemoryPath);
+    const existingMemorySum = await readMemorySumText(agentFolder, longMemoryPath);
     const recentThoughts = await listRecentThoughts();
     const messages = [
       {
@@ -63,7 +71,7 @@ export function createThoughtSkill(context) {
           thoughtInstruction,
           "This is not a visible reply, not a public message, and not a story. It is temporary private working memory.",
           "Thoughts are less stable than shortmemory. They can support end-of-day summarization, stories, and dreams later, but they are not hard facts by themselves.",
-          "Use the prompt, recent shortmemory, memorysummary, and recent thoughts as evidence.",
+          "Use the prompt, recent shortmemory, memorysum, and recent thoughts as evidence.",
           "Do not write as an outside narrator. Use first person: I think, I feel, I notice, I wonder.",
           "Do not address the user directly unless the thought naturally includes what I want to say or avoid saying.",
           "Do not claim certainty when the evidence is thin.",
@@ -77,8 +85,8 @@ export function createThoughtSkill(context) {
           "# Thought Prompt",
           thoughtPrompt,
           "",
-          "# Memorysummary",
-          existingMemorySummary || "(empty)",
+          "# Memorysum",
+          existingMemorySum || "(empty)",
           "",
           "# Recent Shortmemory",
           recentShortMemory || "(empty)",
@@ -135,7 +143,7 @@ export function createThoughtSkill(context) {
     name: "thought",
     getPipeHelp({ agentCommandName }) {
       return [
-        [`||${agentCommandName} thought: text||`, "Write a private first-person internal thought from the prompt, recent memory, memorysummary, and recent thoughts."],
+        [`||${agentCommandName} thought: text||`, "Write a private first-person internal thought from the prompt, recent memory, memorysum, and recent thoughts."],
       ];
     },
     async handlePipeCommand(command, message) {

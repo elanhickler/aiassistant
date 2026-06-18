@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memory Layer Graph Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b0b;
+      --panel: #0d1414;
+      --panel-2: #141c1c;
+      --text: #d8d3c8;
+      --muted: #9fa6a1;
+      --line: #263333;
+      --accent: #7dd3fc;
+      --active: #86efac;
+      --warn: #facc15;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Segoe UI, Arial, sans-serif;
+      font-size: 14px;
+    }
+
+    button,
+    input,
+    select,
+    label {
+      font: inherit;
+    }
+
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100vh;
+      gap: 10px;
+      padding: 10px;
+    }
+
+    .toolbar,
+    .main,
+    .inspector {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 7px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      min-height: 54px;
+    }
+
+    .title {
+      font-weight: 800;
+      font-size: 20px;
+      min-width: 250px;
+    }
+
+    .hint {
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .button {
+      border: 1px solid #3b4a4a;
+      background: #182020;
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .button:hover {
+      border-color: var(--accent);
+    }
+
+    .button.primary {
+      border-color: #2f765e;
+      background: #123228;
+    }
+
+    .button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .file {
+      max-width: 260px;
+    }
+
+    .select {
+      min-width: 210px;
+      border: 1px solid #3b4a4a;
+      background: #182020;
+      color: var(--text);
+      border-radius: 6px;
+      padding: 8px 9px;
+    }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #3b4a4a;
+      background: #101818;
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: var(--muted);
+      user-select: none;
+    }
+
+    .main {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    .canvas-wrap {
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .empty {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 22px;
+      font-weight: 800;
+      pointer-events: none;
+    }
+
+    .inspector {
+      border-width: 0 0 0 1px;
+      border-radius: 0;
+      padding: 14px;
+      overflow: auto;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin: 12px 0 4px;
+    }
+
+    .value {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      border-radius: 5px;
+      padding: 8px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .value.warning {
+      border-color: #6b5622;
+      color: #f5d78b;
+    }
+
+    .small-button {
+      margin-top: 8px;
+      padding: 6px 9px;
+      font-size: 12px;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .badge {
+      border: 1px solid var(--line);
+      background: #101818;
+      border-radius: 999px;
+      color: var(--muted);
+      padding: 3px 8px;
+      font-size: 12px;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 6px;
+      max-height: 170px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      background: #0b1111;
+      border-radius: 5px;
+      padding: 8px;
+    }
+
+    .timeline-row {
+      display: grid;
+      grid-template-columns: 56px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .timeline-time {
+      color: #8ea39e;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .timeline-text {
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
+
+    .timeline-row.warn .timeline-text {
+      color: #f5d78b;
+    }
+
+    .timeline-row.good .timeline-text {
+      color: #9fe2c0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="toolbar">
+      <div class="title">Memory Graph</div>
+      <input class="file" id="fileInput" type="file" accept=".json,application/json">
+      <select class="select" id="animationSelect" disabled></select>
+      <button class="button primary" id="playButton" disabled>Debug Downscale</button>
+      <label class="toggle"><input id="liveToggle" type="checkbox" disabled> Live</label>
+      <button class="button" id="fitButton" disabled>Fit</button>
+      <div class="hint" id="statusText">Load agents/&lt;Agent&gt;/soul/memory-layers/graph.json</div>
+    </div>
+
+    <div class="main">
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="graphCanvas"></canvas>
+        <div class="empty" id="emptyState">No graph loaded</div>
+      </div>
+      <aside class="inspector">
+        <h2 id="nodeTitle">Inspector</h2>
+        <div class="badge-row" id="badges"></div>
+        <div class="label">Compressed</div>
+        <div class="value" id="compressed">Select a node to inspect it.</div>
+        <div class="label">Upscale Direction</div>
+        <div class="value" id="upscale"></div>
+        <div class="label">Do Not Invent</div>
+        <div class="value" id="bounds"></div>
+        <div class="label">Source</div>
+        <div class="value" id="source"></div>
+        <button class="button small-button" id="copyContextButton" disabled>Copy Debug Upscale Context</button>
+        <div class="label">Debug Upscale Context</div>
+        <div class="value" id="contextPreview"></div>
+        <div class="label">Graph Run</div>
+        <div class="value" id="graphRun">No graph loaded.</div>
+        <div class="label">Animation Step</div>
+        <div class="value" id="animationStep">No animation running.</div>
+        <div class="label">Event Stream</div>
+        <div class="timeline" id="eventStream"></div>
+        <div class="label">Graph Validation</div>
+        <div class="value warning" id="validationWarnings">No graph loaded.</div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("graphCanvas");
+    const wrap = document.getElementById("canvasWrap");
+    const context = canvas.getContext("2d");
+    const fileInput = document.getElementById("fileInput");
+    const animationSelect = document.getElementById("animationSelect");
+    const playButton = document.getElementById("playButton");
+    const liveToggle = document.getElementById("liveToggle");
+    const fitButton = document.getElementById("fitButton");
+    const statusText = document.getElementById("statusText");
+    const emptyState = document.getElementById("emptyState");
+    const nodeTitle = document.getElementById("nodeTitle");
+    const badges = document.getElementById("badges");
+    const compressed = document.getElementById("compressed");
+    const upscale = document.getElementById("upscale");
+    const bounds = document.getElementById("bounds");
+    const source = document.getElementById("source");
+    const contextPreview = document.getElementById("contextPreview");
+    const graphRun = document.getElementById("graphRun");
+    const animationStep = document.getElementById("animationStep");
+    const eventStream = document.getElementById("eventStream");
+    const validationWarnings = document.getElementById("validationWarnings");
+    const copyContextButton = document.getElementById("copyContextButton");
+
+    let graph = null;
+    let selectedNodeId = "";
+    let animation = null;
+    let animationStartedAt = 0;
+    let hoverNodeId = "";
+    let graphUrl = "";
+    let graphSource = "";
+    let liveTimer = 0;
+    let eventLog = [];
+    let animationStepKey = "";
+    let graphIndex = {
+      nodesById: new Map(),
+      screenPositions: new Map(),
+    };
+
+    function rebuildGraphIndex() {
+      const nodesById = new Map();
+      for (const node of graph?.nodes || []) {
+        if (node.id) nodesById.set(node.id, node);
+      }
+      graphIndex = {
+        nodesById,
+        screenPositions: new Map(),
+      };
+    }
+
+    function resizeCanvas() {
+      const rect = wrap.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * scale));
+      canvas.height = Math.max(1, Math.floor(rect.height * scale));
+      context.setTransform(scale, 0, 0, scale, 0, 0);
+      graphIndex.screenPositions = new Map();
+      draw();
+    }
+
+    function nodePosition(node) {
+      const rect = canvas.getBoundingClientRect();
+      const marginX = 70;
+      const marginY = 54;
+      const visual = node.visual || {};
+      return {
+        x: marginX + Number(visual.x || 0.5) * Math.max(1, rect.width - marginX * 2),
+        y: marginY + Number(visual.y || 0.5) * Math.max(1, rect.height - marginY * 2),
+        r: Math.max(5, Number(visual.radius || 8)),
+      };
+    }
+
+    function nodeById(id) {
+      return graphIndex.nodesById.get(id) || null;
+    }
+
+    function nodePositionById(nodeId) {
+      const cached = graphIndex.screenPositions.get(nodeId);
+      if (cached) return cached;
+      const node = nodeById(nodeId);
+      if (!node) return null;
+      const position = nodePosition(node);
+      graphIndex.screenPositions.set(nodeId, position);
+      return position;
+    }
+
+    function debugContextForNode(node) {
+      if (!node) return "";
+      return [
+        "# Debug Upscale Context Preview",
+        `node_id: ${node.id}`,
+        `layer: ${node.layer} (${node.layer_name || ""})`,
+        `kind: ${node.kind || ""}`,
+        `confidence: ${node.confidence ?? ""}`,
+        `source: ${node.source || ""}`,
+        "",
+        "compressed:",
+        node.compressed || "(empty)",
+        "",
+        "upscale_direction:",
+        node.upscale_direction || "(not recorded)",
+        "",
+        "do_not_invent:",
+        node.do_not_invent || "(not recorded)",
+      ].join("\n");
+    }
+
+    function formatGraphRun() {
+      if (!graph) return "No graph loaded.";
+      const run = graph.graph_run || {};
+      const layerLines = (run.layer_stats || graph.rows || []).map((row) => {
+        const saved = row.saved_nodes ?? row.node_count ?? 0;
+        const preview = row.preview_nodes ?? 0;
+        const range = row.timestamp_start || row.timestamp_end
+          ? `, ${row.timestamp_start || "?"} to ${row.timestamp_end || "?"}`
+          : "";
+        return `layer ${row.layer}: ${row.layer_name || "Layer"}: ${saved} saved, ${preview} preview${range}`;
+      });
+      return [
+        `agent: ${graph.agent || "(unknown)"}`,
+        `generated_at: ${run.generated_at || graph.generated_at || "(unknown)"}`,
+        `saved_nodes: ${run.saved_nodes ?? (graph.nodes || []).filter((node) => !node.preview_only).length}`,
+        `preview_nodes: ${run.preview_nodes ?? (graph.nodes || []).filter((node) => node.preview_only).length}`,
+        `saved_edges: ${run.saved_edges ?? (graph.edges || []).length}`,
+        `preview_edges: ${run.preview_edges ?? (graph.preview_edges || []).length}`,
+        `animations: ${run.animation_count ?? (graph.preview_animations || []).length}`,
+        `compression_ratio: ${graph.compression_ratio ?? "(unknown)"}`,
+        "",
+        ...layerLines,
+      ].join("\n");
+    }
+
+    function resetInspector(message = "Select a node to inspect it.") {
+      selectedNodeId = "";
+      nodeTitle.textContent = "Inspector";
+      badges.innerHTML = "";
+      compressed.textContent = message;
+      upscale.textContent = "";
+      bounds.textContent = "";
+      source.textContent = "";
+      contextPreview.textContent = "";
+      copyContextButton.disabled = true;
+    }
+
+    function validateGraph(candidate) {
+      const warnings = [];
+      if (!candidate || typeof candidate !== "object") return ["Graph is not an object."];
+      if (candidate.schema !== "aiassistant.memory-layer-graph.v1") {
+        warnings.push(`Unexpected schema: ${candidate.schema || "(missing)"}`);
+      }
+      if (!Array.isArray(candidate.rows)) warnings.push("Missing rows array.");
+      if (!Array.isArray(candidate.nodes)) warnings.push("Missing nodes array.");
+      if (!Array.isArray(candidate.edges)) warnings.push("Missing edges array.");
+      if (!Array.isArray(candidate.preview_edges)) warnings.push("Missing preview_edges array.");
+      if (!Array.isArray(candidate.preview_animations)) warnings.push("Missing preview_animations array.");
+      if (candidate.graph_run && typeof candidate.graph_run !== "object") {
+        warnings.push("graph_run exists but is not an object.");
+      }
+      if (candidate.graph_run?.layer_stats && !Array.isArray(candidate.graph_run.layer_stats)) {
+        warnings.push("graph_run.layer_stats exists but is not an array.");
+      }
+      const ids = new Set();
+      for (const [index, node] of (candidate.nodes || []).entries()) {
+        if (!node.id) warnings.push(`Node ${index} is missing id.`);
+        if (ids.has(node.id)) warnings.push(`Duplicate node id: ${node.id}`);
+        ids.add(node.id);
+        if (!node.visual) warnings.push(`Node ${node.id || index} has no visual layout hints.`);
+        if (!("compressed" in node)) warnings.push(`Node ${node.id || index} has no compressed text.`);
+        if (!("do_not_invent" in node)) warnings.push(`Node ${node.id || index} has no do_not_invent boundary.`);
+      }
+      for (const edge of [...(candidate.edges || []), ...(candidate.preview_edges || [])]) {
+        if (edge.from && !ids.has(edge.from)) warnings.push(`Edge source is missing: ${edge.from}`);
+        if (edge.to && !ids.has(edge.to)) warnings.push(`Edge target is missing: ${edge.to}`);
+      }
+      for (const [index, stat] of (candidate.graph_run?.layer_stats || []).entries()) {
+        if (!Number.isFinite(Number(stat.layer))) warnings.push(`graph_run.layer_stats ${index} is missing layer.`);
+        if (!("saved_nodes" in stat)) warnings.push(`graph_run.layer_stats ${index} is missing saved_nodes.`);
+        if (!("preview_nodes" in stat)) warnings.push(`graph_run.layer_stats ${index} is missing preview_nodes.`);
+      }
+      if ((candidate.nodes || []).length === 0) warnings.push("Graph has no memory nodes yet.");
+      return warnings;
+    }
+
+    function setValidationWarnings(warnings) {
+      validationWarnings.textContent = warnings.length
+        ? warnings.slice(0, 18).join("\n")
+        : "Graph looks usable.";
+    }
+
+    function renderEventStream() {
+      eventStream.innerHTML = "";
+      for (const item of eventLog.slice(0, 14)) {
+        const row = document.createElement("div");
+        row.className = `timeline-row ${item.kind || ""}`.trim();
+        const time = document.createElement("div");
+        time.className = "timeline-time";
+        time.textContent = item.time;
+        const text = document.createElement("div");
+        text.className = "timeline-text";
+        text.textContent = item.text;
+        row.append(time, text);
+        eventStream.appendChild(row);
+      }
+    }
+
+    function addEvent(text, kind = "") {
+      const time = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      eventLog.unshift({ time, text, kind });
+      eventLog = eventLog.slice(0, 30);
+      renderEventStream();
+    }
+
+    function showLoadError(error) {
+      stopLiveReload();
+      liveToggle.checked = false;
+      liveToggle.disabled = true;
+      playButton.disabled = true;
+      animationSelect.disabled = true;
+      fitButton.disabled = true;
+      statusText.textContent = `Failed to load graph: ${error.message}`;
+      setValidationWarnings([error.message]);
+      graphRun.textContent = "No graph loaded.";
+      resetInspector("Graph failed to load.");
+      emptyState.style.display = "grid";
+      addEvent(`Graph load failed: ${error.message}`, "warn");
+      draw();
+    }
+
+    function activeAnimationState() {
+      if (!animation) return { progress: 0, step: null, activeIds: new Set(), targetId: "" };
+      const elapsed = performance.now() - animationStartedAt;
+      let cursor = 0;
+      for (const step of animation.steps || []) {
+        const duration = Number(step.duration_ms || 500);
+        if (elapsed <= cursor + duration) {
+          const local = Math.max(0, Math.min(1, (elapsed - cursor) / duration));
+          const ids = new Set([...(step.node_ids || []), ...(step.from_ids || [])]);
+          if (step.node_id) ids.add(step.node_id);
+          animationStep.textContent = `${step.kind || "step"} ${(local * 100).toFixed(0)}%`;
+          const nextStepKey = `${animation.id || animation.label || "animation"}:${step.kind || "step"}:${cursor}`;
+          if (animationStepKey !== nextStepKey) {
+            animationStepKey = nextStepKey;
+            addEvent(`Animation ${step.kind || "step"} step started.`, "good");
+          }
+          return { progress: local, step, activeIds: ids, targetId: step.to_id || step.node_id || "" };
+        }
+        cursor += duration;
+      }
+      animation = null;
+      if (animationStepKey !== "complete") {
+        addEvent("Animation complete.", "good");
+      }
+      animationStepKey = "complete";
+      animationStep.textContent = "Animation complete.";
+      return { progress: 0, step: null, activeIds: new Set(), targetId: "" };
+    }
+
+    function drawRows(rect) {
+      if (!graph) return;
+      context.save();
+      context.font = "700 13px Segoe UI";
+      context.textBaseline = "middle";
+      for (const row of graph.rows || []) {
+        const correctedY = 54 + (1 - row.layer / Math.max(1, graph.max_layers - 1)) * Math.max(1, rect.height - 108);
+        context.strokeStyle = "rgba(216, 211, 200, 0.09)";
+        context.beginPath();
+        context.moveTo(20, correctedY);
+        context.lineTo(rect.width - 20, correctedY);
+        context.stroke();
+        context.fillStyle = "rgba(216, 211, 200, 0.56)";
+        context.fillText(`${row.layer_name} (${row.node_count})`, 24, correctedY - 18);
+      }
+      context.restore();
+    }
+
+    function drawEdge(edge, activeState, preview) {
+      const a = nodePositionById(edge.from);
+      const b = nodePositionById(edge.to);
+      if (!a || !b) return;
+      const active = activeState.activeIds.has(edge.from) || activeState.targetId === edge.to;
+      context.save();
+      context.strokeStyle = preview
+        ? `rgba(250, 204, 21, ${active ? 0.75 : 0.24})`
+        : `rgba(125, 211, 252, ${active ? 0.8 : 0.18})`;
+      context.lineWidth = active ? 2.5 : 1.2;
+      context.beginPath();
+      context.moveTo(a.x, a.y);
+      context.bezierCurveTo(a.x, (a.y + b.y) / 2, b.x, (a.y + b.y) / 2, b.x, b.y);
+      context.stroke();
+      context.restore();
+    }
+
+    function drawNode(node, activeState) {
+      const pos = nodePositionById(node.id) || nodePosition(node);
+      const visual = node.visual || {};
+      const active = activeState.activeIds.has(node.id) || activeState.targetId === node.id;
+      const selected = selectedNodeId === node.id;
+      const hovered = hoverNodeId === node.id;
+      const pulse = active ? 1 + Math.sin(activeState.progress * Math.PI) * 0.35 : 1;
+      const radius = pos.r * pulse;
+      context.save();
+      context.globalAlpha = Number(visual.opacity || 1);
+      if (node.preview_only) context.globalAlpha *= 0.78;
+      context.fillStyle = visual.color || "#7dd3fc";
+      context.strokeStyle = selected ? "#ffffff" : active ? "#facc15" : hovered ? "#86efac" : "rgba(255,255,255,0.18)";
+      context.lineWidth = selected || active || hovered ? 3 : 1;
+      context.beginPath();
+      context.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+      if (selected || active) {
+        context.strokeStyle = selected ? "rgba(255,255,255,0.24)" : "rgba(250,204,21,0.22)";
+        context.lineWidth = 7;
+        context.beginPath();
+        context.arc(pos.x, pos.y, radius + 5, 0, Math.PI * 2);
+        context.stroke();
+      }
+      context.restore();
+    }
+
+    function draw() {
+      const rect = canvas.getBoundingClientRect();
+      context.clearRect(0, 0, rect.width, rect.height);
+      if (!graph) return;
+      const activeState = activeAnimationState();
+      drawRows(rect);
+      for (const edge of graph.edges || []) drawEdge(edge, activeState, false);
+      for (const edge of graph.preview_edges || []) drawEdge(edge, activeState, true);
+      for (const node of graph.nodes || []) drawNode(node, activeState);
+      if (animation) requestAnimationFrame(draw);
+    }
+
+    function inspectNode(node, { quiet = false } = {}) {
+      if (!node) return;
+      selectedNodeId = node.id;
+      nodeTitle.textContent = node.label || node.id;
+      badges.innerHTML = "";
+      for (const text of [
+        `layer ${node.layer}`,
+        node.kind,
+        `confidence ${node.confidence}`,
+        node.preview_only ? "preview only" : "",
+      ].filter(Boolean)) {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = text;
+        badges.appendChild(badge);
+      }
+      compressed.textContent = node.compressed || "(empty)";
+      upscale.textContent = node.upscale_direction || "(not recorded)";
+      bounds.textContent = node.do_not_invent || "(not recorded)";
+      source.textContent = node.source || "(not recorded)";
+      contextPreview.textContent = debugContextForNode(node);
+      copyContextButton.disabled = false;
+      if (!quiet) addEvent(`Selected ${node.label || node.id}.`);
+      draw();
+    }
+
+    function selectedNodeIndex() {
+      if (!graph?.nodes?.length || !selectedNodeId) return -1;
+      return graph.nodes.findIndex((node) => node.id === selectedNodeId);
+    }
+
+    function selectRelativeNode(offset) {
+      if (!graph?.nodes?.length) return;
+      const currentIndex = selectedNodeIndex();
+      const nextIndex = currentIndex === -1
+        ? 0
+        : Math.max(0, Math.min(graph.nodes.length - 1, currentIndex + offset));
+      inspectNode(graph.nodes[nextIndex]);
+    }
+
+    function selectLayerSibling(offset) {
+      if (!graph?.nodes?.length || !selectedNodeId) return;
+      const current = nodeById(selectedNodeId);
+      if (!current) return;
+      const row = (graph.rows || []).find((item) => Number(item.layer) === Number(current.layer));
+      if (!row?.node_ids?.length) return;
+      const currentIndex = row.node_ids.indexOf(selectedNodeId);
+      const nextIndex = Math.max(0, Math.min(row.node_ids.length - 1, currentIndex + offset));
+      inspectNode(nodeById(row.node_ids[nextIndex]));
+    }
+
+    function selectLayerNeighbor(offset) {
+      if (!graph?.nodes?.length || !selectedNodeId) return;
+      const current = nodeById(selectedNodeId);
+      if (!current) return;
+      const targetLayer = Number(current.layer) + offset;
+      const targetRow = (graph.rows || []).find((item) => Number(item.layer) === targetLayer);
+      if (!targetRow?.node_ids?.length) return;
+      const currentPosition = nodePositionById(current.id) || nodePosition(current);
+      let bestNode = null;
+      let bestDistance = Infinity;
+      for (const nodeId of targetRow.node_ids) {
+        const position = nodePositionById(nodeId);
+        if (!position) continue;
+        const distance = Math.abs(position.x - currentPosition.x);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestNode = nodeById(nodeId);
+        }
+      }
+      if (bestNode) inspectNode(bestNode);
+    }
+
+    function hitTest(event) {
+      if (!graph) return null;
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      for (const node of [...graph.nodes].reverse()) {
+        const pos = nodePositionById(node.id) || nodePosition(node);
+        const distance = Math.hypot(x - pos.x, y - pos.y);
+        if (distance <= pos.r + 8) return node;
+      }
+      return null;
+    }
+
+    async function loadGraphFile(file) {
+      const text = await file.text();
+      graphUrl = "";
+      graphSource = file.name || "selected file";
+      liveToggle.checked = false;
+      liveToggle.disabled = true;
+      stopLiveReload();
+      await loadGraphText(text, file.name || "selected file");
+    }
+
+    async function loadGraphUrl(url, { preserveSelection = false, quiet = false, rememberUrl = true } = {}) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (rememberUrl) {
+        graphUrl = url;
+        graphSource = url;
+      }
+      await loadGraphText(await response.text(), graphSource || url, { preserveSelection, quiet });
+    }
+
+    function setAnimationOptions() {
+      const animations = graph?.preview_animations || [];
+      animationSelect.innerHTML = "";
+      for (const [index, item] of animations.entries()) {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = item.label || item.id || `Animation ${index + 1}`;
+        animationSelect.appendChild(option);
+      }
+      animationSelect.disabled = animations.length === 0;
+      playButton.disabled = animations.length === 0;
+    }
+
+    function graphStatusText(sourceName) {
+      return `${graph.agent || "agent"}: ${graph.nodes?.length || 0} nodes, ${graph.edges?.length || 0} edges, ${graph.preview_edges?.length || 0} preview edges, ${(graph.preview_animations || []).length} animations from ${sourceName}`;
+    }
+
+    async function loadGraphText(text, sourceName, { preserveSelection = false, quiet = false } = {}) {
+      const previousSelectedNodeId = selectedNodeId;
+      const parsedGraph = JSON.parse(text);
+      const warnings = validateGraph(parsedGraph);
+      graph = parsedGraph;
+      rebuildGraphIndex();
+      selectedNodeId = preserveSelection && nodeById(previousSelectedNodeId) ? previousSelectedNodeId : "";
+      hoverNodeId = "";
+      animation = null;
+      animationStepKey = "";
+      animationStep.textContent = "No animation running.";
+      graphRun.textContent = formatGraphRun();
+      emptyState.style.display = "none";
+      setAnimationOptions();
+      fitButton.disabled = false;
+      liveToggle.disabled = !graphUrl;
+      statusText.textContent = `${graphStatusText(sourceName)}${quiet ? " (refreshed)" : ""}`;
+      setValidationWarnings(warnings);
+      addEvent(`${quiet ? "Refreshed" : "Loaded"} graph with ${graph.nodes?.length || 0} memory nodes.`, quiet ? "" : "good");
+      const initialNode = nodeById(selectedNodeId) || graph.nodes?.[0];
+      if (initialNode) {
+        inspectNode(initialNode, { quiet: true });
+      } else {
+        resetInspector("No memory nodes available yet. Run the Memory Layers builder or load a graph with nodes.");
+      }
+      draw();
+    }
+
+    function stopLiveReload() {
+      if (!liveTimer) return;
+      clearInterval(liveTimer);
+      liveTimer = 0;
+    }
+
+    function startLiveReload() {
+      stopLiveReload();
+      if (!graphUrl) return;
+      addEvent("Live graph refresh started.", "good");
+      liveTimer = setInterval(() => {
+        loadGraphUrl(`${graphUrl}${graphUrl.includes("?") ? "&" : "?"}_=${Date.now()}`, {
+          preserveSelection: true,
+          quiet: true,
+          rememberUrl: false,
+        }).catch((error) => {
+          statusText.textContent = `Live refresh failed: ${error.message}`;
+          addEvent(`Live refresh failed: ${error.message}`, "warn");
+        });
+      }, 2000);
+    }
+
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+      loadGraphFile(file).catch(showLoadError);
+    });
+
+    playButton.addEventListener("click", () => {
+      if (!graph?.preview_animations?.length) return;
+      const index = Number(animationSelect.value || 0);
+      animation = graph.preview_animations[index] || graph.preview_animations[0];
+      animationStartedAt = performance.now();
+      animationStepKey = "";
+      addEvent(`Debug downscale started: ${animation.label || animation.id || "animation"}.`, "good");
+      requestAnimationFrame(draw);
+    });
+
+    liveToggle.addEventListener("change", () => {
+      if (liveToggle.checked) startLiveReload();
+      else {
+        stopLiveReload();
+        addEvent("Live graph refresh stopped.");
+      }
+    });
+
+    fitButton.addEventListener("click", () => draw());
+
+    copyContextButton.addEventListener("click", () => {
+      const text = contextPreview.textContent || "";
+      if (!text.trim()) return;
+      navigator.clipboard?.writeText(text).then(() => {
+        statusText.textContent = "Copied debug upscale context.";
+        addEvent("Copied debug upscale context.", "good");
+      }).catch(() => {
+        statusText.textContent = "Clipboard copy failed.";
+        addEvent("Clipboard copy failed.", "warn");
+      });
+    });
+
+    canvas.addEventListener("click", (event) => {
+      const node = hitTest(event);
+      if (node) inspectNode(node);
+    });
+
+    canvas.addEventListener("mousemove", (event) => {
+      const node = hitTest(event);
+      const nextHover = node?.id || "";
+      if (nextHover === hoverNodeId) return;
+      hoverNodeId = nextHover;
+      canvas.style.cursor = hoverNodeId ? "pointer" : "default";
+      draw();
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (!graph) return;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        selectLayerSibling(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        selectLayerSibling(1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        selectLayerNeighbor(1);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        selectLayerNeighbor(-1);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        if (graph.nodes?.[0]) inspectNode(graph.nodes[0]);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        if (graph.nodes?.length) inspectNode(graph.nodes[graph.nodes.length - 1]);
+      } else if (event.key === "PageUp") {
+        event.preventDefault();
+        selectRelativeNode(-10);
+      } else if (event.key === "PageDown") {
+        event.preventDefault();
+        selectRelativeNode(10);
+      }
+    });
+
+    wrap.addEventListener("dragover", (event) => {
+      event.preventDefault();
+    });
+
+    wrap.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const file = event.dataTransfer?.files?.[0];
+      if (!file) return;
+      loadGraphFile(file).catch(showLoadError);
+    });
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    const graphParam = new URLSearchParams(location.search).get("graph");
+    if (graphParam) {
+      loadGraphUrl(graphParam).catch(showLoadError);
+    }
+  </script>
+</body>
+</html>
